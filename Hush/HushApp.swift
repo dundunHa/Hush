@@ -1,32 +1,26 @@
-//
-//  HushApp.swift
-//  Hush
-//
-//  Created by lxp on 2/11/26.
-//
-
 import SwiftUI
-import SwiftData
 
 @main
 struct HushApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
+    @StateObject private var container = AppContainer.bootstrap()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        WindowGroup("Hush") {
+            RootView()
+                .environmentObject(container)
+                .frame(minWidth: 980, minHeight: 640)
+                .onChange(of: scenePhase) { _, newPhase in
+                    container.handleScenePhaseChange(newPhase)
+                }
         }
-        .modelContainer(sharedModelContainer)
+        .commands {
+            CommandMenu("Hush") {
+                Button("Toggle Quick Bar") {
+                    container.toggleQuickBar()
+                }
+                .keyboardShortcut("k", modifiers: [.command, .option])
+            }
+        }
     }
 }
