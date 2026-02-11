@@ -1,0 +1,6 @@
+--swiftversion 5.0
+--indent 4
+--linebreaks lf
+--trimwhitespace always
+--commas inline
+--exclude build,.build

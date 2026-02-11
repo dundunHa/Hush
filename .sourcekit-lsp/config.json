@@ -1,0 +1,9 @@
+{
+  "swiftPM": {
+    "configuration": "debug",
+    "scratchPath": ".build"
+  },
+  "backgroundIndexing": true,
+  "buildSettingsTimeout": 15000,
+  "swiftPublishDiagnosticsDebounceDuration": 0.2
+}

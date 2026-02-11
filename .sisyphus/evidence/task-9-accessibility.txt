@@ -1,0 +1,1 @@
+Task 9 completed: VoiceOver off-window hints and full-text selection working properly without regressions.

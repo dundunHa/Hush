@@ -6,14 +6,38 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D5F104D32F3DC1EF00CE6272 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = D5TE500B2F3C42530046A153 /* GRDB */; };
+		D5F1FE582F3DBF5900CE6272 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = D58CE4112F3C99990046A153 /* GRDB */; };
+		D5RD00042F5E00010046A153 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = D5RD00022F5E00010046A153 /* Markdown */; };
+		D5RD00052F5E00010046A153 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = D5RD00032F5E00010046A153 /* Markdown */; };
+		D5RD00082F5E00010046A153 /* SwiftMath in Frameworks */ = {isa = PBXBuildFile; productRef = D5RD00072F5E00010046A153 /* SwiftMath */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D5TE50092F3C42530046A153 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D58CE3EE2F3C42510046A153 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D58CE3F52F3C42520046A153;
+			remoteInfo = Hush;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		D58CE3F62F3C42520046A153 /* Hush.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hush.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D5TE50012F3C42530046A153 /* HushTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HushTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		D58CE3F82F3C42520046A153 /* Hush */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Hush;
+			sourceTree = "<group>";
+		};
+		D5TE50052F3C42530046A153 /* HushTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = HushTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -23,6 +47,18 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D5F1FE582F3DBF5900CE6272 /* GRDB in Frameworks */,
+				D5RD00042F5E00010046A153 /* Markdown in Frameworks */,
+				D5RD00082F5E00010046A153 /* SwiftMath in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D5TE50042F3C42530046A153 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D5F104D32F3DC1EF00CE6272 /* GRDB in Frameworks */,
+				D5RD00052F5E00010046A153 /* Markdown in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -33,6 +69,7 @@
 			isa = PBXGroup;
 			children = (
 				D58CE3F82F3C42520046A153 /* Hush */,
+				D5TE50052F3C42530046A153 /* HushTests */,
 				D58CE3F72F3C42520046A153 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +78,7 @@
 			isa = PBXGroup;
 			children = (
 				D58CE3F62F3C42520046A153 /* Hush.app */,
+				D5TE50012F3C42530046A153 /* HushTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -54,7 +92,7 @@
 			buildPhases = (
 				D58CE3F22F3C42520046A153 /* Sources */,
 				D58CE3F32F3C42520046A153 /* Frameworks */,
-				D58CE3F42F3C42520046A153 /* Resources */,
+				D5A11C0D2F9D1C0A00CEFA11 /* Generate App Icon */,
 			);
 			buildRules = (
 			);
@@ -65,10 +103,37 @@
 			);
 			name = Hush;
 			packageProductDependencies = (
+				D58CE4112F3C99990046A153 /* GRDB */,
+				D5RD00022F5E00010046A153 /* Markdown */,
+				D5RD00072F5E00010046A153 /* SwiftMath */,
 			);
 			productName = Hush;
 			productReference = D58CE3F62F3C42520046A153 /* Hush.app */;
 			productType = "com.apple.product-type.application";
+		};
+		D5TE50022F3C42530046A153 /* HushTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D5TE50062F3C42530046A153 /* Build configuration list for PBXNativeTarget "HushTests" */;
+			buildPhases = (
+				D5TE50032F3C42530046A153 /* Sources */,
+				D5TE50042F3C42530046A153 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D5TE500A2F3C42530046A153 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D5TE50052F3C42530046A153 /* HushTests */,
+			);
+			name = HushTests;
+			packageProductDependencies = (
+				D5TE500B2F3C42530046A153 /* GRDB */,
+				D5RD00032F5E00010046A153 /* Markdown */,
+			);
+			productName = HushTests;
+			productReference = D5TE50012F3C42530046A153 /* HushTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -83,6 +148,10 @@
 					D58CE3F52F3C42520046A153 = {
 						CreatedOnToolsVersion = 26.2;
 					};
+					D5TE50022F3C42530046A153 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = D58CE3F52F3C42520046A153;
+					};
 				};
 			};
 			buildConfigurationList = D58CE3F12F3C42510046A153 /* Build configuration list for PBXProject "Hush" */;
@@ -94,25 +163,51 @@
 			);
 			mainGroup = D58CE3ED2F3C42510046A153;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D58CE4102F3C99990046A153 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+				D5RD00012F5E00010046A153 /* XCRemoteSwiftPackageReference "swift-markdown" */,
+				D5RD00062F5E00010046A153 /* XCRemoteSwiftPackageReference "SwiftMath" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D58CE3F72F3C42520046A153 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				D58CE3F52F3C42520046A153 /* Hush */,
+				D5TE50022F3C42530046A153 /* HushTests */,
 			);
 		};
 /* End PBXProject section */
 
-/* Begin PBXResourcesBuildPhase section */
-		D58CE3F42F3C42520046A153 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
+/* Begin PBXShellScriptBuildPhase section */
+		D5A11C0D2F9D1C0A00CEFA11 /* Generate App Icon */ = {
+			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
+			inputPaths = (
+				"$(PROJECT_DIR)/Hush/Assets.xcassets/AppIcon.appiconset/appIcon_16x16.png",
+				"$(PROJECT_DIR)/Hush/Assets.xcassets/AppIcon.appiconset/appIcon_16x16@2x.png",
+				"$(PROJECT_DIR)/Hush/Assets.xcassets/AppIcon.appiconset/appIcon_32x32.png",
+				"$(PROJECT_DIR)/Hush/Assets.xcassets/AppIcon.appiconset/appIcon_32x32@2x.png",
+				"$(PROJECT_DIR)/Hush/Assets.xcassets/AppIcon.appiconset/appIcon_128x128.png",
+				"$(PROJECT_DIR)/Hush/Assets.xcassets/AppIcon.appiconset/appIcon_128x128@2x.png",
+				"$(PROJECT_DIR)/Hush/Assets.xcassets/AppIcon.appiconset/appIcon_256x256.png",
+				"$(PROJECT_DIR)/Hush/Assets.xcassets/AppIcon.appiconset/appIcon_256x256@2x.png",
+				"$(PROJECT_DIR)/Hush/Assets.xcassets/AppIcon.appiconset/appIcon_512x512.png",
+				"$(PROJECT_DIR)/Hush/Assets.xcassets/AppIcon.appiconset/appIcon_512x512@2x.png",
+				"$(PROJECT_DIR)/scripts/generate_app_icon.sh",
+			);
+			name = "Generate App Icon";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon.icns",
+			);
 			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/zsh \"${PROJECT_DIR}/scripts/generate_app_icon.sh\"\n";
+			showEnvVarsInLog = 0;
 		};
-/* End PBXResourcesBuildPhase section */
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		D58CE3F22F3C42520046A153 /* Sources */ = {
@@ -122,7 +217,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D5TE50032F3C42530046A153 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D5TE500A2F3C42530046A153 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D58CE3F52F3C42520046A153 /* Hush */;
+			targetProxy = D5TE50092F3C42530046A153 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		D58CE4012F3C42530046A153 /* Debug */ = {
@@ -256,9 +366,21 @@
 				DEVELOPMENT_TEAM = XCBNBG3B57;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Hush/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -288,9 +410,21 @@
 				DEVELOPMENT_TEAM = XCBNBG3B57;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Hush/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -306,6 +440,46 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		D5TE50072F3C42530046A153 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XCBNBG3B57;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dundunha.HushTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hush.app/Contents/MacOS/Hush";
+			};
+			name = Debug;
+		};
+		D5TE50082F3C42530046A153 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XCBNBG3B57;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dundunha.HushTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hush.app/Contents/MacOS/Hush";
 			};
 			name = Release;
 		};
@@ -330,7 +504,71 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		D5TE50062F3C42530046A153 /* Build configuration list for PBXNativeTarget "HushTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D5TE50072F3C42530046A153 /* Debug */,
+				D5TE50082F3C42530046A153 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D58CE4102F3C99990046A153 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.0.0;
+			};
+		};
+		D5RD00012F5E00010046A153 /* XCRemoteSwiftPackageReference "swift-markdown" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/swiftlang/swift-markdown.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.4.0;
+			};
+		};
+		D5RD00062F5E00010046A153 /* XCRemoteSwiftPackageReference "SwiftMath" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mgriebling/SwiftMath.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D58CE4112F3C99990046A153 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D58CE4102F3C99990046A153 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+		D5RD00022F5E00010046A153 /* Markdown */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D5RD00012F5E00010046A153 /* XCRemoteSwiftPackageReference "swift-markdown" */;
+			productName = Markdown;
+		};
+		D5RD00032F5E00010046A153 /* Markdown */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D5RD00012F5E00010046A153 /* XCRemoteSwiftPackageReference "swift-markdown" */;
+			productName = Markdown;
+		};
+		D5RD00072F5E00010046A153 /* SwiftMath */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D5RD00062F5E00010046A153 /* XCRemoteSwiftPackageReference "SwiftMath" */;
+			productName = SwiftMath;
+		};
+		D5TE500B2F3C42530046A153 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D58CE4102F3C99990046A153 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D58CE3EE2F3C42510046A153 /* Project object */;
 }

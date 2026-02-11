@@ -1,0 +1,75 @@
+included:
+  - Hush
+  - HushTests
+
+excluded:
+  - build
+  - .build
+
+disabled_rules:
+  - todo
+
+opt_in_rules:
+  - async_without_await
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - contains_over_first_not_nil
+  - contains_over_range_nil_comparison
+  - empty_collection_literal
+  - empty_count
+  - empty_string
+  - first_where
+  - flatmap_over_map_reduce
+  - identical_operands
+  - last_where
+  - reduce_into
+  - sorted_first_last
+  - sorted_imports
+  - unhandled_throwing_task
+  - unneeded_escaping
+  - unowned_variable_capture
+
+analyzer_rules:
+  - capture_variable
+  - typesafe_array_init
+  - unused_import
+
+line_length:
+  warning: 140
+  error: 180
+  ignores_comments: true
+  ignores_urls: true
+
+type_body_length:
+  warning: 400
+  error: 550
+
+file_length:
+  warning: 600
+  error: 900
+
+function_body_length:
+  warning: 80
+  error: 120
+
+large_tuple:
+  warning: 4
+  error: 5
+
+opening_brace:
+  ignore_multiline_statement_conditions: true
+
+identifier_name:
+  min_length:
+    warning: 2
+  excluded:
+    - final_
+    - id
+    - t
+    - x
+    - y
+    - z
+
+cache_path: .build/swiftlint-cache
+
+reporter: "xcode"

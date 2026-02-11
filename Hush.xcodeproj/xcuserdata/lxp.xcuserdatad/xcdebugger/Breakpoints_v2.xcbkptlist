@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Bucket
+   uuid = "9CBDDEFE-693D-4D5F-9F13-4F3F8805BD96"
+   type = "1"
+   version = "2.0">
+   <Breakpoints>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "9ACB2FBC-0B30-4954-87FE-4C37233FCE78"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "Hush/AppContainer.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "235"
+            endingLineNumber = "235"
+            landmarkName = "init(settings:preferencesRepository:credentialStore:registry:messageRenderRuntime:persistence:catalogRepository:providerConfigRepository:agentPresetRepository:promptTemplateRepository:activeConversationId:messages:sidebarThreads:hasMoreOlderMessages:oldestLoadedOrderIndex:hasMoreSidebarThreads:sidebarThreadsCursor:)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+   </Breakpoints>
+</Bucket>
