@@ -680,7 +680,8 @@ final class AppContainer: ObservableObject {
             apiKeyEnvironmentVariable: existingConfiguration?.apiKeyEnvironmentVariable ?? "",
             defaultModelID: normalizedModelID,
             isEnabled: input.isEnabled,
-            credentialRef: credentialRef
+            credentialRef: credentialRef,
+            pinnedModelIDs: existingConfiguration?.pinnedModelIDs ?? []
         )
 
         if let index = existingIndex {
@@ -867,19 +868,11 @@ final class AppContainer: ObservableObject {
             self.catalogRefreshingProviderIDs.remove(providerID)
             switch result {
             case let .success(modelCount):
-                self.clearPinnedModels(forProviderID: providerID)
                 self.statusMessage = "Refreshed \(modelCount) models for \(config.name)"
             case let .failure(error):
                 self.statusMessage = "Catalog refresh failed: \(error)"
             }
         }
-    }
-
-    private func clearPinnedModels(forProviderID providerID: String) {
-        guard var config = settings.providerConfigurations.first(where: { $0.id == providerID }) else { return }
-        guard !config.pinnedModelIDs.isEmpty else { return }
-        config.pinnedModelIDs = []
-        saveProviderProfile(config)
     }
 
     private func resolveProvider(for config: ProviderConfiguration) -> any LLMProvider {

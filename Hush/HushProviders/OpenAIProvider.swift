@@ -159,15 +159,17 @@ public struct OpenAIProvider: LLMProvider, Sendable {
         let url = "\(baseURL)/chat/completions"
         logger.info("[Chat] Sending request to: \(url)")
 
+        let useDefaults = parameters.useModelDefaults
         let body = OpenAIChatRequest(
             model: modelID,
             messages: messages.map { OpenAIChatMessage(role: $0.role.rawValue, content: $0.content) },
             stream: true,
-            temperature: parameters.temperature,
-            topP: parameters.topP,
-            maxTokens: parameters.maxTokens,
-            presencePenalty: parameters.presencePenalty,
-            frequencyPenalty: parameters.frequencyPenalty
+            temperature: useDefaults ? nil : parameters.temperature,
+            topP: useDefaults ? nil : parameters.topP,
+            topK: useDefaults ? nil : parameters.topK,
+            maxTokens: useDefaults ? nil : parameters.maxTokens,
+            presencePenalty: useDefaults ? nil : parameters.presencePenalty,
+            frequencyPenalty: useDefaults ? nil : parameters.frequencyPenalty
         )
 
         let bodyData = try JSONEncoder().encode(body)
@@ -503,15 +505,17 @@ struct OpenAIChatRequest: Encodable {
     let model: String
     let messages: [OpenAIChatMessage]
     let stream: Bool
-    let temperature: Double
-    let topP: Double
-    let maxTokens: Int
-    let presencePenalty: Double
-    let frequencyPenalty: Double
+    let temperature: Double?
+    let topP: Double?
+    let topK: Int?
+    let maxTokens: Int?
+    let presencePenalty: Double?
+    let frequencyPenalty: Double?
 
     enum CodingKeys: String, CodingKey {
         case model, messages, stream, temperature
         case topP = "top_p"
+        case topK = "top_k"
         case maxTokens = "max_tokens"
         case presencePenalty = "presence_penalty"
         case frequencyPenalty = "frequency_penalty"

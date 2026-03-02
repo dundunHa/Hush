@@ -257,6 +257,13 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v10: add useModelDefaults to appPreferences ───────────────
+        migrator.registerMigration("v10_app_preferences_use_model_defaults") { db in
+            try db.alter(table: "appPreferences") { t in
+                t.add(column: "useModelDefaults", .boolean).notNull().defaults(to: false)
+            }
+        }
+
         return migrator
     }
 

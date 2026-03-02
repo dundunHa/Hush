@@ -10,8 +10,6 @@ private struct ScrollAnchor {
 
 @MainActor
 private final class MessageCopyOverlayButton: NSButton {
-    var onHoverChanged: ((Bool) -> Void)?
-
     private var resetTask: Task<Void, Never>?
     private var isHovered = false
     private var isCopied = false
@@ -75,14 +73,12 @@ private final class MessageCopyOverlayButton: NSButton {
         super.mouseEntered(with: event)
         isHovered = true
         updateVisualState()
-        onHoverChanged?(true)
     }
 
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         isHovered = false
         updateVisualState()
-        onHoverChanged?(false)
     }
 
     func resetState() {
@@ -145,24 +141,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
 
     private let scrollView = NSScrollView()
     let tableView = NSTableView()
-
-    private enum MessageCopyOverlayMetrics {
-        static let buttonSize: CGFloat = HushSpacing.xl
-        static let gapBelowBody: CGFloat = HushSpacing.md
-        static let edgeInset: CGFloat = HushSpacing.xs
-        static let hideDelayNanoseconds: UInt64 = 160_000_000
-    }
-
-    private let messageCopyOverlayButton = MessageCopyOverlayButton(frame: .zero)
-    private var hoveredAssistantMessageIDForCopyOverlay: UUID?
-    private weak var hoveredAssistantCellForCopyOverlay: MessageTableCellView?
-    private var isHoveringCopyOverlayButton = false
-    private var pendingCopyOverlayHideTask: Task<Void, Never>?
-    private var copyOverlayAnimationToken: UInt64 = 0
-
-    private var isHoveringAssistantCellForCopyOverlay: Bool {
-        hoveredAssistantCellForCopyOverlay != nil
-    }
 
     var rows: [RowModel] = []
     private var runtime: MessageRenderRuntime?
@@ -254,21 +232,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
 
-        messageCopyOverlayButton.isHidden = true
-        messageCopyOverlayButton.alphaValue = 0
-        messageCopyOverlayButton.target = self
-        messageCopyOverlayButton.action = #selector(handleCopyOverlayPressed)
-        messageCopyOverlayButton.onHoverChanged = { [weak self] isHovering in
-            guard let self else { return }
-            self.isHoveringCopyOverlayButton = isHovering
-            if isHovering {
-                self.cancelPendingCopyOverlayHide()
-            } else if !self.isHoveringAssistantCellForCopyOverlay {
-                self.scheduleCopyOverlayHide()
-            }
-        }
-        scrollView.contentView.addSubview(messageCopyOverlayButton, positioned: .above, relativeTo: tableView)
-
         scrollView.contentView.postsBoundsChangedNotifications = true
         boundsChangeObserver = NotificationCenter.default.addObserver(
             forName: NSView.boundsDidChangeNotification,
@@ -302,157 +265,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
                 self.handleDidEndLiveScroll()
             }
         }
-    }
-
-    @objc private func handleCopyOverlayPressed() {
-        guard let messageID = hoveredAssistantMessageIDForCopyOverlay else { return }
-        guard let row = rows.first(where: { $0.message.id == messageID }) else { return }
-        guard row.message.role == .assistant else { return }
-        guard !row.isStreaming else { return }
-
-        let content = row.message.content
-        guard !content.isEmpty else { return }
-
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(content, forType: .string)
-
-        messageCopyOverlayButton.flashCopied()
-    }
-
-    fileprivate func messageCellDidEnterHover(row: RowModel, cell: MessageTableCellView) {
-        guard row.message.role == .assistant else { return }
-        guard !row.isStreaming else { return }
-
-        hoveredAssistantCellForCopyOverlay = cell
-        cancelPendingCopyOverlayHide()
-
-        let previousMessageID = hoveredAssistantMessageIDForCopyOverlay
-        hoveredAssistantMessageIDForCopyOverlay = row.message.id
-        if previousMessageID != row.message.id {
-            messageCopyOverlayButton.resetState()
-        }
-
-        updateCopyOverlayPosition(anchorCell: cell)
-        setCopyOverlayVisible(true, animated: true)
-    }
-
-    fileprivate func messageCellDidExitHover(cell: MessageTableCellView) {
-        guard hoveredAssistantCellForCopyOverlay === cell else { return }
-        hoveredAssistantCellForCopyOverlay = nil
-        if !isHoveringCopyOverlayButton {
-            scheduleCopyOverlayHide()
-        }
-    }
-
-    private func setCopyOverlayVisible(_ isVisible: Bool, animated: Bool) {
-        copyOverlayAnimationToken &+= 1
-        let token = copyOverlayAnimationToken
-
-        if isVisible {
-            if messageCopyOverlayButton.isHidden {
-                messageCopyOverlayButton.alphaValue = 0
-            }
-            messageCopyOverlayButton.isHidden = false
-
-            if animated {
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.12
-                    messageCopyOverlayButton.animator().alphaValue = 1
-                }
-            } else {
-                messageCopyOverlayButton.alphaValue = 1
-            }
-            return
-        }
-
-        cancelPendingCopyOverlayHide()
-        hoveredAssistantMessageIDForCopyOverlay = nil
-        hoveredAssistantCellForCopyOverlay = nil
-        isHoveringCopyOverlayButton = false
-
-        guard !messageCopyOverlayButton.isHidden else { return }
-
-        if animated {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.12
-                messageCopyOverlayButton.animator().alphaValue = 0
-            } completionHandler: { [weak self] in
-                guard let self else { return }
-                guard token == self.copyOverlayAnimationToken else { return }
-                self.messageCopyOverlayButton.isHidden = true
-            }
-        } else {
-            messageCopyOverlayButton.alphaValue = 0
-            messageCopyOverlayButton.isHidden = true
-        }
-    }
-
-    private func cancelPendingCopyOverlayHide() {
-        pendingCopyOverlayHideTask?.cancel()
-        pendingCopyOverlayHideTask = nil
-    }
-
-    private func scheduleCopyOverlayHide() {
-        cancelPendingCopyOverlayHide()
-        pendingCopyOverlayHideTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            try? await Task.sleep(nanoseconds: MessageCopyOverlayMetrics.hideDelayNanoseconds)
-            guard !Task.isCancelled else { return }
-            guard !self.isHoveringAssistantCellForCopyOverlay else { return }
-            guard !self.isHoveringCopyOverlayButton else { return }
-            self.pendingCopyOverlayHideTask = nil
-            self.setCopyOverlayVisible(false, animated: true)
-        }
-    }
-
-    private func updateCopyOverlayPosition(anchorCell: MessageTableCellView) {
-        let clipView = scrollView.contentView
-        clipView.layoutSubtreeIfNeeded()
-        anchorCell.layoutSubtreeIfNeeded()
-
-        let bodyFrame = anchorCell.bodyFrame(in: clipView)
-        let contentFrame = anchorCell.bodyContentFrame(in: clipView)
-        let size = MessageCopyOverlayMetrics.buttonSize
-
-        var x = bodyFrame.minX
-        var y = clipView.isFlipped
-            ? (contentFrame.maxY + MessageCopyOverlayMetrics.gapBelowBody)
-            : (contentFrame.minY - MessageCopyOverlayMetrics.gapBelowBody - size)
-
-        let clipBounds = clipView.bounds
-
-        x = min(
-            max(x, clipBounds.minX + MessageCopyOverlayMetrics.edgeInset),
-            clipBounds.maxX - size - MessageCopyOverlayMetrics.edgeInset
-        )
-        y = min(
-            max(y, clipBounds.minY + MessageCopyOverlayMetrics.edgeInset),
-            clipBounds.maxY - size - MessageCopyOverlayMetrics.edgeInset
-        )
-
-        messageCopyOverlayButton.frame = NSRect(x: x, y: y, width: size, height: size)
-    }
-
-    private func updateCopyOverlayPositionIfNeeded() {
-        guard !messageCopyOverlayButton.isHidden else { return }
-        guard let messageID = hoveredAssistantMessageIDForCopyOverlay else {
-            setCopyOverlayVisible(false, animated: false)
-            return
-        }
-        guard let rowIndex = rows.firstIndex(where: { $0.message.id == messageID }) else {
-            setCopyOverlayVisible(false, animated: false)
-            return
-        }
-        guard tableView.numberOfColumns > 0 else {
-            setCopyOverlayVisible(false, animated: false)
-            return
-        }
-        guard let cell = tableView.view(atColumn: 0, row: rowIndex, makeIfNecessary: false) as? MessageTableCellView else {
-            setCopyOverlayVisible(false, animated: false)
-            return
-        }
-        updateCopyOverlayPosition(anchorCell: cell)
     }
 
     @available(*, unavailable)
@@ -563,7 +375,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
 
         let generationChanged = lastGeneration != switchGeneration
         if generationChanged {
-            setCopyOverlayVisible(false, animated: false)
             if isLiveScrolling {
                 setLiveScrolling(false)
             } else {
@@ -873,7 +684,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         let originY = scrollView.contentView.bounds.origin.y
         trackScrollActivity(originY: originY)
         updatePinnedState()
-        updateCopyOverlayPositionIfNeeded()
     }
 
     private func trackScrollActivity(originY: CGFloat) {
@@ -908,7 +718,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     }
 
     private func beginScrollActivity() {
-        setCopyOverlayVisible(false, animated: false)
         scrollEndPrewarmDebounceTask?.cancel()
         scrollEndPrewarmDebounceTask = nil
         lookaheadPrewarmTask?.cancel()
@@ -1014,8 +823,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         if !userHasScrolledUp, !rows.isEmpty, invalidated.contains(rows.count - 1) {
             requestCoalescedScrollToBottom()
         }
-
-        updateCopyOverlayPositionIfNeeded()
     }
 
     private func flushPinnedRowHeightInvalidationsIfNeeded() {
@@ -1036,8 +843,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         if !userHasScrolledUp, !rows.isEmpty, invalidated.contains(rows.count - 1) {
             requestCoalescedScrollToBottom()
         }
-
-        updateCopyOverlayPositionIfNeeded()
     }
 
     private func scheduleScrollEndDebouncedPrewarm() {
@@ -1853,6 +1658,7 @@ final class MessageTableCellView: NSTableCellView {
 
     private let metaLabel = NSTextField(labelWithString: "")
     private let bodyTextView = MessageBodyTextView()
+    private let copyButton = MessageCopyOverlayButton(frame: .zero)
     private weak var owningTableView: NSTableView?
     private weak var messageTableView: MessageTableView?
     private var hoverTrackingArea: NSTrackingArea?
@@ -1861,6 +1667,13 @@ final class MessageTableCellView: NSTableCellView {
     private var metaTrailingConstraint: NSLayoutConstraint!
     private var bodyLeadingConstraint: NSLayoutConstraint!
     private var bodyTrailingConstraint: NSLayoutConstraint!
+    private var bodyBottomWithoutActionBar: NSLayoutConstraint!
+    private var bodyBottomWithActionBar: NSLayoutConstraint!
+    private var copyButtonBottomConstraint: NSLayoutConstraint!
+    private var copyButtonHeightConstraint: NSLayoutConstraint!
+    private var copyButtonLeadingConstraint: NSLayoutConstraint!
+    private var copyButtonWidthConstraint: NSLayoutConstraint!
+    private var isActionBarActive = false
     private var renderController: RenderController?
     private var outputObservation: AnyCancellable?
     private weak var container: AppContainer?
@@ -1893,17 +1706,31 @@ final class MessageTableCellView: NSTableCellView {
         addSubview(metaLabel)
         addSubview(bodyTextView)
 
+        copyButton.translatesAutoresizingMaskIntoConstraints = false
+        copyButton.alphaValue = 0
+        copyButton.isHidden = true
+        copyButton.target = self
+        copyButton.action = #selector(handleCopyButtonPressed)
+        addSubview(copyButton)
+
         metaLeadingConstraint = metaLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: HushSpacing.xl)
         metaTrailingConstraint = metaLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -HushSpacing.xl)
         bodyLeadingConstraint = bodyTextView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: HushSpacing.xl)
         bodyTrailingConstraint = bodyTextView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -HushSpacing.xl)
+
+        bodyBottomWithoutActionBar = bodyTextView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -HushSpacing.sm)
+        bodyBottomWithActionBar = copyButton.topAnchor.constraint(equalTo: bodyTextView.bottomAnchor, constant: HushSpacing.sm)
+        copyButtonBottomConstraint = copyButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -HushSpacing.sm)
+        copyButtonHeightConstraint = copyButton.heightAnchor.constraint(equalToConstant: HushSpacing.xl)
+        copyButtonLeadingConstraint = copyButton.leadingAnchor.constraint(equalTo: bodyTextView.leadingAnchor)
+        copyButtonWidthConstraint = copyButton.widthAnchor.constraint(equalToConstant: HushSpacing.xl)
 
         NSLayoutConstraint.activate([
             metaLeadingConstraint, metaTrailingConstraint,
             metaLabel.topAnchor.constraint(equalTo: topAnchor, constant: HushSpacing.sm),
             bodyLeadingConstraint, bodyTrailingConstraint,
             bodyTextView.topAnchor.constraint(equalTo: metaLabel.bottomAnchor, constant: HushSpacing.xs),
-            bodyTextView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -HushSpacing.sm)
+            bodyBottomWithoutActionBar
         ])
     }
 
@@ -1931,6 +1758,8 @@ final class MessageTableCellView: NSTableCellView {
         owningTableView = nil
         messageTableView = nil
         isMouseHovering = false
+        copyButton.resetState()
+        copyButton.alphaValue = 0
         bodyTextView.setAttributedText(NSAttributedString(), cachedHeight: nil)
     }
 
@@ -1954,13 +1783,13 @@ final class MessageTableCellView: NSTableCellView {
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
         isMouseHovering = true
-        refreshCopyOverlayHoverIfNeeded()
+        if isActionBarActive { setCopyButtonVisible(true, animated: true) }
     }
 
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         isMouseHovering = false
-        messageTableView?.messageCellDidExitHover(cell: self)
+        if isActionBarActive { setCopyButtonVisible(false, animated: true) }
     }
 
     func cancelRenderWork() {
@@ -2115,7 +1944,9 @@ final class MessageTableCellView: NSTableCellView {
         outputObservation?.cancel()
         outputObservation = nil
         bodyTextView.cachedIntrinsicHeight = nil
-        refreshCopyOverlayHoverIfNeeded()
+
+        let shouldShowActionBar = row.message.role == .assistant && !row.isStreaming
+        updateActionBarLayout(showActionBar: shouldShowActionBar)
 
         guard row.message.role == ChatRole.assistant else {
             applyPlainText(row.message.content, cachedHeight: nil)
@@ -2207,28 +2038,62 @@ final class MessageTableCellView: NSTableCellView {
         )
     }
 
-    private func refreshCopyOverlayHoverIfNeeded() {
-        guard isMouseHovering else { return }
-        guard let row = currentRow else { return }
-        messageTableView?.messageCellDidEnterHover(row: row, cell: self)
-    }
+    private func updateActionBarLayout(showActionBar: Bool) {
+        guard showActionBar != isActionBarActive else { return }
+        isActionBarActive = showActionBar
 
-    fileprivate func bodyFrame(in view: NSView) -> NSRect {
-        bodyTextView.convert(bodyTextView.bounds, to: view)
-    }
-
-    fileprivate func bodyContentFrame(in view: NSView) -> NSRect {
-        guard let layoutManager = bodyTextView.layoutManager,
-              let textContainer = bodyTextView.textContainer
-        else {
-            return bodyFrame(in: view)
+        if showActionBar {
+            bodyBottomWithoutActionBar.isActive = false
+            NSLayoutConstraint.activate([
+                bodyBottomWithActionBar,
+                copyButtonBottomConstraint,
+                copyButtonHeightConstraint,
+                copyButtonLeadingConstraint,
+                copyButtonWidthConstraint
+            ])
+            copyButton.isHidden = false
+            copyButton.alphaValue = isMouseHovering ? 1 : 0
+        } else {
+            NSLayoutConstraint.deactivate([
+                bodyBottomWithActionBar,
+                copyButtonBottomConstraint,
+                copyButtonHeightConstraint,
+                copyButtonLeadingConstraint,
+                copyButtonWidthConstraint
+            ])
+            bodyBottomWithoutActionBar.isActive = true
+            copyButton.isHidden = true
+            copyButton.alphaValue = 0
         }
+    }
 
-        layoutManager.ensureLayout(for: textContainer)
-        let usedRect = layoutManager.usedRect(for: textContainer)
-        let origin = bodyTextView.textContainerOrigin
-        let rectInTextView = usedRect.offsetBy(dx: origin.x, dy: origin.y)
-        return bodyTextView.convert(rectInTextView, to: view)
+    private func setCopyButtonVisible(_ isVisible: Bool, animated: Bool) {
+        let targetAlpha: CGFloat = isVisible ? 1 : 0
+        guard copyButton.alphaValue != targetAlpha else { return }
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.12
+                copyButton.animator().alphaValue = targetAlpha
+            }
+        } else {
+            copyButton.alphaValue = targetAlpha
+        }
+    }
+
+    @objc private func handleCopyButtonPressed() {
+        guard let row = currentRow else { return }
+        guard row.message.role == .assistant else { return }
+        guard !row.isStreaming else { return }
+
+        let content = row.message.content
+        guard !content.isEmpty else { return }
+
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(content, forType: .string)
+
+        copyButton.flashCopied()
     }
 
     private static let timeFormatter: DateFormatter = {

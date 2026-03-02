@@ -16,6 +16,7 @@ public nonisolated struct AppPreferencesRecord: Codable, Sendable, Equatable {
     public var presencePenalty: Double
     public var frequencyPenalty: Double
     public var contextMessageLimit: Int?
+    public var useModelDefaults: Bool
     public var quickBarKey: String
     public var quickBarModifiers: String // JSON-encoded [String]
     public var theme: String
@@ -33,6 +34,7 @@ public nonisolated struct AppPreferencesRecord: Codable, Sendable, Equatable {
         presencePenalty: Double,
         frequencyPenalty: Double,
         contextMessageLimit: Int? = nil,
+        useModelDefaults: Bool = false,
         quickBarKey: String,
         quickBarModifiers: String = "[]",
         theme: String = AppTheme.dark.rawValue,
@@ -49,6 +51,7 @@ public nonisolated struct AppPreferencesRecord: Codable, Sendable, Equatable {
         self.presencePenalty = presencePenalty
         self.frequencyPenalty = frequencyPenalty
         self.contextMessageLimit = contextMessageLimit
+        self.useModelDefaults = useModelDefaults
         self.quickBarKey = quickBarKey
         self.quickBarModifiers = quickBarModifiers
         self.theme = theme
@@ -110,7 +113,8 @@ public extension AppPreferencesRecord {
                 maxTokens: maxTokens,
                 presencePenalty: presencePenalty,
                 frequencyPenalty: frequencyPenalty,
-                contextMessageLimit: contextMessageLimit
+                contextMessageLimit: contextMessageLimit,
+                useModelDefaults: useModelDefaults
             ),
             quickBar: QuickBarConfiguration(
                 key: quickBarKey,
@@ -144,6 +148,7 @@ public extension AppPreferencesRecord {
             presencePenalty: settings.parameters.presencePenalty,
             frequencyPenalty: settings.parameters.frequencyPenalty,
             contextMessageLimit: settings.parameters.contextMessageLimit,
+            useModelDefaults: settings.parameters.useModelDefaults,
             quickBarKey: settings.quickBar.key,
             quickBarModifiers: modifiersJSON,
             theme: settings.theme.rawValue,

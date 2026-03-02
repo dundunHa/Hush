@@ -347,6 +347,7 @@ extension Notification.Name {
 }
 
 private enum ThinkingStrength: String, CaseIterable, Identifiable {
+    case `default` = "Default"
     case low = "Low"
     case medium = "Medium"
     case high = "High"
@@ -357,21 +358,29 @@ private enum ThinkingStrength: String, CaseIterable, Identifiable {
     }
 
     func parameters(preserving existing: ModelParameters) -> ModelParameters {
-        let (temp, topP, maxTokens) = switch self {
-        case .low: (0.30, 0.80, 512)
-        case .medium: (0.50, 0.90, 768)
-        case .high: (0.70, 1.00, 1024)
-        case .extraHigh: (0.90, 1.00, 1536)
+        switch self {
+        case .default:
+            var params = existing
+            params.useModelDefaults = true
+            return params
+        case .low, .medium, .high, .extraHigh:
+            let (temp, topP, maxTokens) = switch self {
+            case .low: (0.30, 0.80, 512)
+            case .medium: (0.50, 0.90, 768)
+            case .high: (0.70, 1.00, 1024)
+            case .extraHigh: (0.90, 1.00, 1536)
+            case .default: (0.0, 0.0, 0) // unreachable
+            }
+            return ModelParameters(
+                temperature: temp,
+                topP: topP,
+                topK: existing.topK,
+                maxTokens: maxTokens,
+                presencePenalty: 0,
+                frequencyPenalty: 0,
+                contextMessageLimit: existing.contextMessageLimit
+            )
         }
-        return ModelParameters(
-            temperature: temp,
-            topP: topP,
-            topK: existing.topK,
-            maxTokens: maxTokens,
-            presencePenalty: 0,
-            frequencyPenalty: 0,
-            contextMessageLimit: existing.contextMessageLimit
-        )
     }
 
     var parameters: ModelParameters {
@@ -379,7 +388,9 @@ private enum ThinkingStrength: String, CaseIterable, Identifiable {
     }
 
     static func from(parameters: ModelParameters) -> ThinkingStrength {
-        allCases.min {
+        if parameters.useModelDefaults { return .default }
+        let presets: [ThinkingStrength] = [.low, .medium, .high, .extraHigh]
+        return presets.min {
             abs($0.parameters.temperature - parameters.temperature)
                 < abs($1.parameters.temperature - parameters.temperature)
         } ?? .high
