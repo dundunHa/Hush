@@ -5,6 +5,10 @@ struct RootView: View {
     @Binding var showSettings: Bool
     @State private var showSidebar: Bool = true
 
+    private var rightPaneCornerRadius: CGFloat {
+        showSidebar ? HushSpacing.splitPaneCornerRadius : 0
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // MARK: - Split-color top bar
@@ -29,12 +33,43 @@ struct RootView: View {
                     .clipped()
                     .allowsHitTesting(showSidebar)
 
-                    Divider()
-                        .overlay(HushColors.separator)
-                        .opacity(showSidebar ? 1 : 0)
+                    ZStack {
+                        Rectangle()
+                            .fill(.ultraThinMaterial)
 
-                    ChatDetailPane()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        let shape = UnevenRoundedRectangle(
+                            topLeadingRadius: 0,
+                            bottomLeadingRadius: rightPaneCornerRadius,
+                            bottomTrailingRadius: 0,
+                            topTrailingRadius: 0,
+                            style: .continuous
+                        )
+
+                        ChatDetailPane()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(HushColors.rootBackground)
+                            .clipShape(shape)
+                            .shadow(
+                                color: HushColors.splitPaneShadow.opacity(showSidebar ? 1 : 0),
+                                radius: HushSpacing.splitPaneShadowRadius,
+                                x: HushSpacing.splitPaneShadowX,
+                                y: 0
+                            )
+                            .overlay {
+                                if showSidebar {
+                                    shape
+                                        .strokeBorder(HushColors.splitPaneEdgeStroke, lineWidth: 1)
+                                        .mask(
+                                            HStack(spacing: 0) {
+                                                Rectangle()
+                                                    .frame(width: rightPaneCornerRadius + 2)
+                                                Spacer(minLength: 0)
+                                            }
+                                        )
+                                }
+                            }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }

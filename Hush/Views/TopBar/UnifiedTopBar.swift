@@ -5,29 +5,65 @@ struct SplitTopBar: View {
     let isSettingsMode: Bool
 
     private let barHeight: CGFloat = HushSpacing.topBarHeight
+    private var rightPaneCornerRadius: CGFloat {
+        (showSidebar && !isSettingsMode) ? min(HushSpacing.splitPaneCornerRadius, barHeight / 2) : 0
+    }
+
+    private var showsSplit: Bool {
+        showSidebar || isSettingsMode
+    }
 
     var body: some View {
         HStack(spacing: 0) {
             Color.clear
-                .frame(width: showSidebar || isSettingsMode ? HushSpacing.sidebarWidth : 0, height: barHeight)
+                .frame(width: showsSplit ? HushSpacing.sidebarWidth : 0, height: barHeight)
                 .background(.ultraThinMaterial)
 
-            Rectangle()
-                .fill(HushColors.separator)
-                .frame(width: 1)
-                .opacity(showSidebar || isSettingsMode ? 1 : 0)
+            ZStack {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
 
-            if !isSettingsMode {
-                ChatTopBar(showSidebar: $showSidebar)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(height: barHeight)
-                    .background(HushColors.rootBackground)
-            } else {
-                Color.clear
-                    .frame(maxWidth: .infinity)
-                    .frame(height: barHeight)
-                    .background(HushColors.rootBackground)
+                let shape = UnevenRoundedRectangle(
+                    topLeadingRadius: rightPaneCornerRadius,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 0,
+                    style: .continuous
+                )
+
+                Group {
+                    if !isSettingsMode {
+                        ChatTopBar(showSidebar: $showSidebar)
+                    } else {
+                        Color.clear
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: barHeight)
+                .background(HushColors.rootBackground)
+                .clipShape(shape)
+                .shadow(
+                    color: HushColors.splitPaneShadow.opacity((showSidebar && !isSettingsMode) ? 1 : 0),
+                    radius: HushSpacing.splitPaneShadowRadius,
+                    x: HushSpacing.splitPaneShadowX,
+                    y: 0
+                )
+                .overlay {
+                    if showSidebar && !isSettingsMode {
+                        shape
+                            .strokeBorder(HushColors.splitPaneEdgeStroke, lineWidth: 1)
+                            .mask(
+                                HStack(spacing: 0) {
+                                    Rectangle()
+                                        .frame(width: rightPaneCornerRadius + 2)
+                                    Spacer(minLength: 0)
+                                }
+                            )
+                    }
+                }
             }
+            .frame(maxWidth: .infinity)
+            .frame(height: barHeight)
         }
         .frame(height: barHeight)
         .overlay(alignment: .topLeading) {

@@ -12,6 +12,10 @@ enum HushColors {
     static let separator = Color.white.opacity(0.10)
     static let subtleStroke = Color.white.opacity(0.12)
 
+    // Shadows
+    static let splitPaneEdgeStroke = Color.white.opacity(0.14)
+    static let splitPaneShadow = Color.black.opacity(0.28)
+
     /// Text
     static let secondaryText = Color.white.opacity(0.62)
 

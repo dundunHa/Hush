@@ -9,6 +9,9 @@ enum HushSpacing {
 
     static let cardCornerRadius: CGFloat = 14
     static let composerCornerRadius: CGFloat = 12
+    static let splitPaneCornerRadius: CGFloat = 24
+    static let splitPaneShadowRadius: CGFloat = 8
+    static let splitPaneShadowX: CGFloat = -4
     static let sidebarWidth: CGFloat = 280
     static let topBarHeight: CGFloat = 50
     static let chatContentMaxWidth: CGFloat = 800
