@@ -60,10 +60,13 @@ struct RootView: View {
                                     shape
                                         .strokeBorder(HushColors.splitPaneEdgeStroke, lineWidth: 1)
                                         .mask(
-                                            HStack(spacing: 0) {
+                                            ZStack(alignment: .topLeading) {
+                                                Rectangle()
+                                                    .frame(width: 2)
+
                                                 Rectangle()
                                                     .frame(width: rightPaneCornerRadius + 2)
-                                                Spacer(minLength: 0)
+                                                    .padding(.top, 1)
                                             }
                                         )
                                 }
