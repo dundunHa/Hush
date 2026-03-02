@@ -16,7 +16,7 @@ struct MessageTableViewHistoryPrependScrollTests {
     }
 
     @Test("Prepending older messages preserves top visible anchor when scrolled up")
-    func prependPreservesAnchorWhenScrolledUp() throws {
+    func prependPreservesAnchorWhenScrolledUp() {
         let runtime = MessageRenderRuntime()
         let container = AppContainer.forTesting(settings: .testDefault)
 

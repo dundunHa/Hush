@@ -2277,11 +2277,11 @@ extension AppContainer {
 }
 
 #if DEBUG
-extension AppContainer {
-    func setRunningConversationIDsForTesting(_ ids: Set<String>) {
-        runningConversationIds = ids
+    extension AppContainer {
+        func setRunningConversationIDsForTesting(_ ids: Set<String>) {
+            runningConversationIds = ids
+        }
     }
-}
 #endif
 
 // swiftlint:enable file_length type_body_length

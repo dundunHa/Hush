@@ -7,12 +7,14 @@ SPM_DIR ?= .build/SourcePackages
 APP_PATH ?= $(DERIVED_DATA)/Build/Products/Debug/Hush.app
 RELEASE_APP_PATH ?= $(DERIVED_DATA)/Build/Products/Release/Hush.app
 RELEASE_DIR ?= build/release
+RELEASE_ARCHS ?= arm64 x86_64
 SRC_DIRS ?= Hush HushTests
 WATCH_DIRS ?= $(CURDIR)/Hush $(CURDIR)/HushTests
 WATCH_SCRIPT ?= scripts/dev-watch.sh
 XCODEBUILD ?= xcodebuild
 HOST_ARCH ?= $(shell uname -m)
 XCODE_DESTINATION ?= platform=macOS,arch=$(HOST_ARCH)
+XCODE_RELEASE_DESTINATION ?= platform=macOS
 TEST_RESULTS_DIR ?= .build/TestResults
 XCCOV ?= xcrun xccov
 XCTRACE_ARGS ?=
@@ -83,10 +85,14 @@ release: ## Build Release app and package into a DMG installer
 	@$(XCODEBUILD) \
 		-project "$(PROJECT)" \
 		-scheme "$(SCHEME)" \
-		-destination "$(XCODE_DESTINATION)" \
+		-destination "$(XCODE_RELEASE_DESTINATION)" \
 		-configuration Release \
 		-derivedDataPath "$(DERIVED_DATA)" \
 		-clonedSourcePackagesDirPath "$(SPM_DIR)" \
+		ONLY_ACTIVE_ARCH=NO \
+		"ARCHS=$(RELEASE_ARCHS)" \
+		CODE_SIGNING_ALLOWED=NO \
+		CODE_SIGNING_REQUIRED=NO \
 		build
 	@echo "==> Packaging DMG..."
 	@VERSION=$$(defaults read "$$(pwd)/$(RELEASE_APP_PATH)/Contents/Info" CFBundleShortVersionString); \
@@ -94,7 +100,7 @@ release: ## Build Release app and package into a DMG installer
 	DMG_NAME="Hush-$${VERSION}-$${BUILD}.dmg"; \
 	DMG_PATH="$(RELEASE_DIR)/$$DMG_NAME"; \
 	STAGING=$$(mktemp -d); \
-	cp -R "$(RELEASE_APP_PATH)" "$$STAGING/Hush.app"; \
+	ditto "$(RELEASE_APP_PATH)" "$$STAGING/Hush.app"; \
 	ln -s /Applications "$$STAGING/Applications"; \
 	rm -f "$$DMG_PATH"; \
 	hdiutil create -volname "Hush" \
