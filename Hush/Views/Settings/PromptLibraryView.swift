@@ -23,6 +23,7 @@ struct PromptLibraryView: View {
                     templateDetailSheet(templateID: templateID)
                 }
             }
+            .themeRefreshAware()
     }
 
     // MARK: - Template List
@@ -332,6 +333,7 @@ private struct PromptTemplateRow: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        .themeRefreshAware()
     }
 }
 

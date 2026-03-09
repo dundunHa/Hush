@@ -32,7 +32,7 @@ struct HotScenePoolControllerStreamingFastPathTests {
         let controller = HotScenePoolController(pool: pool)
         _ = controller.view
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         let scene = try #require(pool.sceneFor(conversationID: conversationID))
         let baselineApplyCount = scene.applyCountForTesting
@@ -52,7 +52,7 @@ struct HotScenePoolControllerStreamingFastPathTests {
             )
         ]
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         #expect(scene.applyCountForTesting == baselineApplyCount)
         #expect(scene.streamingPushCountForTesting == 1)

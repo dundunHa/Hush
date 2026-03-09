@@ -24,7 +24,6 @@ struct ChatDetailPane: View {
             VStack(spacing: 0) {
                 HotScenePoolRepresentable()
                     .environmentObject(container)
-                    .id(container.settings.theme)
                     .frame(maxHeight: .infinity)
                     .clipped()
 

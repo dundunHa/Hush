@@ -5,6 +5,7 @@ final class HotScenePoolController: NSViewController {
     private weak var container: AppContainer?
     private let pool: HotScenePool
     private var lastActiveConversationID: String?
+    private var lastAppliedTheme: AppTheme?
 
     // MARK: - Diff State (avoids redundant apply when only unrelated @Published fields change)
 
@@ -61,21 +62,28 @@ final class HotScenePoolController: NSViewController {
         scheduleResizeCleanup(expectedContentWidth: quantized)
     }
 
-    func update(container: AppContainer) {
+    func update(container: AppContainer, theme: AppTheme) {
         self.container = container
         container.registerHotScenePool(pool)
+
+        let themeChanged = lastAppliedTheme != theme
+        lastAppliedTheme = theme
 
         guard let activeConversationID = container.activeConversationId else { return }
 
         if lastActiveConversationID != activeConversationID {
-            switchToActiveConversation(container: container)
+            switchToActiveConversation(container: container, forceFullReload: themeChanged)
             lastActiveConversationID = activeConversationID
         } else {
-            forwardUpdateToActiveScene(container: container)
+            forwardUpdateToActiveScene(container: container, forceFullReload: themeChanged)
+        }
+
+        if themeChanged {
+            refreshInactiveScenes(container: container, activeConversationID: activeConversationID)
         }
     }
 
-    func switchToActiveConversation(container: AppContainer) {
+    func switchToActiveConversation(container: AppContainer, forceFullReload: Bool = false) {
         guard let activeConversationID = container.activeConversationId else { return }
         let messages = container.messages
         let generation = container.activeConversationRenderGeneration
@@ -95,7 +103,8 @@ final class HotScenePoolController: NSViewController {
             generation: generation,
             makeScene: { ConversationViewController(container: container) }
         )
-        let isHotHitWithoutReload = !result.didCreate && !result.scene.needsReload
+        let requiresReload = result.scene.needsReload || forceFullReload
+        let isHotHitWithoutReload = !result.didCreate && !requiresReload
 
         if let evicted = result.evicted {
             evictScene(conversationID: evicted.conversationID, scene: evicted.scene, container: container)
@@ -108,16 +117,18 @@ final class HotScenePoolController: NSViewController {
                 messages: messages,
                 isSending: isSending,
                 generation: generation,
-                container: container
+                container: container,
+                forceFullReload: forceFullReload
             )
-        } else if result.scene.needsReload {
+        } else if requiresReload {
             result.scene.needsReload = false
             result.scene.applyConversationState(
                 conversationId: activeConversationID,
                 messages: messages,
                 isSending: isSending,
                 generation: generation,
-                container: container
+                container: container,
+                forceFullReload: true
             )
         }
 
@@ -145,10 +156,10 @@ final class HotScenePoolController: NSViewController {
 
     // MARK: - Private
 
-    private func forwardUpdateToActiveScene(container: AppContainer) {
+    private func forwardUpdateToActiveScene(container: AppContainer, forceFullReload: Bool = false) {
         guard let activeConversationID = container.activeConversationId else { return }
         guard let scene = pool.sceneFor(conversationID: activeConversationID) else {
-            switchToActiveConversation(container: container)
+            switchToActiveConversation(container: container, forceFullReload: forceFullReload)
             return
         }
 
@@ -172,7 +183,8 @@ final class HotScenePoolController: NSViewController {
                 && lastMessageID == lastForwardedLastMessageID
                 && lastContentHash != lastForwardedLastMessageContentHash
 
-        if messageCount == lastForwardedMessageCount,
+        if !forceFullReload,
+           messageCount == lastForwardedMessageCount,
            lastContentHash == lastForwardedLastMessageContentHash,
            isSending == lastForwardedIsSending,
            generation == lastForwardedGeneration
@@ -187,7 +199,7 @@ final class HotScenePoolController: NSViewController {
         lastForwardedIsSending = isSending
         lastForwardedGeneration = generation
 
-        pool.switchTo(
+        _ = pool.switchTo(
             conversationID: activeConversationID,
             messageCount: messageCount,
             generation: generation,
@@ -211,13 +223,31 @@ final class HotScenePoolController: NSViewController {
             messages: messages,
             isSending: isSending,
             generation: generation,
-            container: container
+            container: container,
+            forceFullReload: forceFullReload
         )
 
         container.messageRenderRuntime.setSceneConfiguration(
             active: (activeConversationID, generation),
             hot: pool.hotConversationGenerations()
         )
+    }
+
+    private func refreshInactiveScenes(container: AppContainer, activeConversationID: String) {
+        for conversationID in pool.hotConversationIDs where conversationID != activeConversationID {
+            guard let scene = pool.sceneFor(conversationID: conversationID) else { continue }
+            guard let generation = pool.generationForConversation(conversationID: conversationID) else { continue }
+
+            scene.needsReload = false
+            scene.applyConversationState(
+                conversationId: conversationID,
+                messages: container.messagesForConversation(conversationID),
+                isSending: container.runningConversationIds.contains(conversationID),
+                generation: generation,
+                container: container,
+                forceFullReload: true
+            )
+        }
     }
 
     private func attachSceneIfNeeded(_ scene: ConversationViewController) {

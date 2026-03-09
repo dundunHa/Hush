@@ -57,6 +57,7 @@ struct ArchivedThreadsSettingsView: View {
                 "Permanently delete all \(archivedThreads.count) archived thread(s). This cannot be undone."
             )
         }
+        .themeRefreshAware()
     }
 
     // MARK: - Header
@@ -389,6 +390,7 @@ private struct ArchivedThreadRow: View {
         } message: {
             Text("This will permanently delete this thread and all its messages.")
         }
+        .themeRefreshAware()
     }
 }
 

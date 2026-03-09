@@ -60,17 +60,17 @@ struct HotSceneSwitchTests {
             activeConversationId: conversationA
         )
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
         let sceneA = try #require(pool.sceneFor(conversationID: conversationA))
         let applyCountA = sceneA.applyCountForTesting
 
         container.activateConversation(conversationId: conversationB)
         try await waitForConversationReady(container, conversationId: conversationB)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         container.activateConversation(conversationId: conversationA)
         try await waitForConversationReady(container, conversationId: conversationA)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         let sceneAAfter = try #require(pool.sceneFor(conversationID: conversationA))
         #expect(sceneAAfter.applyCountForTesting == applyCountA)
@@ -103,12 +103,12 @@ struct HotSceneSwitchTests {
             activeConversationId: conversationA
         )
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
         #expect(pool.sceneFor(conversationID: conversationA) != nil)
 
         container.activateConversation(conversationId: conversationB)
         try await waitForConversationReady(container, conversationId: conversationB)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         let sceneB = try #require(pool.sceneFor(conversationID: conversationB))
         #expect(sceneB.parent != nil)
@@ -160,11 +160,11 @@ struct HotSceneSwitchTests {
             messageRenderRuntime: runtime
         )
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         container.activateConversation(conversationId: conversationB)
         try await waitForConversationReady(container, conversationId: conversationB)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         #expect(renderCache.protectedKeyCountForTesting(conversationID: conversationA) == 0)
     }
@@ -197,7 +197,7 @@ struct HotSceneSwitchTests {
         container.resetConversation()
         let conversationA = try #require(container.activeConversationId)
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
         #expect(pool.sceneFor(conversationID: conversationA) != nil)
 
         container.sendDraft("start")
@@ -212,7 +212,7 @@ struct HotSceneSwitchTests {
         // Switch to a new conversation to evict A's scene while its request is still streaming.
         container.resetConversation()
         let conversationB = try #require(container.activeConversationId)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         #expect(conversationB != conversationA)
         #expect(pool.sceneFor(conversationID: conversationA) == nil)
@@ -256,7 +256,7 @@ struct HotSceneSwitchTests {
         container.resetConversation()
         let conversationA = try #require(container.activeConversationId)
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
         let sceneA = try #require(pool.sceneFor(conversationID: conversationA))
         let applyCountA = sceneA.applyCountForTesting
 
@@ -272,7 +272,7 @@ struct HotSceneSwitchTests {
         // Switch to B without evicting A.
         container.resetConversation()
         let conversationB = try #require(container.activeConversationId)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         #expect(conversationB != conversationA)
         #expect(pool.sceneFor(conversationID: conversationA) != nil)
@@ -299,7 +299,7 @@ struct HotSceneSwitchTests {
         // Switch back to A and ensure we apply latest state once.
         container.activateConversation(conversationId: conversationA)
         try await waitForConversationReady(container, conversationId: conversationA)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         let sceneAAfter = try #require(pool.sceneFor(conversationID: conversationA))
         #expect(!sceneAAfter.needsReload)
@@ -360,7 +360,7 @@ struct HotSceneSwitchTests {
             activeConversationId: conversationA
         )
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
         try await waitForConversationReady(container, conversationId: conversationA, timeout: .seconds(5))
         controller.view.layoutSubtreeIfNeeded()
 
@@ -371,12 +371,12 @@ struct HotSceneSwitchTests {
 
         container.activateConversation(conversationId: conversationB)
         try await waitForConversationReady(container, conversationId: conversationB, timeout: .seconds(5))
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
         controller.view.layoutSubtreeIfNeeded()
 
         container.activateConversation(conversationId: conversationA)
         try await waitForConversationReady(container, conversationId: conversationA, timeout: .seconds(5))
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
         controller.view.layoutSubtreeIfNeeded()
 
         let sceneAAfter = try #require(pool.sceneFor(conversationID: conversationA))
@@ -483,7 +483,7 @@ struct HotSceneSwitchTests {
         }
         await container.messageRenderRuntime.prewarm(inputs: inputsA, protectFor: conversationA)
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
         try await waitForConversationReady(container, conversationId: conversationA)
 
         let recorder = PerfTrace.TestRecorder()
@@ -491,35 +491,35 @@ struct HotSceneSwitchTests {
             // A → B → C → A includes at least one hot-hit switch.
             container.activateConversation(conversationId: conversationB)
             try await waitForConversationReady(container, conversationId: conversationB, timeout: .seconds(5))
-            controller.update(container: container)
+            controller.update(container: container, theme: container.settings.theme)
             controller.view.layoutSubtreeIfNeeded()
 
             container.activateConversation(conversationId: conversationC)
             try await waitForConversationReady(container, conversationId: conversationC, timeout: .seconds(5))
-            controller.update(container: container)
+            controller.update(container: container, theme: container.settings.theme)
             controller.view.layoutSubtreeIfNeeded()
 
             container.activateConversation(conversationId: conversationA)
             try await waitForConversationReady(container, conversationId: conversationA, timeout: .seconds(5))
-            controller.update(container: container)
+            controller.update(container: container, theme: container.settings.theme)
             controller.view.layoutSubtreeIfNeeded()
 
             // Introduce D to force at least one cold-miss recreation path.
             container.activateConversation(conversationId: conversationD)
             try await waitForConversationReady(container, conversationId: conversationD, timeout: .seconds(5))
-            controller.update(container: container)
+            controller.update(container: container, theme: container.settings.theme)
             controller.view.layoutSubtreeIfNeeded()
 
             // Switch to a still-pooled conversation to hit the visibility-toggle path again.
             container.activateConversation(conversationId: conversationC)
             try await waitForConversationReady(container, conversationId: conversationC, timeout: .seconds(5))
-            controller.update(container: container)
+            controller.update(container: container, theme: container.settings.theme)
             controller.view.layoutSubtreeIfNeeded()
 
             // Recreate an evicted conversation and ensure it's cache-hit on reload.
             container.activateConversation(conversationId: conversationB)
             try await waitForConversationReady(container, conversationId: conversationB, timeout: .seconds(5))
-            controller.update(container: container)
+            controller.update(container: container, theme: container.settings.theme)
             controller.view.layoutSubtreeIfNeeded()
         }
 

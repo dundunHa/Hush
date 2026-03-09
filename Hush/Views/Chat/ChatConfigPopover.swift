@@ -114,6 +114,7 @@ struct ChatConfigPopover: View {
                         .stroke(HushColors.subtleStroke, lineWidth: 1)
                 )
         )
+        .themeRefreshAware()
     }
 
     private func clampContextMessageLimit(_ value: Int) -> Int {

@@ -51,7 +51,8 @@ final class ConversationViewController: NSViewController {
         messages: [ChatMessage],
         isSending: Bool,
         generation: UInt64,
-        container: AppContainer
+        container: AppContainer,
+        forceFullReload: Bool = false
     ) {
         needsReload = false
         #if DEBUG
@@ -63,7 +64,8 @@ final class ConversationViewController: NSViewController {
             isActiveConversationSending: isSending,
             switchGeneration: generation,
             runtime: container.messageRenderRuntime,
-            container: container
+            container: container,
+            forceFullReload: forceFullReload
         )
 
         guard conversationId == container.activeConversationId else { return }

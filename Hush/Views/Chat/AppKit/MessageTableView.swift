@@ -368,7 +368,8 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         isActiveConversationSending: Bool,
         switchGeneration: UInt64,
         runtime: MessageRenderRuntime,
-        container: AppContainer
+        container: AppContainer,
+        forceFullReload: Bool = false
     ) {
         self.runtime = runtime
         self.container = container
@@ -431,7 +432,8 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
             previousRows: previousRows,
             newRows: newRows,
             generationChanged: generationChanged,
-            didPrependOlder: didPrependOlder
+            didPrependOlder: didPrependOlder,
+            forceFullReload: forceFullReload
         )
         rows = newRows
 
@@ -553,8 +555,10 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         previousRows: [RowModel],
         newRows: [RowModel],
         generationChanged: Bool,
-        didPrependOlder: Bool
+        didPrependOlder: Bool,
+        forceFullReload: Bool
     ) -> ApplyUpdateMode {
+        guard !forceFullReload else { return .fullReload }
         guard !generationChanged else { return .fullReload }
         guard !didPrependOlder else { return .fullReload }
 

@@ -81,6 +81,7 @@ struct SplitTopBar: View {
             }
         }
         .background(WindowDragArea())
+        .themeRefreshAware()
     }
 
     private var splitBackground: some View {

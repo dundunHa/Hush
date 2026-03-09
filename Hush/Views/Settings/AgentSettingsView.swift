@@ -47,6 +47,7 @@ struct AgentSettingsView: View {
                     presetDetailSheet(presetID: presetID)
                 }
             }
+            .themeRefreshAware()
     }
 
     // MARK: - Preset List
@@ -694,6 +695,7 @@ private struct AgentPresetRow: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        .themeRefreshAware()
     }
 }
 

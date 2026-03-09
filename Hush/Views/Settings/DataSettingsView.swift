@@ -29,6 +29,7 @@ struct DataSettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task { await loadStats() }
+        .themeRefreshAware()
     }
 
     // MARK: - Storage Section

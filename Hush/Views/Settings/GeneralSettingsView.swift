@@ -20,6 +20,7 @@ struct GeneralSettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .themeRefreshAware()
     }
 
     private var appearanceSection: some View {
@@ -182,5 +183,6 @@ private struct ThemeOptionCard: View {
             )
         }
         .buttonStyle(.plain)
+        .themeRefreshAware()
     }
 }

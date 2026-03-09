@@ -10,69 +10,72 @@ struct RootView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // MARK: - Split-color top bar
-
-            SplitTopBar(
-                showSidebar: $showSidebar,
-                isSettingsMode: showSettings
-            )
-
-            // MARK: - Content
-
+        Group {
             if showSettings {
                 SettingsWorkspaceView(showSettings: $showSettings)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                HStack(spacing: 0) {
-                    ConversationSidebarView(
-                        showSettings: $showSettings
+                VStack(spacing: 0) {
+                    // MARK: - Split-color top bar
+
+                    SplitTopBar(
+                        showSidebar: $showSidebar,
+                        isSettingsMode: false
                     )
-                    .frame(width: HushSpacing.sidebarWidth)
-                    .frame(width: showSidebar ? HushSpacing.sidebarWidth : 0, alignment: .leading)
-                    .clipped()
-                    .allowsHitTesting(showSidebar)
 
-                    ZStack {
-                        Rectangle()
-                            .fill(showSidebar ? HushColors.sidebarBackground : HushColors.rootBackground)
+                    // MARK: - Content
 
-                        let shape = UnevenRoundedRectangle(
-                            topLeadingRadius: 0,
-                            bottomLeadingRadius: rightPaneCornerRadius,
-                            bottomTrailingRadius: 0,
-                            topTrailingRadius: 0,
-                            style: .continuous
+                    HStack(spacing: 0) {
+                        ConversationSidebarView(
+                            showSettings: $showSettings
                         )
+                        .frame(width: HushSpacing.sidebarWidth)
+                        .frame(width: showSidebar ? HushSpacing.sidebarWidth : 0, alignment: .leading)
+                        .clipped()
+                        .allowsHitTesting(showSidebar)
 
-                        ChatDetailPane()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(HushColors.rootBackground)
-                            .clipShape(shape)
-                            .overlay {
-                                if showSidebar {
-                                    shape
-                                        .strokeBorder(HushColors.splitPaneEdgeStroke, lineWidth: 1)
-                                        .mask(
-                                            ZStack(alignment: .topLeading) {
-                                                Rectangle()
-                                                    .frame(width: 2)
+                        ZStack {
+                            Rectangle()
+                                .fill(showSidebar ? HushColors.sidebarBackground : HushColors.rootBackground)
 
-                                                Rectangle()
-                                                    .frame(width: rightPaneCornerRadius + 2)
-                                                    .padding(.top, 1)
-                                            }
-                                        )
+                            let shape = UnevenRoundedRectangle(
+                                topLeadingRadius: 0,
+                                bottomLeadingRadius: rightPaneCornerRadius,
+                                bottomTrailingRadius: 0,
+                                topTrailingRadius: 0,
+                                style: .continuous
+                            )
+
+                            ChatDetailPane()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .background(HushColors.rootBackground)
+                                .clipShape(shape)
+                                .overlay {
+                                    if showSidebar {
+                                        shape
+                                            .strokeBorder(HushColors.splitPaneEdgeStroke, lineWidth: 1)
+                                            .mask(
+                                                ZStack(alignment: .topLeading) {
+                                                    Rectangle()
+                                                        .frame(width: 2)
+
+                                                    Rectangle()
+                                                        .frame(width: rightPaneCornerRadius + 2)
+                                                        .padding(.top, 1)
+                                                }
+                                            )
+                                    }
                                 }
-                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .ignoresSafeArea(edges: .top)
         .background(HushColors.rootBackground.ignoresSafeArea())
+        .environment(\.hushTheme, container.settings.theme)
         .preferredColorScheme(preferredScheme(forTheme: container.settings.theme))
     }
 

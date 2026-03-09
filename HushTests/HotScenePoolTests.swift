@@ -130,22 +130,76 @@ struct HotScenePoolTests {
             sidebarThreads: []
         )
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
         let sceneA = try #require(pool.sceneFor(conversationID: conversationA))
         let applyCountAfterFirst = sceneA.applyCountForTesting
         #expect(applyCountAfterFirst > 0)
 
         container.activateConversation(conversationId: conversationB)
         try await waitForConversationReady(container, conversationId: conversationB)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         container.activateConversation(conversationId: conversationA)
         try await waitForConversationReady(container, conversationId: conversationA)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         let sceneAAfter = try #require(pool.sceneFor(conversationID: conversationA))
         #expect(sceneAAfter.applyCountForTesting == applyCountAfterFirst)
         #expect(sceneAAfter.view.isHidden == false)
+    }
+
+    @Test("Theme change forces full reload for active and hot scenes")
+    func themeChangeForcesFullReloadForActiveAndHotScenes() async throws {
+        let db = try DatabaseManager.inMemory()
+        let coordinator = ChatPersistenceCoordinator(dbManager: db)
+
+        let conversationA = try coordinator.createNewConversation()
+        let conversationB = try coordinator.createNewConversation()
+
+        try coordinator.persistSystemMessage(
+            ChatMessage(role: .assistant, content: "A1"),
+            conversationId: conversationA,
+            status: .completed
+        )
+        try coordinator.persistSystemMessage(
+            ChatMessage(role: .assistant, content: "B1"),
+            conversationId: conversationB,
+            status: .completed
+        )
+
+        var registry = ProviderRegistry()
+        registry.register(MockProvider(id: "mock"))
+
+        let pool = HotScenePool(capacity: 3)
+        let controller = HotScenePoolController(pool: pool)
+        controller.loadViewIfNeeded()
+
+        let container = AppContainer.forTesting(
+            settings: .testDefault,
+            registry: registry,
+            persistence: coordinator,
+            activeConversationId: conversationA,
+            sidebarThreads: []
+        )
+
+        controller.update(container: container, theme: container.settings.theme)
+
+        container.activateConversation(conversationId: conversationB)
+        try await waitForConversationReady(container, conversationId: conversationB)
+        controller.update(container: container, theme: container.settings.theme)
+
+        let hotScene = try #require(pool.sceneFor(conversationID: conversationA))
+        let activeScene = try #require(pool.sceneFor(conversationID: conversationB))
+        let hotApplyCount = hotScene.applyCountForTesting
+        let activeApplyCount = activeScene.applyCountForTesting
+
+        container.settings.theme = .light
+        controller.update(container: container, theme: container.settings.theme)
+
+        #expect(hotScene.applyCountForTesting == hotApplyCount + 1)
+        #expect(activeScene.applyCountForTesting == activeApplyCount + 1)
+        #expect(hotScene.messageTableViewForTesting.lastUpdateModeForTesting == .fullReload)
+        #expect(activeScene.messageTableViewForTesting.lastUpdateModeForTesting == .fullReload)
     }
 
     @Test("Evicted scenes are removed from view hierarchy")
@@ -190,22 +244,22 @@ struct HotScenePoolTests {
             sidebarThreads: []
         )
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
         try await waitForConversationReady(container, conversationId: c1)
 
         container.activateConversation(conversationId: c2)
         try await waitForConversationReady(container, conversationId: c2)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         container.activateConversation(conversationId: c3)
         try await waitForConversationReady(container, conversationId: c3)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         let sceneC1 = try #require(pool.sceneFor(conversationID: c1))
 
         container.activateConversation(conversationId: c4)
         try await waitForConversationReady(container, conversationId: c4)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         #expect(pool.sceneFor(conversationID: c1) == nil)
         #expect(sceneC1.parent == nil)

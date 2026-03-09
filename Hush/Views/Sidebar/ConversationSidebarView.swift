@@ -13,6 +13,7 @@ struct ConversationSidebarView: View {
         }
         .background(HushColors.sidebarBackground)
         .frame(maxHeight: .infinity, alignment: .top)
+        .themeRefreshAware()
     }
 
     private var header: some View {
@@ -246,6 +247,7 @@ private struct SidebarThreadRow: View {
             archiveResetTask = nil
         }
         .disabled(isDisabled)
+        .themeRefreshAware()
     }
 
     private var trailingAccessory: some View {

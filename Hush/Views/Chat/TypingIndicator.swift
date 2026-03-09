@@ -20,6 +20,7 @@ struct TypingIndicator: View {
         .onDisappear {
             stopAnimation()
         }
+        .themeRefreshAware()
     }
 
     private func startAnimation() {

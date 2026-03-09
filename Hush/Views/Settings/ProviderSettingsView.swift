@@ -108,6 +108,7 @@ struct ProviderSettingsView: View {
                     providerDetailSheet(providerID: providerID)
                 }
             }
+            .themeRefreshAware()
     }
 
     // MARK: - Helpers
@@ -1033,6 +1034,7 @@ private struct ProviderListRowView: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        .themeRefreshAware()
     }
 }
 

@@ -5,6 +5,14 @@ struct SettingsWorkspaceView: View {
 
     @State private var selectedTab: SettingsTab = .general
 
+    private var detailPaneTopCornerRadius: CGFloat {
+        min(HushSpacing.splitPaneCornerRadius, HushSpacing.topBarHeight / 2)
+    }
+
+    private var detailPaneBottomCornerRadius: CGFloat {
+        HushSpacing.splitPaneCornerRadius
+    }
+
     private enum SettingsTab: String, CaseIterable {
         case general
         case provider
@@ -18,9 +26,34 @@ struct SettingsWorkspaceView: View {
         HStack(spacing: 0) {
             sidebar
 
-            settingsDetailPane
+            ZStack {
+                Rectangle()
+                    .fill(HushColors.sidebarBackground)
+
+                let shape = UnevenRoundedRectangle(
+                    topLeadingRadius: detailPaneTopCornerRadius,
+                    bottomLeadingRadius: detailPaneBottomCornerRadius,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 0,
+                    style: .continuous
+                )
+
+                settingsDetailPane
+                    .background(HushColors.rootBackground)
+                    .clipShape(shape)
+                    .overlay {
+                        shape
+                            .strokeBorder(HushColors.splitPaneEdgeStroke, lineWidth: 1)
+                            .mask(alignment: .leading) {
+                                Rectangle()
+                                    .frame(width: max(detailPaneTopCornerRadius, detailPaneBottomCornerRadius) + 2)
+                            }
+                    }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(HushColors.sidebarBackground)
+        .themeRefreshAware()
     }
 
     // MARK: - Sidebar
@@ -106,11 +139,16 @@ struct SettingsWorkspaceView: View {
 
             Spacer(minLength: 0)
         }
+        .padding(.top, HushSpacing.topBarHeight + HushSpacing.lg)
         .padding(.horizontal, HushSpacing.md)
-        .padding(.vertical, HushSpacing.lg)
+        .padding(.bottom, HushSpacing.lg)
         .frame(width: HushSpacing.sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(HushColors.sidebarBackground)
+        .background(alignment: .top) {
+            WindowDragArea()
+                .frame(height: HushSpacing.topBarHeight)
+        }
     }
 
     private var settingsDetailPane: some View {
@@ -131,12 +169,6 @@ struct SettingsWorkspaceView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(HushColors.rootBackground)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(HushColors.splitPaneEdgeStroke)
-                .frame(width: 1)
-        }
     }
 }
 
@@ -185,6 +217,7 @@ private struct SettingsSidebarItem: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        .themeRefreshAware()
     }
 }
 
