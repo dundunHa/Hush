@@ -167,7 +167,7 @@ struct PromptLibraryView: View {
                 .scrollContentBackground(.hidden)
                 .padding(HushSpacing.sm)
                 .frame(minHeight: 240, maxHeight: 360)
-                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+                .background(HushColors.softFill, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(HushColors.subtleStroke, lineWidth: 1)
@@ -292,7 +292,7 @@ private struct PromptTemplateRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(template.name)
                         .font(HushTypography.body)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(HushColors.primaryText)
                         .lineLimit(1)
 
 //                    if !template.category.isEmpty {
@@ -316,11 +316,11 @@ private struct PromptTemplateRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
-                    .fill(isHovered ? Color.white.opacity(0.06) : HushColors.cardBackground)
+                    .fill(isHovered ? HushColors.hoverFill : HushColors.cardBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
                             .stroke(
-                                isHovered ? Color.white.opacity(0.16) : HushColors.subtleStroke,
+                                isHovered ? HushColors.hoverStroke : HushColors.subtleStroke,
                                 lineWidth: 1
                             )
                     )

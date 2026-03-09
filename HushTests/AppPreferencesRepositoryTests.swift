@@ -25,7 +25,8 @@ struct AppPreferencesRepositoryTests {
             selectedProviderID: "openai",
             selectedModelID: "gpt-4o-mini",
             parameters: .standard,
-            quickBar: .standard
+            quickBar: .standard,
+            theme: .readPaper
         )
 
         try repo.save(original)
@@ -37,7 +38,7 @@ struct AppPreferencesRepositoryTests {
         #expect(prefs.selectedModelID == "gpt-4o-mini")
         #expect(prefs.parameters == .standard)
         #expect(prefs.quickBar == .standard)
-        #expect(prefs.theme == .dark)
+        #expect(prefs.theme == .readPaper)
     }
 
     @Test("save overwrites previous preferences")

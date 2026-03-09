@@ -133,6 +133,9 @@ final class AppContainer: ObservableObject {
 
     @Published var settings: AppSettings {
         didSet {
+            if oldValue.theme != settings.theme {
+                HushColors.apply(theme: settings.theme)
+            }
             persistSettingsIfNeeded(previous: oldValue)
             if oldValue.maxConcurrentRequests != settings.maxConcurrentRequests {
                 requestCoordinator?.updateMaxConcurrent(settings.maxConcurrentRequests)
@@ -353,6 +356,7 @@ final class AppContainer: ObservableObject {
         sidebarThreadsCursor: SidebarThreadsCursor? = nil
     ) {
         self.settings = settings
+        HushColors.apply(theme: settings.theme)
         self.preferencesRepository = preferencesRepository
         self.credentialStore = credentialStore
         self.registry = registry

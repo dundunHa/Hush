@@ -11,7 +11,7 @@ struct ConversationSidebarView: View {
             threadList
             settingsButton
         }
-        .background(.ultraThinMaterial)
+        .background(HushColors.sidebarBackground)
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
@@ -140,11 +140,11 @@ struct ConversationSidebarView: View {
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.white.opacity(isSettingsHovered ? 0.06 : 0))
+                        .fill(isSettingsHovered ? HushColors.hoverFill : .clear)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .stroke(
-                                    isSettingsHovered ? Color.white.opacity(0.12) : .clear,
+                                    isSettingsHovered ? HushColors.hoverStroke : .clear,
                                     lineWidth: 1
                                 )
                         )
@@ -283,7 +283,7 @@ private struct SidebarThreadRow: View {
         } label: {
             Image(systemName: archiveConfirmPending ? "archivebox.fill" : "archivebox")
                 .font(.system(size: 13))
-                .foregroundStyle(archiveConfirmPending ? HushColors.badgeQueued : .white.opacity(0.5))
+                .foregroundStyle(archiveConfirmPending ? HushColors.badgeQueued : HushColors.tertiaryText)
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
                 .contentTransition(.symbolEffect(.replace))
@@ -331,11 +331,11 @@ private struct SidebarThreadRow: View {
 
     private var rowBackground: some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(Color.white.opacity(isActive ? 0.10 : (isHovered ? 0.06 : 0)))
+            .fill(isActive ? HushColors.selectionFill : (isHovered ? HushColors.hoverFill : .clear))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(
-                        isActive ? HushColors.subtleStroke : (isHovered ? Color.white.opacity(0.12) : .clear),
+                        isActive ? HushColors.selectionStroke : (isHovered ? HushColors.hoverStroke : .clear),
                         lineWidth: 1
                     )
             )
@@ -359,8 +359,13 @@ private struct SidebarThreadRow: View {
                     activeConversationId: "2",
                     sidebarThreads: [
                         ConversationSidebarThread(id: "1", title: "First conversation", lastActivityAt: Date()),
-                        ConversationSidebarThread(id: "2", title: "Second conversation", lastActivityAt: Date().addingTimeInterval(-3600)),
-                        ConversationSidebarThread(id: "3", title: "Third conversation", lastActivityAt: Date().addingTimeInterval(-7200))
+                        ConversationSidebarThread(
+                            id: "2", title: "Second conversation",
+                            lastActivityAt: Date().addingTimeInterval(-3600)
+                        ),
+                        ConversationSidebarThread(
+                            id: "3", title: "Third conversation", lastActivityAt: Date().addingTimeInterval(-7200)
+                        )
                     ]
                 )
             )

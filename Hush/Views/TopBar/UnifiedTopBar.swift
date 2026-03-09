@@ -15,13 +15,15 @@ struct SplitTopBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Color.clear
+            splitBackground
                 .frame(width: showsSplit ? HushSpacing.sidebarWidth : 0, height: barHeight)
-                .background(.ultraThinMaterial)
 
             ZStack {
                 Rectangle()
-                    .fill(.ultraThinMaterial)
+                    .fill(
+                        (showSidebar && !isSettingsMode)
+                            ? HushColors.sidebarBackground : HushColors.rootBackground
+                    )
 
                 let shape = UnevenRoundedRectangle(
                     topLeadingRadius: rightPaneCornerRadius,
@@ -42,12 +44,6 @@ struct SplitTopBar: View {
                 .frame(height: barHeight)
                 .background(HushColors.rootBackground)
                 .clipShape(shape)
-                .shadow(
-                    color: HushColors.splitPaneShadow.opacity((showSidebar && !isSettingsMode) ? 1 : 0),
-                    radius: HushSpacing.splitPaneShadowRadius,
-                    x: HushSpacing.splitPaneShadowX,
-                    y: 0
-                )
                 .overlay {
                     if showSidebar && !isSettingsMode {
                         shape
@@ -86,17 +82,51 @@ struct SplitTopBar: View {
         }
         .background(WindowDragArea())
     }
+
+    private var splitBackground: some View {
+        Rectangle()
+            .fill(HushColors.sidebarBackground)
+    }
 }
 
 struct ChatTopBar: View {
+    @EnvironmentObject private var container: AppContainer
     @Binding var showSidebar: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: HushSpacing.md) {
+            Text(activeThreadTitle)
+                .font(HushTypography.footnote.weight(.semibold))
+                .lineLimit(1)
+                .foregroundStyle(titleColor)
+
             Spacer(minLength: 0)
         }
         .padding(.leading, showSidebar ? 18 : HushSpacing.trafficLightInset + 28)
         .padding(.trailing, 18)
+    }
+
+    private var activeConversationID: String? {
+        container.activeConversationId
+    }
+
+    private var activeThread: ConversationSidebarThread? {
+        guard let activeConversationID else { return nil }
+        return container.sidebarThreads.first { $0.id == activeConversationID }
+    }
+
+    private var activeThreadTitle: String {
+        activeThread?.title ?? ConversationSidebarTitleFormatter.placeholderTitle
+    }
+
+    private var titleColor: Color {
+        if container.activeConversationLoadError != nil {
+            return HushColors.errorText
+        }
+        if let activeConversationID, container.runningConversationIds.contains(activeConversationID) {
+            return HushColors.primaryText
+        }
+        return HushColors.secondaryText
     }
 }
 

@@ -20,7 +20,7 @@ struct ComposerDock: View {
                     Button {} label: {
                         Image(systemName: "plus")
                             .font(.system(size: 22, weight: .light))
-                            .foregroundStyle(.white.opacity(0.70))
+                            .foregroundStyle(HushColors.controlForegroundMuted)
                             .frame(width: 34, height: 34)
                     }
                     .buttonStyle(.plain)
@@ -35,7 +35,7 @@ struct ComposerDock: View {
                     Button {} label: {
                         Image(systemName: "mic")
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.58))
+                            .foregroundStyle(HushColors.controlForegroundMuted)
                             .frame(width: 25, height: 25)
                     }
                     .buttonStyle(.plain)
@@ -60,8 +60,8 @@ struct ComposerDock: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.16, green: 0.17, blue: 0.21),
-                            Color(red: 0.13, green: 0.14, blue: 0.18)
+                            HushColors.composerShellTop,
+                            HushColors.composerShellBottom
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -69,7 +69,7 @@ struct ComposerDock: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 30, style: .continuous)
-                        .stroke(Color.white.opacity(0.13), lineWidth: 1)
+                        .stroke(HushColors.composerShellStroke, lineWidth: 1)
                 )
         }
         .frame(maxWidth: HushSpacing.chatContentMaxWidth)
@@ -86,7 +86,7 @@ struct ComposerDock: View {
     private var composerEditor: some View {
         TextEditor(text: $draft)
             .font(HushTypography.body)
-            .foregroundStyle(.primary)
+            .foregroundStyle(HushColors.primaryText)
             .frame(minHeight: 28, maxHeight: 44)
             .scrollContentBackground(.hidden)
             .background(Color.clear)
@@ -149,12 +149,12 @@ struct ComposerDock: View {
         } label: {
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.white.opacity(isConfigHovered ? 0.74 : 0.58))
+                .foregroundStyle(isConfigHovered ? HushColors.controlForeground : HushColors.controlForegroundMuted)
                 .frame(width: 28, height: 28)
                 .background(
                     Circle()
-                        .fill(Color.white.opacity(isConfigHovered ? 0.06 : 0))
-                        .overlay(Circle().stroke(Color.white.opacity(isConfigHovered ? 0.12 : 0), lineWidth: 1))
+                        .fill(isConfigHovered ? HushColors.hoverFill : .clear)
+                        .overlay(Circle().stroke(isConfigHovered ? HushColors.hoverStroke : .clear, lineWidth: 1))
                 )
         }
         .buttonStyle(.plain)
@@ -192,13 +192,13 @@ struct ComposerDock: View {
                 .font(.system(size: 11, weight: .semibold))
         }
         .font(Font.body.weight(.medium))
-        .foregroundStyle(.white.opacity(0.74))
+        .foregroundStyle(HushColors.controlForeground)
         .padding(.horizontal, HushSpacing.sm)
         .padding(.vertical, HushSpacing.xs + 2)
         .background(
             Capsule()
-                .fill(Color.white.opacity(isHovered ? 0.06 : 0))
-                .overlay(Capsule().stroke(Color.white.opacity(isHovered ? 0.12 : 0), lineWidth: 1))
+                .fill(isHovered ? HushColors.hoverFill : .clear)
+                .overlay(Capsule().stroke(isHovered ? HushColors.hoverStroke : .clear, lineWidth: 1))
         )
         .animation(.easeInOut(duration: 0.15), value: isHovered)
     }
@@ -240,22 +240,22 @@ struct ComposerDock: View {
 
     private var sendButtonBackground: Color {
         if container.isActiveConversationSending {
-            return Color.red.opacity(0.85)
+            return HushColors.destructiveActionBackground
         }
         if canSendDraft {
-            return Color.white.opacity(0.88)
+            return HushColors.primaryActionBackground
         }
-        return Color.white.opacity(0.22)
+        return HushColors.disabledActionBackground
     }
 
     private var sendButtonForeground: Color {
         if container.isActiveConversationSending {
-            return .white
+            return HushColors.destructiveActionForeground
         }
         if canSendDraft {
-            return Color.black.opacity(0.85)
+            return HushColors.primaryActionForeground
         }
-        return Color.black.opacity(0.38)
+        return HushColors.disabledActionForeground
     }
 
     // MARK: - No Provider Empty State
@@ -264,7 +264,7 @@ struct ComposerDock: View {
         HStack(alignment: .center, spacing: HushSpacing.sm) {
             Image(systemName: "bolt.horizontal")
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(Color.white.opacity(0.44))
+                .foregroundStyle(HushColors.tertiaryText)
 
             Text("Add a provider to start chatting")
                 .font(HushTypography.body)
@@ -277,15 +277,15 @@ struct ComposerDock: View {
             } label: {
                 Label("Open Settings", systemImage: "gearshape")
                     .font(HushTypography.body)
-                    .foregroundStyle(Color.white.opacity(isOpenSettingsHovered ? 0.88 : 0.74))
+                    .foregroundStyle(isOpenSettingsHovered ? HushColors.controlForeground : HushColors.controlForegroundMuted)
                     .padding(.horizontal, HushSpacing.md)
                     .padding(.vertical, HushSpacing.xs + 2)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(Color.white.opacity(isOpenSettingsHovered ? 0.08 : 0.04))
+                            .fill(isOpenSettingsHovered ? HushColors.softFillStrong : HushColors.softFill)
                             .overlay(
                                 Capsule(style: .continuous)
-                                    .stroke(Color.white.opacity(isOpenSettingsHovered ? 0.16 : 0.10), lineWidth: 1)
+                                    .stroke(isOpenSettingsHovered ? HushColors.hoverStroke : HushColors.subtleStroke, lineWidth: 1)
                             )
                     )
             }

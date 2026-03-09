@@ -35,7 +35,7 @@ struct RootView: View {
 
                     ZStack {
                         Rectangle()
-                            .fill(.ultraThinMaterial)
+                            .fill(showSidebar ? HushColors.sidebarBackground : HushColors.rootBackground)
 
                         let shape = UnevenRoundedRectangle(
                             topLeadingRadius: 0,
@@ -49,12 +49,6 @@ struct RootView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(HushColors.rootBackground)
                             .clipShape(shape)
-                            .shadow(
-                                color: HushColors.splitPaneShadow.opacity(showSidebar ? 1 : 0),
-                                radius: HushSpacing.splitPaneShadowRadius,
-                                x: HushSpacing.splitPaneShadowX,
-                                y: 0
-                            )
                             .overlay {
                                 if showSidebar {
                                     shape
@@ -86,6 +80,8 @@ struct RootView: View {
         switch theme {
         case .dark:
             return .dark
+        case .light, .readPaper:
+            return .light
         }
     }
 }

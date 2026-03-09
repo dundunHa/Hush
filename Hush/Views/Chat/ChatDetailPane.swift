@@ -24,6 +24,7 @@ struct ChatDetailPane: View {
             VStack(spacing: 0) {
                 HotScenePoolRepresentable()
                     .environmentObject(container)
+                    .id(container.settings.theme)
                     .frame(maxHeight: .infinity)
                     .clipped()
 
@@ -49,10 +50,10 @@ struct ChatDetailPane: View {
                 "loading=\(container.isActiveConversationLoading)"
         )
         .font(.system(size: 11, weight: .semibold, design: .monospaced))
-        .foregroundStyle(.white.opacity(0.92))
+        .foregroundStyle(HushColors.debugOverlayForeground)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.black.opacity(0.55), in: Capsule())
+        .background(HushColors.debugOverlayBackground, in: Capsule())
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .padding(.top, 10)
         .padding(.trailing, 12)
@@ -94,13 +95,13 @@ struct ChatDetailPane: View {
             } label: {
                 Text("Retry")
                     .font(HushTypography.captionBold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(HushColors.primaryActionForeground)
                     .padding(.horizontal, HushSpacing.lg)
                     .padding(.vertical, HushSpacing.sm)
-                    .background(Color.cyan.opacity(0.18), in: Capsule())
+                    .background(HushColors.primaryActionBackground, in: Capsule())
                     .overlay(
                         Capsule()
-                            .stroke(Color.cyan.opacity(0.35), lineWidth: 1)
+                            .stroke(HushColors.accentMutedStroke, lineWidth: 1)
                     )
             }
             .buttonStyle(.plain)

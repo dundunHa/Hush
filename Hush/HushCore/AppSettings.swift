@@ -2,11 +2,28 @@ import Foundation
 
 public enum AppTheme: String, Codable, CaseIterable, Sendable {
     case dark
+    case light
+    case readPaper
 
     public var displayName: String {
         switch self {
         case .dark:
             return "Dark"
+        case .light:
+            return "Light"
+        case .readPaper:
+            return "ReadPaper"
+        }
+    }
+
+    public var subtitle: String {
+        switch self {
+        case .dark:
+            return "Slate contrast for focused work"
+        case .light:
+            return "Clean daylight canvas"
+        case .readPaper:
+            return "Warm paper tone for long reading"
         }
     }
 }

@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import SwiftUI
 
 // swiftlint:disable file_length type_body_length
 
@@ -132,13 +133,10 @@ private final class MessageCopyOverlayButton: NSButton {
     private func updateVisualState() {
         image = isCopied ? Self.copiedImage : Self.copyImage
         contentTintColor = isCopied
-            ? NSColor.systemGreen
-            : (isHovered ? NSColor.labelColor : NSColor.secondaryLabelColor)
-
-        let backgroundAlpha: CGFloat = isHovered ? 0.14 : 0.10
-        let borderAlpha: CGFloat = isHovered ? 0.22 : 0.16
-        layer?.backgroundColor = NSColor.white.withAlphaComponent(backgroundAlpha).cgColor
-        layer?.borderColor = NSColor.white.withAlphaComponent(borderAlpha).cgColor
+            ? NSColor(HushColors.successText)
+            : (isHovered ? NSColor(HushColors.controlForeground) : NSColor(HushColors.controlForegroundMuted))
+        layer?.backgroundColor = NSColor(isHovered ? HushColors.hoverFill : HushColors.softFillStrong).cgColor
+        layer?.borderColor = NSColor(isHovered ? HushColors.hoverStroke : HushColors.subtleStroke).cgColor
     }
 }
 
@@ -1350,13 +1348,10 @@ final class MessageBodyTextView: NSTextView {
         private func updateVisualState() {
             image = isCopied ? Self.copiedImage : Self.copyImage
             contentTintColor = isCopied
-                ? NSColor.systemGreen
-                : (isHovered ? NSColor.labelColor : NSColor.secondaryLabelColor)
-
-            let backgroundAlpha: CGFloat = isHovered ? 0.14 : 0.10
-            let borderAlpha: CGFloat = isHovered ? 0.22 : 0.16
-            layer?.backgroundColor = NSColor.white.withAlphaComponent(backgroundAlpha).cgColor
-            layer?.borderColor = NSColor.white.withAlphaComponent(borderAlpha).cgColor
+                ? NSColor(HushColors.successText)
+                : (isHovered ? NSColor(HushColors.controlForeground) : NSColor(HushColors.controlForegroundMuted))
+            layer?.backgroundColor = NSColor(isHovered ? HushColors.hoverFill : HushColors.softFillStrong).cgColor
+            layer?.borderColor = NSColor(isHovered ? HushColors.hoverStroke : HushColors.subtleStroke).cgColor
         }
     }
 
@@ -1388,9 +1383,9 @@ final class MessageBodyTextView: NSTextView {
         isSelectable = true
         isRichText = true
         importsGraphics = true
-        // Our renderer already emits dark-theme colors (e.g. white body text).
-        // Adaptive color mapping would treat those as "light-mode colors" and remap them,
-        // causing inconsistent/dim output in the transcript.
+        // Our renderer already emits theme-aware colors directly.
+        // Adaptive color mapping would remap those authored colors again,
+        // causing inconsistent transcript output after theme switches.
         usesAdaptiveColorMappingForDarkAppearance = false
         allowsUndo = false
 
@@ -1650,9 +1645,9 @@ final class MessageBodyTextView: NSTextView {
     private func drawCodeBlockBackgrounds(in dirtyRect: NSRect) {
         guard !codeBlockLayouts.isEmpty else { return }
 
-        let fillColor = NSColor.white.withAlphaComponent(0.10)
-        let borderColor = NSColor.white.withAlphaComponent(0.16)
-        let separatorColor = NSColor.white.withAlphaComponent(0.12)
+        let fillColor = NSColor(HushColors.codeBlockBackground)
+        let borderColor = NSColor(HushColors.codeBlockBorder)
+        let separatorColor = NSColor(HushColors.codeBlockSeparator)
 
         for layout in codeBlockLayouts where layout.backgroundFrame.intersects(dirtyRect) {
             let fillPath = NSBezierPath(
@@ -1709,7 +1704,9 @@ final class MessageTableCellView: NSTableCellView {
         let styleKey: Int
     }
 
-    private static let sharedRenderStyle = RenderStyle.fromTheme()
+    private static var sharedRenderStyle: RenderStyle {
+        RenderStyle.fromTheme()
+    }
 
     private let metaLabel = NSTextField(labelWithString: "")
     private let bodyTextView = MessageBodyTextView()
@@ -1739,10 +1736,13 @@ final class MessageTableCellView: NSTableCellView {
     private var streamingDisplayedLength: Int = 0
     private var currentContentWidth: CGFloat = 0
     private var isShowingStreamingRichOutput = false
-    private static let plainTextAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
-        .foregroundColor: NSColor.labelColor
-    ]
+    private static var plainTextAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
+            .foregroundColor: NSColor(HushColors.primaryText)
+        ]
+    }
+
     #if DEBUG
         // swiftlint:disable identifier_name
         private(set) var renderRequestCountForTesting = 0
@@ -1757,7 +1757,7 @@ final class MessageTableCellView: NSTableCellView {
         translatesAutoresizingMaskIntoConstraints = false
 
         metaLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        metaLabel.textColor = NSColor.secondaryLabelColor
+        metaLabel.textColor = NSColor(HushColors.secondaryText)
         metaLabel.translatesAutoresizingMaskIntoConstraints = false
 
         bodyTextView.translatesAutoresizingMaskIntoConstraints = false

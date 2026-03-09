@@ -123,7 +123,7 @@ struct DataSettingsView: View {
             .padding(HushSpacing.lg)
             .cardStyle(
                 background: HushColors.cardBackground,
-                stroke: Color.red.opacity(0.30)
+                stroke: HushColors.errorText.opacity(0.30)
             )
             .alert("Clear All Chat History?", isPresented: $showDeleteConfirmation) {
                 Button("Cancel", role: .cancel) {}

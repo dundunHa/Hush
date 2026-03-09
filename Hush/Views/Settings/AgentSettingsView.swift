@@ -262,7 +262,7 @@ struct AgentSettingsView: View {
                 .scrollContentBackground(.hidden)
                 .padding(HushSpacing.sm)
                 .frame(minHeight: 200, maxHeight: 320)
-                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+                .background(HushColors.softFill, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(HushColors.subtleStroke, lineWidth: 1)
@@ -304,7 +304,7 @@ struct AgentSettingsView: View {
                         .foregroundStyle(HushColors.secondaryText)
                         .padding(.horizontal, HushSpacing.sm)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
+                        .background(HushColors.softFillStrong, in: RoundedRectangle(cornerRadius: 4))
                 }
                 Slider(value: $temperature, in: 0 ... 2, step: 0.1)
                     .controlSize(.small)
@@ -355,7 +355,7 @@ struct AgentSettingsView: View {
                         .foregroundStyle(HushColors.secondaryText)
                         .padding(.horizontal, HushSpacing.sm)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
+                        .background(HushColors.softFillStrong, in: RoundedRectangle(cornerRadius: 4))
                 }
                 Slider(value: $topP, in: 0 ... 1, step: 0.05)
                     .controlSize(.small)
@@ -406,7 +406,7 @@ struct AgentSettingsView: View {
                         .foregroundStyle(HushColors.secondaryText)
                         .padding(.horizontal, HushSpacing.sm)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
+                        .background(HushColors.softFillStrong, in: RoundedRectangle(cornerRadius: 4))
                 }
                 Slider(value: $presencePenalty, in: 0 ... 2, step: 0.05)
                     .controlSize(.small)
@@ -427,7 +427,7 @@ struct AgentSettingsView: View {
                         .foregroundStyle(HushColors.secondaryText)
                         .padding(.horizontal, HushSpacing.sm)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
+                        .background(HushColors.softFillStrong, in: RoundedRectangle(cornerRadius: 4))
                 }
                 Slider(value: $frequencyPenalty, in: 0 ... 2, step: 0.05)
                     .controlSize(.small)
@@ -645,7 +645,7 @@ private struct AgentPresetRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(preset.name)
                         .font(HushTypography.body)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(HushColors.primaryText)
                         .lineLimit(1)
 
 //                    if !subtitle.isEmpty {
@@ -661,10 +661,10 @@ private struct AgentPresetRow: View {
                 if preset.isDefault {
                     Text("Default")
                         .font(HushTypography.caption)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(HushColors.accent)
                         .padding(.horizontal, HushSpacing.sm)
                         .padding(.vertical, 3)
-                        .background(Color.blue.opacity(0.15), in: Capsule())
+                        .background(HushColors.accentMutedBackground, in: Capsule())
                 }
 
                 Image(systemName: "chevron.right")
@@ -678,11 +678,11 @@ private struct AgentPresetRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
-                    .fill(isHovered ? Color.white.opacity(0.06) : HushColors.cardBackground)
+                    .fill(isHovered ? HushColors.hoverFill : HushColors.cardBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
                             .stroke(
-                                isHovered ? Color.white.opacity(0.16) : HushColors.subtleStroke,
+                                isHovered ? HushColors.hoverStroke : HushColors.subtleStroke,
                                 lineWidth: 1
                             )
                     )

@@ -110,11 +110,12 @@ struct AppContainerSettingsPersistenceTests {
         let (repo, container) = try makeRepoAndContainer()
         #expect(container.settings.theme == .dark)
 
+        container.settings.theme = .readPaper
         container.settings.selectedModelID = "theme-persist-model"
         container.flushSettings()
 
         let loaded = try repo.fetch()
-        #expect(loaded?.theme == AppTheme.dark.rawValue)
+        #expect(loaded?.theme == AppTheme.readPaper.rawValue)
     }
 
     @Test("theme-related settings flush does not mutate sidebar threads")
@@ -127,8 +128,7 @@ struct AppContainerSettingsPersistenceTests {
         )
         container.sidebarThreads = [thread]
 
-        // Current app theme has a single supported case (.dark); assignment should be a no-op.
-        container.settings.theme = .dark
+        container.settings.theme = .light
         container.settings.selectedModelID = "theme-safety-model"
         container.flushSettings()
 

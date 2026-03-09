@@ -182,12 +182,12 @@ struct ArchivedThreadsSettingsView: View {
             HStack(spacing: HushSpacing.md) {
                 Image(systemName: allSelected ? "checkmark.square.fill" : "square")
                     .font(.system(size: 16))
-                    .foregroundStyle(allSelected ? Color.blue : HushColors.secondaryText)
+                    .foregroundStyle(allSelected ? HushColors.accent : HushColors.secondaryText)
                     .contentTransition(.symbolEffect(.replace))
 
                 Text(allSelected ? "Deselect All" : "Select All")
                     .font(HushTypography.body)
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(HushColors.primaryText)
 
                 Spacer()
             }
@@ -204,7 +204,7 @@ struct ArchivedThreadsSettingsView: View {
         HStack(spacing: HushSpacing.md) {
             Text("\(selectedIds.count) selected")
                 .font(HushTypography.body)
-                .foregroundStyle(.white)
+                .foregroundStyle(HushColors.primaryText)
 
             Spacer()
 
@@ -327,7 +327,7 @@ private struct ArchivedThreadRow: View {
                 Button { onToggleSelection() } label: {
                     Image(systemName: isSelected ? "checkmark.square.fill" : "square")
                         .font(.system(size: 16))
-                        .foregroundStyle(isSelected ? Color.blue : HushColors.secondaryText)
+                        .foregroundStyle(isSelected ? HushColors.accent : HushColors.secondaryText)
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(.plain)
@@ -373,7 +373,7 @@ private struct ArchivedThreadRow: View {
         .padding(.vertical, HushSpacing.md)
         .background(
             isSelectionMode && isSelected
-                ? Color.blue.opacity(0.08)
+                ? HushColors.selectionFill
                 : Color.clear
         )
         .contentShape(Rectangle())

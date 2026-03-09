@@ -596,7 +596,7 @@ struct ProviderSettingsView: View {
 
                                             Text(model.id)
                                                 .font(HushTypography.body)
-                                                .foregroundStyle(.white)
+                                                .foregroundStyle(HushColors.primaryText)
                                                 .lineLimit(1)
 
                                             Spacer()
@@ -607,7 +607,7 @@ struct ProviderSettingsView: View {
                                                     .foregroundStyle(HushColors.secondaryText)
                                                     .padding(.horizontal, HushSpacing.sm)
                                                     .padding(.vertical, 2)
-                                                    .background(Color.white.opacity(0.08), in: Capsule())
+                                                    .background(HushColors.softFillStrong, in: Capsule())
                                             }
                                         }
                                     }
@@ -627,7 +627,7 @@ struct ProviderSettingsView: View {
                                 .padding(.vertical, HushSpacing.xs)
                                 .background(
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(isDefault ? Color.white.opacity(0.06) : Color.clear)
+                                        .fill(isDefault ? HushColors.selectionFill : .clear)
                                 )
 
                                 if model.id != filtered.last?.id {
@@ -973,7 +973,7 @@ private struct ProviderListRowView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(provider.name)
                             .font(HushTypography.body)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(HushColors.primaryText)
                             .lineLimit(1)
 
                         Text(subtitle)
@@ -996,10 +996,10 @@ private struct ProviderListRowView: View {
             if isDefault {
                 Text("Default")
                     .font(HushTypography.caption)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(HushColors.accent)
                     .padding(.horizontal, HushSpacing.sm)
                     .padding(.vertical, 3)
-                    .background(Color.blue.opacity(0.15), in: Capsule())
+                    .background(HushColors.accentMutedBackground, in: Capsule())
             } else if canSetDefault {
                 Button("Make Default") {
                     onSetDefault()
@@ -1012,7 +1012,7 @@ private struct ProviderListRowView: View {
                     .foregroundStyle(HushColors.secondaryText)
                     .padding(.horizontal, HushSpacing.sm)
                     .padding(.vertical, 3)
-                    .background(Color.white.opacity(0.06), in: Capsule())
+                    .background(HushColors.softFill, in: Capsule())
             }
         }
         .padding(.horizontal, HushSpacing.lg)
@@ -1020,11 +1020,11 @@ private struct ProviderListRowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
-                .fill(isHovered ? Color.white.opacity(0.06) : HushColors.cardBackground)
+                .fill(isHovered ? HushColors.hoverFill : HushColors.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
                         .stroke(
-                            isHovered ? Color.white.opacity(0.16) : HushColors.subtleStroke,
+                            isHovered ? HushColors.hoverStroke : HushColors.subtleStroke,
                             lineWidth: 1
                         )
                 )

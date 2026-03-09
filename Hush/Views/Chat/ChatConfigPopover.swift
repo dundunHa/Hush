@@ -46,10 +46,10 @@ struct ChatConfigPopover: View {
         VStack(alignment: .leading, spacing: HushSpacing.lg) {
             Text("Chat Configuration")
                 .font(HushTypography.heading)
-                .foregroundStyle(.white)
+                .foregroundStyle(HushColors.primaryText)
 
             Divider()
-                .background(Color.white.opacity(0.1))
+                .background(HushColors.separator)
 
             VStack(alignment: .leading, spacing: HushSpacing.md) {
                 configRow(
@@ -108,7 +108,11 @@ struct ChatConfigPopover: View {
         .frame(width: 360)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(red: 0.12, green: 0.13, blue: 0.16))
+                .fill(HushColors.cardBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(HushColors.subtleStroke, lineWidth: 1)
+                )
         )
     }
 
@@ -125,10 +129,10 @@ struct ChatConfigPopover: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(HushTypography.body)
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(HushColors.primaryText)
                 Text(value)
                     .font(HushTypography.caption)
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(HushColors.secondaryText)
             }
             Spacer()
             control()

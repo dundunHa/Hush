@@ -18,25 +18,9 @@ struct SettingsWorkspaceView: View {
         HStack(spacing: 0) {
             sidebar
 
-            Divider()
-                .overlay(HushColors.separator)
-
-            switch selectedTab {
-            case .general:
-                GeneralSettingsView()
-            case .provider:
-                ProviderSettingsView()
-            case .agent:
-                AgentSettingsView()
-            case .prompts:
-                PromptLibraryView()
-            case .data:
-                DataSettingsView()
-            case .archived:
-                ArchivedThreadsSettingsView()
-            }
+            settingsDetailPane
         }
-        .background(HushColors.rootBackground)
+        .background(HushColors.sidebarBackground)
     }
 
     // MARK: - Sidebar
@@ -55,11 +39,11 @@ struct SettingsWorkspaceView: View {
                     .padding(.vertical, HushSpacing.sm)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.white.opacity(isBackHovered ? 0.06 : 0))
+                            .fill(isBackHovered ? HushColors.hoverFill : .clear)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .stroke(
-                                        isBackHovered ? Color.white.opacity(0.12) : .clear,
+                                        isBackHovered ? HushColors.hoverStroke : .clear,
                                         lineWidth: 1
                                     )
                             )
@@ -126,7 +110,33 @@ struct SettingsWorkspaceView: View {
         .padding(.vertical, HushSpacing.lg)
         .frame(width: HushSpacing.sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(.ultraThinMaterial)
+        .background(HushColors.sidebarBackground)
+    }
+
+    private var settingsDetailPane: some View {
+        Group {
+            switch selectedTab {
+            case .general:
+                GeneralSettingsView()
+            case .provider:
+                ProviderSettingsView()
+            case .agent:
+                AgentSettingsView()
+            case .prompts:
+                PromptLibraryView()
+            case .data:
+                DataSettingsView()
+            case .archived:
+                ArchivedThreadsSettingsView()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(HushColors.rootBackground)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(HushColors.splitPaneEdgeStroke)
+                .frame(width: 1)
+        }
     }
 }
 
@@ -145,7 +155,7 @@ private struct SettingsSidebarItem: View {
             HStack(spacing: HushSpacing.sm) {
                 Image(systemName: icon)
                     .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(HushColors.controlForegroundMuted)
                     .frame(width: 20)
 
                 Text(label)
@@ -159,11 +169,11 @@ private struct SettingsSidebarItem: View {
             .padding(.vertical, HushSpacing.sm)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.white.opacity(isSelected ? 0.10 : (isHovered ? 0.06 : 0)))
+                    .fill(isSelected ? HushColors.selectionFill : (isHovered ? HushColors.hoverFill : .clear))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(
-                                isSelected ? HushColors.subtleStroke : (isHovered ? Color.white.opacity(0.12) : .clear),
+                                isSelected ? HushColors.selectionStroke : (isHovered ? HushColors.hoverStroke : .clear),
                                 lineWidth: 1
                             )
                     )
