@@ -3,7 +3,6 @@ import Foundation
 import SwiftUI
 import Testing
 
-@Suite("Chat Scroll Perf Harness")
 @MainActor
 struct ChatScrollPerfHarnessTests {
     @Test("Visible recompute count drops after windowing integration")

@@ -6,7 +6,6 @@ import Testing
 // MARK: - 2.4 Migration Tests
 
 /// Verifies idempotent startup and expected schema versioning behavior.
-@Suite("Database Migration Tests")
 struct DatabaseMigrationTests {
     @Test("Database opens and migrates successfully")
     func databaseOpensAndMigrates() throws {

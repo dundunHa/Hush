@@ -2,7 +2,6 @@ import Foundation
 @testable import Hush
 import Testing
 
-@Suite("TailFollowStateMachine")
 struct TailFollowStateMachineTests {
     let config = TailFollowConfig(
         pinnedDistanceThreshold: 80,

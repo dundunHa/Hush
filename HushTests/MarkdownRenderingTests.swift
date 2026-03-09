@@ -4,7 +4,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("Markdown Rendering")
 struct MarkdownRenderingTests {
     // MARK: - Helpers
 

@@ -4,7 +4,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("Render Cache")
 struct RenderCacheTests {
     // MARK: - Helpers
 

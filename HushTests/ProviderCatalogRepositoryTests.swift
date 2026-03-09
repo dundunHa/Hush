@@ -5,7 +5,6 @@ import Testing
 
 // MARK: - Provider Catalog Repository Tests
 
-@Suite("Provider Catalog Repository Tests")
 struct ProviderCatalogRepositoryTests {
     private func makeRepo() throws -> (GRDBProviderCatalogRepository, DatabaseManager) {
         let db = try DatabaseManager.inMemory()

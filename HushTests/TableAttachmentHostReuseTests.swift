@@ -3,7 +3,6 @@ import AppKit
 import Testing
 
 @MainActor
-@Suite("Table Attachment Host (Tables Render As Text)")
 struct TableAttachmentHostReuseTests {
     private func makeTextView(width: CGFloat) -> NSTextView {
         let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: width, height: 1))

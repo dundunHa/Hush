@@ -3,7 +3,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("Streaming-Complete (Tail) Prewarm")
 struct StreamingCompletePrewarmTests {
     // MARK: - Helpers
 

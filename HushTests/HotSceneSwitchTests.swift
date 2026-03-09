@@ -5,7 +5,8 @@ import GRDB
 import Testing
 
 @MainActor
-@Suite("Hot Scene Switch Tests", .serialized)
+@Suite(.serialized)
+// swiftlint:disable:next type_body_length
 struct HotSceneSwitchTests {
     private struct ConversationReadyTimeoutError: Error {}
 

@@ -4,7 +4,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("Cell Cache-First Streaming Tests")
 struct CellCacheFirstStreamingTests {
     private func makeRow(
         content: String,
@@ -113,6 +112,103 @@ struct CellCacheFirstStreamingTests {
         #expect(cell.attributedStringForTesting.string == "streaming-123")
         #expect(cell.streamingDisplayedLengthForTesting == "streaming-123".count)
         #expect(cell.streamingUpdateAssignmentCountForTesting == 1)
+    }
+
+    @Test("Closed inline math upgrades streaming output to rich render before completion")
+    func streamingClosedMathRendersBeforeCompletion() async throws {
+        let renderer = MessageContentRenderer(
+            renderCache: RenderCache(capacity: 10),
+            mathCache: MathRenderCache(capacity: 10)
+        )
+        let runtime = MessageRenderRuntime(
+            renderer: renderer,
+            scheduler: ConversationRenderScheduler()
+        )
+        let cell = MessageTableCellView(identifier: NSUserInterfaceItemIdentifier("test-streaming-math"))
+        let availableWidth: CGFloat = 600
+        let messageID = try #require(UUID(uuidString: "BABABABA-7777-7777-7777-777777777777"))
+        let partial = "公式 $y = \\sin"
+
+        cell.configure(
+            row: makeRow(content: partial, isStreaming: true, id: messageID),
+            runtime: runtime,
+            availableWidth: availableWidth,
+            container: nil
+        )
+        #expect(cell.renderRequestCountForTesting == 0)
+        #expect(cell.attributedStringForTesting.string == partial)
+
+        let renderedFormula = "公式 $y = \\sin x$ 为核心"
+        cell.updateStreamingText(renderedFormula)
+        #expect(cell.renderRequestCountForTesting > 0)
+
+        let renderDeadline = ContinuousClock.now + .seconds(2)
+        while cell.attributedStringForTesting.string.contains("$"),
+              ContinuousClock.now < renderDeadline
+        {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        let richString = cell.attributedStringForTesting.string
+        #expect(!richString.contains("$"))
+        #expect(richString.contains("公式 "))
+        #expect(richString.contains(" 为核心"))
+
+        let appendedText = "公式 $y = \\sin x$ 为核心，继续解释"
+        cell.updateStreamingText(appendedText)
+        #expect(!cell.attributedStringForTesting.string.contains("$"))
+
+        let appendedDeadline = ContinuousClock.now + .seconds(2)
+        while !cell.attributedStringForTesting.string.contains("继续解释"),
+              ContinuousClock.now < appendedDeadline
+        {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        let appendedRichString = cell.attributedStringForTesting.string
+        #expect(!appendedRichString.contains("$"))
+        #expect(appendedRichString.contains("继续解释"))
+    }
+
+    @Test("Streaming rich render accepts intermediate growth after formula is already visible")
+    func streamingRichRenderAcceptsIntermediateGrowth() async throws {
+        let renderer = MessageContentRenderer(
+            renderCache: RenderCache(capacity: 10),
+            mathCache: MathRenderCache(capacity: 10)
+        )
+        let runtime = MessageRenderRuntime(
+            renderer: renderer,
+            scheduler: ConversationRenderScheduler()
+        )
+        let cell = MessageTableCellView(identifier: NSUserInterfaceItemIdentifier("test-streaming-math-growth"))
+        let availableWidth: CGFloat = 600
+        let messageID = try #require(UUID(uuidString: "BCBCBCBC-7777-7777-7777-777777777777"))
+        let renderedFormula = "公式 $y = \\sin x$ 为核心"
+
+        cell.configure(
+            row: makeRow(content: renderedFormula, isStreaming: true, id: messageID),
+            runtime: runtime,
+            availableWidth: availableWidth,
+            container: nil
+        )
+
+        let richDeadline = ContinuousClock.now + .seconds(2)
+        while cell.attributedStringForTesting.string.contains("$"),
+              ContinuousClock.now < richDeadline
+        {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        let intermediate = renderedFormula + "，继续解释第一段"
+        let latest = intermediate + "，以及第二段补充"
+
+        cell.updateStreamingText(intermediate)
+        cell.updateStreamingText(latest)
+
+        #expect(cell.shouldApplyOutputForTesting(
+            plainText: intermediate,
+            observedRow: makeRow(content: latest, isStreaming: true, id: messageID)
+        ))
     }
 
     @Test("Streaming configure does not regress over newer fast-track text")

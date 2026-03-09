@@ -4,7 +4,6 @@ import GRDB
 import Testing
 
 @MainActor
-@Suite("AppContainer Persistence Semantics Tests")
 struct AppContainerPersistenceSemanticsTests {
     @Test("Queue-full rejection produces zero durable writes for rejected submission")
     func queueFullRejectionZeroDurableWrites() throws {

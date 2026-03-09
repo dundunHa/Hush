@@ -3,7 +3,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("New thread must not cancel background streaming")
 struct NewThreadBackgroundStreamTests {
     // MARK: - Helpers
 

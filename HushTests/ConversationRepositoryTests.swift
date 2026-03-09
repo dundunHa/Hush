@@ -5,7 +5,6 @@ import Testing
 
 // MARK: - 6.1 Repository Tests: Conversations
 
-@Suite("Conversation Repository Tests")
 struct ConversationRepositoryTests {
     private func makeRepo() throws -> (GRDBConversationRepository, DatabaseManager) {
         let db = try DatabaseManager.inMemory()

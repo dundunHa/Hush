@@ -12,7 +12,7 @@ struct SchedulerState {
     var maxConcurrent: Int = RuntimeConstants.defaultMaxConcurrentRequests
 }
 
-struct RunningSession: Sendable, Equatable {
+struct RunningSession: Equatable {
     let requestID: RequestID
     let conversationId: String
     let streamTask: Task<Void, Never>?

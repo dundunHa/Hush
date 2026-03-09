@@ -87,9 +87,12 @@ public struct ActiveRequestState: Sendable, Equatable {
     public let conversationId: String
     public var status: ActiveRequestStatus
     public var assistantMessageID: UUID?
+    public private(set) var presentedText: String
+    public private(set) var presentedCharacterCount: Int
 
     private var textChunks: [String] = []
     private var assembledText: String?
+    private var accumulatedCharacterCount: Int
 
     public var accumulatedText: String {
         get {
@@ -98,12 +101,25 @@ public struct ActiveRequestState: Sendable, Equatable {
         set {
             textChunks = [newValue]
             assembledText = newValue
+            accumulatedCharacterCount = newValue.count
+            let clampedPresentedCount = min(presentedCharacterCount, accumulatedCharacterCount)
+            presentedText = String(newValue.prefix(clampedPresentedCount))
+            presentedCharacterCount = clampedPresentedCount
         }
+    }
+
+    public var accumulatedTextCharacterCount: Int {
+        accumulatedCharacterCount
+    }
+
+    public var pendingPresentedCharacterCount: Int {
+        max(0, accumulatedCharacterCount - presentedCharacterCount)
     }
 
     public mutating func appendDelta(_ text: String) {
         textChunks.append(text)
         assembledText = nil
+        accumulatedCharacterCount += text.count
     }
 
     public mutating func flushText() -> String {
@@ -113,11 +129,35 @@ public struct ActiveRequestState: Sendable, Equatable {
         return result
     }
 
+    @discardableResult
+    public mutating func revealBy(characters count: Int) -> String {
+        revealUpTo(characterCount: presentedCharacterCount + count)
+    }
+
+    @discardableResult
+    public mutating func revealUpTo(characterCount targetCount: Int) -> String {
+        let clampedCount = min(max(0, targetCount), accumulatedCharacterCount)
+        guard clampedCount != presentedCharacterCount else { return presentedText }
+
+        let fullText = accumulatedText
+        presentedText = String(fullText.prefix(clampedCount))
+        presentedCharacterCount = clampedCount
+        return presentedText
+    }
+
+    @discardableResult
+    public mutating func revealAll() -> String {
+        revealUpTo(characterCount: accumulatedCharacterCount)
+    }
+
     public init(requestID: RequestID, conversationId: String) {
         self.requestID = requestID
         self.conversationId = conversationId
         status = .preflight
+        presentedText = ""
+        presentedCharacterCount = 0
         assembledText = ""
+        accumulatedCharacterCount = 0
         assistantMessageID = nil
     }
 

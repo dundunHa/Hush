@@ -6,14 +6,14 @@ import SwiftUI
 
 // swiftlint:disable file_length type_body_length
 
-struct OpenAISettingsSnapshot: Sendable, Equatable {
+struct OpenAISettingsSnapshot: Equatable {
     var endpoint: String
     var defaultModelID: String
     var isEnabled: Bool
     var hasCredential: Bool
 }
 
-struct OpenAISettingsInput: Sendable, Equatable {
+struct OpenAISettingsInput: Equatable {
     static let providerID = "openai"
 
     var endpoint: String
@@ -22,7 +22,7 @@ struct OpenAISettingsInput: Sendable, Equatable {
     var apiKey: String
 }
 
-enum OpenAISettingsSaveError: Error, Sendable, Equatable {
+enum OpenAISettingsSaveError: Error, Equatable {
     case defaultModelRequired
     case credentialRequired
     case keychainWriteFailed
@@ -41,7 +41,7 @@ extension OpenAISettingsSaveError: LocalizedError {
     }
 }
 
-struct DataStats: Sendable {
+struct DataStats {
     let databaseSizeBytes: UInt64
     let conversationCount: Int
     let messageCount: Int
@@ -243,6 +243,11 @@ final class AppContainer: ObservableObject {
     var generationTimeoutOverride: Duration? {
         get { requestCoordinator?.generationTimeoutOverride }
         set { requestCoordinator?.generationTimeoutOverride = newValue }
+    }
+
+    var streamingPresentationPolicyOverride: StreamingPresentationPolicy? {
+        get { requestCoordinator?.streamingPresentationPolicyOverride }
+        set { requestCoordinator?.streamingPresentationPolicyOverride = newValue }
     }
 
     // MARK: - Message Bucket Interface
@@ -566,6 +571,7 @@ final class AppContainer: ObservableObject {
         credentialResolver: CredentialResolver = CredentialResolver(),
         agentPresetRepository: (any AgentPresetRepository)? = nil,
         promptTemplateRepository: (any PromptTemplateRepository)? = nil,
+        streamingPresentationPolicyOverride: StreamingPresentationPolicy? = .testingFast,
         enableStartupPrewarm: Bool = false
     ) -> AppContainer {
         let resolvedSettings = settings ?? .default
@@ -594,6 +600,7 @@ final class AppContainer: ObservableObject {
             persistence: persistence,
             credentialResolver: credentialResolver
         )
+        container.streamingPresentationPolicyOverride = streamingPresentationPolicyOverride
         if enableStartupPrewarm {
             container.scheduleStartupPrewarmIfNeeded()
         }
@@ -1368,11 +1375,57 @@ final class AppContainer: ObservableObject {
         guard conversationId == activeConversationId else { return }
         guard let running = requestCoordinator.runningRequest(forConversation: conversationId) else { return }
         guard let messageID = running.assistantMessageID else { return }
+        syncPresentedStreamingMessageIntoBucketsIfNeeded(
+            conversationId: conversationId,
+            messageID: messageID,
+            content: running.presentedText
+        )
         pushStreamingContent(
             conversationId: conversationId,
             messageID: messageID,
-            content: running.accumulatedText
+            content: running.presentedText
         )
+    }
+
+    private func syncPresentedStreamingMessageIntoBucketsIfNeeded(
+        conversationId: String,
+        messageID: UUID,
+        content: String
+    ) {
+        var didUpdateActiveMessages = false
+
+        if conversationId == activeConversationId,
+           let activeIndex = messages.lastIndex(where: { $0.id == messageID }),
+           messages[activeIndex].content != content
+        {
+            let existing = messages[activeIndex]
+            messages[activeIndex] = ChatMessage(
+                id: existing.id,
+                role: existing.role,
+                content: content,
+                createdAt: existing.createdAt
+            )
+            didUpdateActiveMessages = true
+        }
+
+        if var bucket = messagesByConversationId[conversationId] {
+            if let bucketIndex = bucket.lastIndex(where: { $0.id == messageID }),
+               bucket[bucketIndex].content != content
+            {
+                let existing = bucket[bucketIndex]
+                bucket[bucketIndex] = ChatMessage(
+                    id: existing.id,
+                    role: existing.role,
+                    content: content,
+                    createdAt: existing.createdAt
+                )
+                messagesByConversationId[conversationId] = bucket
+            } else if didUpdateActiveMessages {
+                messagesByConversationId[conversationId] = messages
+            }
+        } else if didUpdateActiveMessages {
+            messagesByConversationId[conversationId] = messages
+        }
     }
 
     func archiveConversation(conversationId: String) {
@@ -1458,6 +1511,15 @@ final class AppContainer: ObservableObject {
     private func cacheCurrentConversationSnapshotIfNeeded() {
         guard let conversationId = activeConversationId else { return }
         guard messages.count <= RuntimeConstants.conversationMessagePageSize else { return }
+        if let running = requestCoordinator?.runningRequest(forConversation: conversationId),
+           let messageID = running.assistantMessageID
+        {
+            syncPresentedStreamingMessageIntoBucketsIfNeeded(
+                conversationId: conversationId,
+                messageID: messageID,
+                content: running.presentedText
+            )
+        }
         let snapshot = ConversationPageSnapshot(
             messages: messages,
             hasMoreOlderMessages: hasMoreOlderMessages,

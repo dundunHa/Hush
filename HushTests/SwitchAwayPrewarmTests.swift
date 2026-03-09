@@ -4,7 +4,6 @@ import GRDB
 import Testing
 
 @MainActor
-@Suite("Switch-away Prewarm Tests")
 struct SwitchAwayPrewarmTests {
     @Test("Switch triggers prewarm for sidebar-adjacent conversation using chatContentMaxWidth")
     func switchTriggersPrewarm() async throws {

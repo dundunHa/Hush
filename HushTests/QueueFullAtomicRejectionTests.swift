@@ -3,7 +3,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("Queue Full — atomic rejection preserves state integrity")
 struct QueueFullAtomicRejectionTests {
     // MARK: - Helpers
 

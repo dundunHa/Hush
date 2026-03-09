@@ -184,12 +184,14 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     private var scrollEndPrewarmDebounceTask: Task<Void, Never>?
     private var lastLookaheadPrewarmIDs: [UUID] = []
     #if DEBUG
+        // swiftlint:disable identifier_name
         private(set) var lastUpdateModeForTesting: UpdateModeForTesting = .fullReload
         private(set) var lastLookaheadPrewarmIDsForTesting: [UUID] = []
         private(set) var lookaheadScheduleInvocationCountForTesting = 0
         var heightInvalidationCountForTesting = 0
         var scrollToBottomCountForTesting = 0
         var scrollAnchorRestoreCountForTesting = 0
+        // swiftlint:enable identifier_name
     #endif
 
     var userHasScrolledUp: Bool {
@@ -329,7 +331,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         }
     }
 
-    // swiftlint:disable:next function_parameter_count function_body_length
+    // swiftlint:disable:next cyclomatic_complexity function_parameter_count function_body_length
     func apply(
         messages: [ChatMessage],
         activeConversationID: String?,
@@ -973,6 +975,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         )
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     fileprivate func scheduleScrollAnchorRestore(_ anchor: ScrollAnchor) {
         guard userHasScrolledUp else { return }
 
@@ -1406,6 +1409,14 @@ final class MessageBodyTextView: NSTextView {
 
         codeBlockDescriptors = scanCodeBlockDescriptors()
         reconcileCodeBlockCopyButtons()
+        finalizeTextMutation()
+    }
+
+    func finalizeTextMutation() {
+        if let layoutManager, let textContainer {
+            layoutManager.ensureLayout(for: textContainer)
+        }
+        invalidateIntrinsicContentSize()
         updateCodeBlockLayouts()
         needsDisplay = true
     }
@@ -1474,6 +1485,7 @@ final class MessageBodyTextView: NSTextView {
         }
     }
 
+    // swiftlint:disable:next function_body_length
     private func updateCodeBlockLayouts() {
         guard let textStorage, let layoutManager, let textContainer else {
             codeBlockLayouts = []
@@ -1677,17 +1689,23 @@ final class MessageTableCellView: NSTableCellView {
     private var renderController: RenderController?
     private var outputObservation: AnyCancellable?
     private weak var container: AppContainer?
+    private var renderRuntime: MessageRenderRuntime?
     private var currentRow: MessageTableView.RowModel?
+    private var currentRowIndex: Int?
     private var lastFingerprint: RenderInputFingerprint?
     private var streamingDisplayedLength: Int = 0
+    private var currentContentWidth: CGFloat = 0
+    private var isShowingStreamingRichOutput = false
     private static let plainTextAttributes: [NSAttributedString.Key: Any] = [
         .font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
         .foregroundColor: NSColor.labelColor
     ]
     #if DEBUG
+        // swiftlint:disable identifier_name
         private(set) var renderRequestCountForTesting = 0
         private(set) var streamingUpdateAssignmentsForTesting = 0
         private(set) var richOutputHeightInvalidationCountForTesting = 0
+        // swiftlint:enable identifier_name
     #endif
 
     init(identifier: NSUserInterfaceItemIdentifier) {
@@ -1754,7 +1772,11 @@ final class MessageTableCellView: NSTableCellView {
         super.prepareForReuse()
         cancelRenderWork()
         currentRow = nil
+        currentRowIndex = nil
         streamingDisplayedLength = 0
+        currentContentWidth = 0
+        renderRuntime = nil
+        isShowingStreamingRichOutput = false
         owningTableView = nil
         messageTableView = nil
         isMouseHovering = false
@@ -1803,6 +1825,7 @@ final class MessageTableCellView: NSTableCellView {
             renderController.cancel()
             self.renderController = nil
         }
+        isShowingStreamingRichOutput = false
         if resetFingerprint {
             lastFingerprint = nil
         }
@@ -1813,7 +1836,134 @@ final class MessageTableCellView: NSTableCellView {
     }
 
     func updateStreamingText(_ content: String) {
-        applyStreamingPlainText(content)
+        updateCurrentRowContent(content)
+
+        let shouldRenderStreamingRich = shouldUseStreamingRichRender(for: content)
+        if !isShowingStreamingRichOutput {
+            applyStreamingPlainText(content)
+        }
+
+        guard shouldRenderStreamingRich else { return }
+        if let runtime = renderRuntime, let currentRow {
+            ensureRenderController(
+                runtime: runtime,
+                observedRow: currentRow,
+                contentWidth: currentContentWidth,
+                owningTableView: owningTableView,
+                rowIndex: currentRowIndex,
+                messageTableView: messageTableView
+            )
+        }
+        requestStreamingRichRender(content: content)
+    }
+
+    private func updateCurrentRowContent(_ content: String) {
+        guard let currentRow else { return }
+        guard currentRow.message.content != content else { return }
+
+        let updatedMessage = ChatMessage(
+            id: currentRow.message.id,
+            role: currentRow.message.role,
+            content: content,
+            createdAt: currentRow.message.createdAt
+        )
+        self.currentRow = MessageTableView.RowModel(
+            message: updatedMessage,
+            isStreaming: currentRow.isStreaming,
+            renderHint: currentRow.renderHint
+        )
+    }
+
+    private static func containsClosedMathSegment(_ content: String) -> Bool {
+        guard content.contains("$") else { return false }
+        return MathSegmenter.segment(content).contains { segment in
+            switch segment {
+            case .inlineMath, .blockMath:
+                return true
+            case .text:
+                return false
+            }
+        }
+    }
+
+    private func shouldUseStreamingRichRender(for content: String) -> Bool {
+        isShowingStreamingRichOutput || Self.containsClosedMathSegment(content)
+    }
+
+    // swiftlint:disable:next function_parameter_count
+    private func ensureRenderController(
+        runtime: MessageRenderRuntime,
+        observedRow: MessageTableView.RowModel,
+        contentWidth: CGFloat,
+        owningTableView: NSTableView?,
+        rowIndex: Int?,
+        messageTableView: MessageTableView?
+    ) {
+        if renderController == nil {
+            renderController = runtime.makeRenderController()
+        }
+
+        guard let renderController else { return }
+        outputObservation?.cancel()
+        outputObservation = renderController.$currentOutput.sink { [weak self, weak messageTableView] output in
+            guard let self, let output else { return }
+            guard let activeRow = self.validatedRowForOutput(output, observedRow: observedRow) else { return }
+
+            let previousHeight = self.bodyIntrinsicHeight
+            let cachedHeight: CGFloat?
+            if activeRow.isStreaming {
+                cachedHeight = nil
+                self.streamingDisplayedLength = max(self.streamingDisplayedLength, output.plainText.count)
+                self.isShowingStreamingRichOutput = true
+            } else {
+                let heightInput = MessageRenderInput(
+                    content: activeRow.message.content,
+                    availableWidth: contentWidth,
+                    style: Self.sharedRenderStyle,
+                    isStreaming: false
+                )
+                cachedHeight = runtime.cachedRowHeight(for: heightInput)
+                self.streamingDisplayedLength = 0
+                self.isShowingStreamingRichOutput = false
+            }
+
+            self.bodyTextView.setAttributedText(
+                output.attributedString,
+                cachedHeight: cachedHeight
+            )
+            self.invalidateOwningRowHeightIfNeeded(
+                owningTableView: owningTableView,
+                rowIndex: rowIndex,
+                previousHeight: previousHeight,
+                messageTableView: messageTableView
+            )
+
+            if !activeRow.isStreaming {
+                self.container?.reportActiveConversationRichRenderReadyIfNeeded()
+            }
+        }
+    }
+
+    private func requestStreamingRichRender(content: String) {
+        guard let runtime = renderRuntime else { return }
+        guard currentContentWidth > 0 else { return }
+        guard let currentRow else { return }
+
+        if renderController == nil {
+            renderController = runtime.makeRenderController()
+        }
+        guard let renderController else { return }
+
+        #if DEBUG
+            renderRequestCountForTesting += 1
+        #endif
+        renderController.requestRender(
+            content: content,
+            availableWidth: currentContentWidth,
+            style: Self.sharedRenderStyle,
+            isStreaming: true,
+            hint: currentRow.renderHint
+        )
     }
 
     private func applyStreamingPlainText(_ content: String) {
@@ -1826,7 +1976,11 @@ final class MessageTableCellView: NSTableCellView {
         if !existing.isEmpty, content.hasPrefix(existing), let textStorage = bodyTextView.textStorage {
             let delta = String(content.dropFirst(existing.count))
             if !delta.isEmpty {
+                textStorage.beginEditing()
                 textStorage.append(NSAttributedString(string: delta, attributes: Self.plainTextAttributes))
+                textStorage.endEditing()
+                bodyTextView.cachedIntrinsicHeight = nil
+                bodyTextView.finalizeTextMutation()
                 #if DEBUG
                     streamingUpdateAssignmentsForTesting += 1
                 #endif
@@ -1910,6 +2064,7 @@ final class MessageTableCellView: NSTableCellView {
         #endif
     }
 
+    // swiftlint:disable:next function_body_length
     func configure(
         row: MessageTableView.RowModel,
         runtime: MessageRenderRuntime,
@@ -1921,8 +2076,11 @@ final class MessageTableCellView: NSTableCellView {
     ) {
         self.owningTableView = owningTableView
         self.messageTableView = messageTableView
+        currentRowIndex = rowIndex
+        renderRuntime = runtime
 
         let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
+        currentContentWidth = contentWidth
         let fingerprint = RenderInputFingerprint(
             messageID: row.message.id,
             contentHash: row.message.content.hashValue,
@@ -1956,17 +2114,35 @@ final class MessageTableCellView: NSTableCellView {
         }
 
         if row.isStreaming {
-            // Streaming: plain text only. Rich (markdown/math) is applied after completion.
+            let shouldRenderStreamingRich = shouldUseStreamingRichRender(for: row.message.content)
             let shouldSkipStreamingFallback =
                 previousRow?.isStreaming == true
                     && row.message.content.count < streamingDisplayedLength
-            if !shouldSkipStreamingFallback {
+            if !shouldSkipStreamingFallback, !isShowingStreamingRichOutput {
                 applyPlainText(row.message.content, cachedHeight: nil)
                 streamingDisplayedLength = row.message.content.count
             }
-            cancelRenderWork(resetFingerprint: false)
+
+            guard shouldRenderStreamingRich else {
+                cancelRenderWork(resetFingerprint: false)
+                return
+            }
+
+            ensureRenderController(
+                runtime: runtime,
+                observedRow: row,
+                contentWidth: contentWidth,
+                owningTableView: owningTableView,
+                rowIndex: rowIndex,
+                messageTableView: messageTableView
+            )
+            if !shouldSkipStreamingFallback || isShowingStreamingRichOutput {
+                requestStreamingRichRender(content: row.message.content)
+            }
             return
         }
+
+        isShowingStreamingRichOutput = false
 
         if !row.isStreaming {
             let input = MessageRenderInput(
@@ -2002,33 +2178,19 @@ final class MessageTableCellView: NSTableCellView {
             renderController = runtime.makeRenderController()
         }
 
-        guard let renderController else { return }
-        outputObservation = renderController.$currentOutput.sink { [weak self, weak messageTableView] output in
-            guard let self, let output else { return }
-            guard let activeRow = self.validatedRowForOutput(output, observedRow: row) else { return }
-            let previousHeight = self.bodyIntrinsicHeight
-            let heightInput = MessageRenderInput(
-                content: activeRow.message.content,
-                availableWidth: contentWidth,
-                style: Self.sharedRenderStyle,
-                isStreaming: false
-            )
-            self.bodyTextView.setAttributedText(
-                output.attributedString,
-                cachedHeight: runtime.cachedRowHeight(for: heightInput)
-            )
-            self.invalidateOwningRowHeightIfNeeded(
-                owningTableView: owningTableView,
-                rowIndex: rowIndex,
-                previousHeight: previousHeight,
-                messageTableView: messageTableView
-            )
-            self.container?.reportActiveConversationRichRenderReadyIfNeeded()
-        }
+        ensureRenderController(
+            runtime: runtime,
+            observedRow: row,
+            contentWidth: contentWidth,
+            owningTableView: owningTableView,
+            rowIndex: rowIndex,
+            messageTableView: messageTableView
+        )
 
         #if DEBUG
             renderRequestCountForTesting += 1
         #endif
+        guard let renderController else { return }
         renderController.requestRender(
             content: row.message.content,
             availableWidth: contentWidth,
@@ -2122,6 +2284,7 @@ final class MessageTableCellView: NSTableCellView {
 
 #if DEBUG
     extension MessageTableView {
+        // swiftlint:disable identifier_name
         var scrollOriginYForTesting: CGFloat {
             scrollView.contentView.bounds.origin.y
         }
@@ -2154,18 +2317,43 @@ final class MessageTableCellView: NSTableCellView {
             handleDidEndLiveScroll()
         }
 
-        func prepareCellForTesting(row: Int) {
-            guard tableView.numberOfColumns > 0 else { return }
-            _ = tableView.view(atColumn: 0, row: row, makeIfNecessary: true)
+        @discardableResult
+        func prepareCellForTesting(row: Int) -> MessageTableCellView? {
+            guard tableView.numberOfColumns > 0 else { return nil }
+            guard row >= 0, row < tableView.numberOfRows else { return nil }
+            return testingCellForRow(row)
         }
 
         func visibleCellForTesting(row: Int) -> MessageTableCellView? {
             guard tableView.numberOfColumns > 0 else { return nil }
-            return tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? MessageTableCellView
+            guard row >= 0, row < tableView.numberOfRows else { return nil }
+            return testingCellForRow(row)
         }
+
+        private func testingCellForRow(_ row: Int) -> MessageTableCellView? {
+            if let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: true) as? MessageTableCellView {
+                return cell
+            }
+            guard let runtime else { return nil }
+            guard row >= 0, row < rows.count else { return nil }
+            let identifier = NSUserInterfaceItemIdentifier("MessageTableCellView.testing")
+            let cell = MessageTableCellView(identifier: identifier)
+            cell.configure(
+                row: rows[row],
+                runtime: runtime,
+                availableWidth: effectiveAvailableWidth(),
+                container: container,
+                owningTableView: tableView,
+                rowIndex: row,
+                messageTableView: self
+            )
+            return cell
+        }
+        // swiftlint:enable identifier_name
     }
 
     extension MessageTableCellView {
+        // swiftlint:disable identifier_name
         var hasRenderControllerForTesting: Bool {
             renderController != nil
         }
@@ -2202,6 +2390,7 @@ final class MessageTableCellView: NSTableCellView {
         var streamingUpdateAssignmentCountForTesting: Int {
             streamingUpdateAssignmentsForTesting
         }
+        // swiftlint:enable identifier_name
     }
 #endif
 

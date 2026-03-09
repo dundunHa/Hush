@@ -1,6 +1,57 @@
 import Foundation
 import os
 
+struct StreamingPresentationPolicy: Equatable {
+    let revealTickInterval: Duration
+    let initialRevealCharacters: Int
+    let minimumCharactersPerSecond: Double
+    let maximumCharactersPerSecond: Double
+    let targetBacklogLagSeconds: Double
+    let terminalCatchUpCharactersPerSecond: Double
+    let terminalForceRevealAfter: Duration?
+
+    nonisolated static let production = StreamingPresentationPolicy(
+        revealTickInterval: .milliseconds(50),
+        initialRevealCharacters: 1,
+        minimumCharactersPerSecond: 20,
+        maximumCharactersPerSecond: 40,
+        targetBacklogLagSeconds: 2.0,
+        terminalCatchUpCharactersPerSecond: 40,
+        terminalForceRevealAfter: nil
+    )
+
+    nonisolated static let testingFast = StreamingPresentationPolicy(
+        revealTickInterval: .milliseconds(10),
+        initialRevealCharacters: 1,
+        minimumCharactersPerSecond: 240,
+        maximumCharactersPerSecond: 600,
+        targetBacklogLagSeconds: 0.1,
+        terminalCatchUpCharactersPerSecond: 600,
+        terminalForceRevealAfter: nil
+    )
+
+    var fastestCharactersPerSecond: Double {
+        max(maximumCharactersPerSecond, terminalCatchUpCharactersPerSecond)
+    }
+
+    func charactersPerSecond(
+        forPendingCharacters pendingCharacters: Int,
+        isTerminalCatchUp: Bool
+    ) -> Double {
+        guard pendingCharacters > 0 else { return 0 }
+        if isTerminalCatchUp {
+            return terminalCatchUpCharactersPerSecond
+        }
+
+        let targetLagSeconds = max(0.05, targetBacklogLagSeconds)
+        let targetCharactersPerSecond = Double(pendingCharacters) / targetLagSeconds
+        return min(
+            maximumCharactersPerSecond,
+            max(minimumCharactersPerSecond, targetCharactersPerSecond)
+        )
+    }
+}
+
 /// Configurable constants for the rendering pipeline.
 nonisolated enum RenderConstants {
     /// Maximum number of math segments rendered per message.
@@ -48,6 +99,9 @@ nonisolated enum RenderConstants {
 
     /// Fast-track interval between direct streaming UI pushes in RequestCoordinator.
     static let streamingFastFlushInterval: Duration = .milliseconds(30)
+
+    /// Presentation-side typewriter tuning for streaming assistant content.
+    static let streamingPresentationPolicy = StreamingPresentationPolicy.production
 
     /// Slow-track interval between streaming model updates in RequestCoordinator.
     static let streamingSlowFlushInterval: Duration = .milliseconds(200)

@@ -3,7 +3,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("Rendering Guardrails")
 struct GuardrailsTests {
     // MARK: - Task 8.10: Excessive Math and Long Content
 

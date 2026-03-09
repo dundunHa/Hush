@@ -90,7 +90,7 @@ public struct OpenAIProvider: LLMProvider, Sendable {
         }
     }
 
-    private struct StreamingExecutionInput: Sendable {
+    private struct StreamingExecutionInput {
         let messages: [ChatMessage]
         let modelID: String
         let parameters: ModelParameters
@@ -422,7 +422,7 @@ private struct AnyCodingKey: CodingKey {
     }
 }
 
-private enum JSONValue: Codable, Equatable, Sendable {
+private enum JSONValue: Codable, Equatable {
     case string(String)
     case integer(Int)
     case number(Double)

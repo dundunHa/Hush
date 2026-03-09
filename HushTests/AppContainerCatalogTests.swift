@@ -5,7 +5,7 @@ import Testing
 // MARK: - AppContainer Catalog Tests
 
 @MainActor
-@Suite("AppContainer Catalog and Multi-Provider Tests", .serialized)
+@Suite(.serialized)
 struct AppContainerCatalogTests {
     // MARK: - Helpers
 

@@ -5,7 +5,6 @@ import GRDB
 import Testing
 
 @MainActor
-@Suite("Single Path Routing Tests")
 struct SinglePathRoutingTests {
     private func waitForConversationReady(
         _ container: AppContainer,

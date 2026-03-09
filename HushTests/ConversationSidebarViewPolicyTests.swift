@@ -2,7 +2,6 @@ import Foundation
 @testable import Hush
 import Testing
 
-@Suite("Conversation Sidebar Policy Tests")
 struct ConversationSidebarViewPolicyTests {
     @Test("Sidebar context actions exclude stop")
     func contextActionsExcludeStop() {

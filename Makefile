@@ -19,7 +19,7 @@ TEST_RESULTS_DIR ?= .build/TestResults
 XCCOV ?= xcrun xccov
 XCTRACE_ARGS ?=
 
-.PHONY: help setup check-tools resolve build check-xcode release test test-cov run fmt xctrace-memory clean
+.PHONY: help setup check-tools resolve build check-xcode release test test-cov run fmt crash-context xctrace-memory clean
 
 help: ## Show available targets
 	@echo "Available targets:"
@@ -63,7 +63,10 @@ build: ## Build Debug app for scheme $(SCHEME)
 		-configuration Debug \
 		-derivedDataPath "$(DERIVED_DATA)" \
 		-clonedSourcePackagesDirPath "$(SPM_DIR)" \
-		build
+		build \
+		CODE_SIGNING_ALLOWED=NO \
+		CODE_SIGNING_REQUIRED=NO \
+		CODE_SIGN_IDENTITY=""
 
 check-xcode: ## Run Xcode diagnostics build with strict concurrency
 	@mkdir -p "$(DERIVED_DATA)" "$(SPM_DIR)"
@@ -163,6 +166,9 @@ run: clean build ## Clean, rebuild, launch app and stream rendering logs
 fmt: ## Format Swift code and run SwiftLint checks
 	@swiftformat $(SRC_DIRS) --config .swiftformat
 	@swiftlint lint --config .swiftlint.yml
+
+crash-context: ## Collect recent Hush crash reports and unified logs into .build/crash
+	@APP_NAME="$(SCHEME)" bash scripts/capture-crash-context.sh .build/crash
 
 xctrace-memory: build ## Record Activity Monitor trace and estimate memory delta
 	@python3 scripts/xctrace-hot-scene-memory.py $(XCTRACE_ARGS)

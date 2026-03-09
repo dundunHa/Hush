@@ -4,7 +4,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("MessageTableView Fast-Track")
 struct MessageTableViewFastTrackTests {
     private func makeMessage(
         id: UUID,

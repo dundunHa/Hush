@@ -35,15 +35,15 @@ public struct ModelParameters: Codable, Equatable, Sendable {
     // MARK: - Codable (backward-compatible decoding)
 
     public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        temperature = try c.decode(Double.self, forKey: .temperature)
-        topP = try c.decode(Double.self, forKey: .topP)
-        topK = try c.decodeIfPresent(Int.self, forKey: .topK)
-        maxTokens = try c.decode(Int.self, forKey: .maxTokens)
-        presencePenalty = try c.decode(Double.self, forKey: .presencePenalty)
-        frequencyPenalty = try c.decode(Double.self, forKey: .frequencyPenalty)
-        contextMessageLimit = try c.decodeIfPresent(Int.self, forKey: .contextMessageLimit)
-        useModelDefaults = try c.decodeIfPresent(Bool.self, forKey: .useModelDefaults) ?? false
+        let keyedContainer = try decoder.container(keyedBy: CodingKeys.self)
+        temperature = try keyedContainer.decode(Double.self, forKey: .temperature)
+        topP = try keyedContainer.decode(Double.self, forKey: .topP)
+        topK = try keyedContainer.decodeIfPresent(Int.self, forKey: .topK)
+        maxTokens = try keyedContainer.decode(Int.self, forKey: .maxTokens)
+        presencePenalty = try keyedContainer.decode(Double.self, forKey: .presencePenalty)
+        frequencyPenalty = try keyedContainer.decode(Double.self, forKey: .frequencyPenalty)
+        contextMessageLimit = try keyedContainer.decodeIfPresent(Int.self, forKey: .contextMessageLimit)
+        useModelDefaults = try keyedContainer.decodeIfPresent(Bool.self, forKey: .useModelDefaults) ?? false
     }
 
     public static let standard = ModelParameters(

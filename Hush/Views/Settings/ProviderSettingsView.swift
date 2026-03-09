@@ -407,9 +407,15 @@ struct ProviderSettingsView: View {
                 HStack(spacing: HushSpacing.sm) {
                     Image(systemName: "info.circle")
                         .foregroundStyle(HushColors.secondaryText)
-                    Text(isRefreshing ? "Fetching models…" : (hasPersistedProfile ? "No models cached. Tap Refresh to fetch." : "Save this provider to enable model refresh."))
-                        .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
+                    Text(
+                        isRefreshing
+                            ? "Fetching models…"
+                            : (hasPersistedProfile
+                                ? "No models cached. Tap Refresh to fetch."
+                                : "Save this provider to enable model refresh.")
+                    )
+                    .font(HushTypography.caption)
+                    .foregroundStyle(HushColors.secondaryText)
                 }
                 .padding(.vertical, HushSpacing.sm)
             } else {

@@ -5,7 +5,6 @@ import Testing
 
 // MARK: - 6.3 Sync Metadata and Outbox Tests
 
-@Suite("Sync Outbox Tests")
 struct SyncOutboxTests {
     private func makeRepo() throws -> (GRDBSyncOutboxRepository, DatabaseManager) {
         let db = try DatabaseManager.inMemory()

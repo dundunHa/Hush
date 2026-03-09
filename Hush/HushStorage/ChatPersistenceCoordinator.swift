@@ -4,25 +4,25 @@ import os
 
 // MARK: - Chat Persistence Coordinator
 
-struct MessagePage: Sendable, Equatable {
+struct MessagePage: Equatable {
     let messages: [ChatMessage]
     let hasMoreOlderMessages: Bool
     let oldestOrderIndex: Int?
     let newestOrderIndex: Int?
 }
 
-struct SidebarThreadsCursor: Sendable, Equatable {
+struct SidebarThreadsCursor: Equatable {
     let lastActivityAt: Date
     let conversationID: String
 }
 
-struct SidebarThreadsPage: Sendable, Equatable {
+struct SidebarThreadsPage: Equatable {
     let threads: [ConversationSidebarThread]
     let hasMore: Bool
     let nextCursor: SidebarThreadsCursor?
 }
 
-struct BootstrapState: Sendable, Equatable {
+struct BootstrapState: Equatable {
     let conversationID: String
     let messagePage: MessagePage
 }

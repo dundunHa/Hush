@@ -4,7 +4,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("Cell Cache-First Rendering Tests")
 struct CellCacheFirstRenderingTests {
     private func makeRow(
         content: String,

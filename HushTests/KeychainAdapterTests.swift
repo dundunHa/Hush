@@ -6,7 +6,6 @@ import Testing
 
 /// Note: These tests use a unique service prefix to avoid polluting
 /// the real Keychain. Each test uses a unique provider ID.
-@Suite("Keychain Adapter Tests")
 struct KeychainAdapterTests {
     private let adapter = KeychainAdapter(servicePrefix: "com.dundunha.hush.test.\(UUID().uuidString)")
 
@@ -83,7 +82,6 @@ struct KeychainAdapterTests {
 
 // MARK: - Credential Resolver Tests
 
-@Suite("Credential Resolver Tests")
 struct CredentialResolverTests {
     @Test("Resolver returns secret when present")
     func resolverReturnsSecret() throws {

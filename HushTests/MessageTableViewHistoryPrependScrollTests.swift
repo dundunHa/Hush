@@ -4,7 +4,7 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("MessageTableView History Prepend Scroll")
+// swiftlint:disable:next type_name
 struct MessageTableViewHistoryPrependScrollTests {
     private func makeMessage(id: UUID, content: String) -> ChatMessage {
         ChatMessage(

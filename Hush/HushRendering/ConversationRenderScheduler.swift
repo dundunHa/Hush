@@ -7,13 +7,13 @@ import os
 /// switch-time rendering can prefer latest visible assistant messages.
 @MainActor
 final class ConversationRenderScheduler {
-    enum SceneTier: Sendable, Equatable {
+    enum SceneTier: Equatable {
         case active
         case hot
         case cold
     }
 
-    enum RenderWorkPriority: Int, Comparable, Sendable {
+    enum RenderWorkPriority: Int, Comparable {
         case high = 0
         case visible = 1
         case deferred = 2
@@ -24,14 +24,14 @@ final class ConversationRenderScheduler {
         }
     }
 
-    struct RenderWorkKey: Hashable, Sendable {
+    struct RenderWorkKey: Hashable {
         let conversationID: String
         let messageID: UUID
         let fingerprint: Int
         let generation: UInt64
     }
 
-    struct Configuration: Sendable {
+    struct Configuration {
         let budgetInterval: TimeInterval
         let idleDelay: TimeInterval
         let queueCapacity: Int
@@ -122,7 +122,7 @@ final class ConversationRenderScheduler {
     private var insertionOrder: [RenderWorkKey] = []
     private var workerTask: Task<Void, Never>?
 
-    private struct SceneConfiguration: Sendable, Equatable {
+    private struct SceneConfiguration: Equatable {
         let activeConversationID: String
         let activeGeneration: UInt64
         let hotGenerationsByConversationID: [String: UInt64]
