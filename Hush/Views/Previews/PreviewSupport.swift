@@ -133,13 +133,6 @@
         static var sampleProviderConfigurations: [ProviderConfiguration] {
             [
                 providerConfiguration(),
-                providerConfiguration(
-                    id: "preview-anthropic",
-                    name: "Anthropic",
-                    type: .anthropic,
-                    endpoint: "https://api.anthropic.com/v1",
-                    defaultModelID: "claude-sonnet-4-20250514"
-                ),
                 ProviderConfiguration.mockDefault()
             ]
         }

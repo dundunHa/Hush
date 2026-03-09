@@ -151,6 +151,7 @@ final class AppContainer: ObservableObject {
     @Published private(set) var queuedConversationCounts: [String: Int] = [:]
     @Published private(set) var unreadCompletions: Set<String> = []
     @Published var catalogRefreshingProviderIDs: Set<String> = []
+    @Published var catalogRefreshErrors: [String: String] = [:]
 
     // MARK: - Message Buckets
 
@@ -617,8 +618,8 @@ final class AppContainer: ObservableObject {
         let id = "provider-\(UUID().uuidString.prefix(8))"
         let configuration = ProviderConfiguration(
             id: String(id),
-            name: "Custom Provider",
-            type: .custom,
+            name: "OpenAI Compatible",
+            type: .openAI,
             endpoint: "https://api.example.com/v1",
             apiKeyEnvironmentVariable: "HUSH_API_KEY",
             defaultModelID: "model-id",
@@ -865,6 +866,7 @@ final class AppContainer: ObservableObject {
         )
 
         catalogRefreshingProviderIDs.insert(providerID)
+        catalogRefreshErrors.removeValue(forKey: providerID)
 
         Task {
             let result = await service.refresh(
@@ -878,6 +880,7 @@ final class AppContainer: ObservableObject {
                 self.statusMessage = "Refreshed \(modelCount) models for \(config.name)"
             case let .failure(error):
                 self.statusMessage = "Catalog refresh failed: \(error)"
+                self.catalogRefreshErrors[providerID] = error
             }
         }
     }
@@ -895,7 +898,7 @@ final class AppContainer: ObservableObject {
         }
         let provider: any LLMProvider
         switch config.type {
-        case .openAI, .custom, .ollama, .anthropic:
+        case .openAI:
             provider = OpenAIProvider(id: config.id)
         #if DEBUG
             case .mock:

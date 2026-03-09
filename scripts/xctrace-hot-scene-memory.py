@@ -11,6 +11,8 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
+DEFAULT_DERIVED_DATA = Path(os.environ.get("HUSH_DERIVED_DATA", "/tmp/hush-dd"))
+
 
 @dataclass(frozen=True)
 class Window:
@@ -113,7 +115,7 @@ def main() -> int:
     parser.add_argument(
         "--app-exec",
         default=str(
-            Path(".build/DerivedData/Build/Products/Debug/Hush.app/Contents/MacOS/Hush")
+            DEFAULT_DERIVED_DATA / "Build/Products/Debug/Hush.app/Contents/MacOS/Hush"
         ),
         help="Path to the app executable to launch (default: Debug build product).",
     )
@@ -135,8 +137,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--output-dir",
-        default=".build/xctrace",
-        help="Directory for trace and exports (default: .build/xctrace).",
+        default="/tmp/hush-xctrace",
+        help="Directory for trace and exports (default: /tmp/hush-xctrace).",
     )
     parser.add_argument(
         "--automation",
@@ -410,4 +412,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

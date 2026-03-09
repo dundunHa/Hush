@@ -2,8 +2,8 @@ SHELL := /bin/bash
 
 PROJECT ?= Hush.xcodeproj
 SCHEME ?= Hush
-DERIVED_DATA ?= .build/DerivedData
-SPM_DIR ?= .build/SourcePackages
+DERIVED_DATA ?= /tmp/hush-dd
+SPM_DIR ?= /tmp/hush-spm
 APP_PATH ?= $(DERIVED_DATA)/Build/Products/Debug/Hush.app
 RELEASE_APP_PATH ?= $(DERIVED_DATA)/Build/Products/Release/Hush.app
 RELEASE_DIR ?= build/release
@@ -15,7 +15,7 @@ XCODEBUILD ?= xcodebuild
 HOST_ARCH ?= $(shell uname -m)
 XCODE_DESTINATION ?= platform=macOS,arch=$(HOST_ARCH)
 XCODE_RELEASE_DESTINATION ?= platform=macOS
-TEST_RESULTS_DIR ?= .build/TestResults
+TEST_RESULTS_DIR ?= /tmp/hush-test-results
 XCCOV ?= xcrun xccov
 XCTRACE_ARGS ?=
 
@@ -94,9 +94,20 @@ release: ## Build Release app and package into a DMG installer
 		-clonedSourcePackagesDirPath "$(SPM_DIR)" \
 		ONLY_ACTIVE_ARCH=NO \
 		"ARCHS=$(RELEASE_ARCHS)" \
-		CODE_SIGNING_ALLOWED=NO \
-		CODE_SIGNING_REQUIRED=NO \
+		CODE_SIGN_IDENTITY=- \
+		AD_HOC_CODE_SIGNING_ALLOWED=YES \
+		ENABLE_APP_SANDBOX=NO \
+		REGISTER_APP_GROUPS=NO \
 		build
+	@echo "==> Re-signing Release app without App Sandbox entitlements..."
+	@codesign \
+		--force \
+		--sign - \
+		--options runtime \
+		--timestamp=none \
+		"$(RELEASE_APP_PATH)"
+	@echo "==> Verifying Release app signature..."
+	@codesign --verify --deep --strict --verbose=2 "$(RELEASE_APP_PATH)"
 	@echo "==> Packaging DMG..."
 	@VERSION=$$(defaults read "$$(pwd)/$(RELEASE_APP_PATH)/Contents/Info" CFBundleShortVersionString); \
 	BUILD=$$(defaults read "$$(pwd)/$(RELEASE_APP_PATH)/Contents/Info" CFBundleVersion); \
@@ -171,8 +182,10 @@ crash-context: ## Collect recent Hush crash reports and unified logs into .build
 	@APP_NAME="$(SCHEME)" bash scripts/capture-crash-context.sh .build/crash
 
 xctrace-memory: build ## Record Activity Monitor trace and estimate memory delta
-	@python3 scripts/xctrace-hot-scene-memory.py $(XCTRACE_ARGS)
+	@python3 scripts/xctrace-hot-scene-memory.py \
+		--app-exec "$(APP_PATH)/Contents/MacOS/Hush" \
+		$(XCTRACE_ARGS)
 
 clean: ## Remove build artifacts and local caches
-	@rm -rf build .build
+	@rm -rf build .build "$(DERIVED_DATA)" "$(SPM_DIR)" "$(TEST_RESULTS_DIR)"
 	@echo "Cleaned build artifacts and caches."

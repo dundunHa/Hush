@@ -49,9 +49,9 @@ struct AppContainerSettingsPersistenceTests {
 
         let loaded = try repo.fetch()
         #expect(loaded != nil)
-        let customProviders = container.settings.providerConfigurations.filter { $0.type == .custom }
+        let customProviders = container.settings.providerConfigurations.filter { $0.name == "OpenAI Compatible" }
         #expect(customProviders.count == 1)
-        #expect(customProviders.first?.name == "Custom Provider")
+        #expect(customProviders.first?.name == "OpenAI Compatible")
     }
 
     @Test("flushSettings persists provider removal")
@@ -61,7 +61,7 @@ struct AppContainerSettingsPersistenceTests {
         container.addPlaceholderProvider()
         container.flushSettings()
 
-        let addedID = try #require(container.settings.providerConfigurations.first(where: { $0.type == .custom })?.id)
+        let addedID = try #require(container.settings.providerConfigurations.first(where: { $0.name == "OpenAI Compatible" })?.id)
         container.removeProviderProfile(id: addedID)
         container.flushSettings()
 
@@ -90,7 +90,7 @@ struct AppContainerSettingsPersistenceTests {
         let profile = ProviderConfiguration(
             id: "anthropic",
             name: "Anthropic",
-            type: .anthropic,
+            type: .openAI,
             endpoint: "https://api.anthropic.com",
             apiKeyEnvironmentVariable: "",
             defaultModelID: "claude-3",

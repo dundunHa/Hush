@@ -3,12 +3,48 @@ import SwiftUI
 
 // swiftlint:disable type_body_length function_body_length file_length
 
+enum ProviderCatalogRefreshGate {
+    static func requiresSave(
+        persistedConfig: ProviderConfiguration?,
+        draftType: ProviderType,
+        draftEndpoint: String,
+        pendingAPIKey: String
+    ) -> Bool {
+        guard let persistedConfig else { return true }
+        guard draftType == persistedConfig.type else { return true }
+        let draftNormalizedEndpoint = normalizedEndpoint(draftEndpoint, type: draftType)
+        let persistedNormalizedEndpoint = normalizedEndpoint(
+            persistedConfig.endpoint,
+            type: persistedConfig.type
+        )
+        guard draftNormalizedEndpoint == persistedNormalizedEndpoint else {
+            return true
+        }
+        return !pendingAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private static func normalizedEndpoint(_ raw: String, type: ProviderType) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            switch type {
+            case .openAI:
+                return OpenAIProvider.defaultEndpoint
+            #if DEBUG
+                case .mock:
+                    return "local://mock-provider"
+            #endif
+            }
+        }
+        return trimmed
+    }
+}
+
 struct ProviderSettingsView: View {
     @EnvironmentObject private var container: AppContainer
 
     @State private var editingProviderID: String?
     @State private var providerName: String = ""
-    @State private var providerType: ProviderType = .custom
+    @State private var providerType: ProviderType = .openAI
     @State private var endpoint: String = OpenAIProvider.defaultEndpoint
     @State private var defaultModelID: String = ""
     @State private var pinnedModelIDs: [String] = []
@@ -70,9 +106,6 @@ struct ProviderSettingsView: View {
     private func providerIcon(for type: ProviderType) -> String {
         switch type {
         case .openAI: "brain"
-        case .anthropic: "sparkle"
-        case .ollama: "desktopcomputer"
-        case .custom: "server.rack"
         #if DEBUG
             case .mock: "ladybug"
         #endif
@@ -82,33 +115,16 @@ struct ProviderSettingsView: View {
     private func providerAccent(for type: ProviderType) -> Color {
         switch type {
         case .openAI: .green
-        case .anthropic: .orange
-        case .ollama: .blue
-        case .custom: .purple
         #if DEBUG
             case .mock: .gray
         #endif
         }
     }
 
-    private var selectableProviderTypes: [ProviderType] {
-        #if DEBUG
-            ProviderType.allCases.filter { $0 != .mock }
-        #else
-            ProviderType.allCases
-        #endif
-    }
-
     private func defaultEndpointPlaceholder(for type: ProviderType) -> String {
         switch type {
         case .openAI:
             OpenAIProvider.defaultEndpoint
-        case .anthropic:
-            "https://api.anthropic.com/v1"
-        case .ollama:
-            "http://localhost:11434/v1"
-        case .custom:
-            "https://api.example.com/v1"
         #if DEBUG
             case .mock:
                 "local://mock-provider"
@@ -120,12 +136,6 @@ struct ProviderSettingsView: View {
         switch type {
         case .openAI:
             "OpenAI Compatible"
-        case .anthropic:
-            "Anthropic"
-        case .ollama:
-            "Ollama"
-        case .custom:
-            "Custom Provider"
         #if DEBUG
             case .mock:
                 "Local Mock"
@@ -164,32 +174,8 @@ struct ProviderSettingsView: View {
                         .font(HushTypography.pageTitle)
                     Spacer()
 
-                    Menu {
-                        Button {
-                            openProviderSettings(providerID: OpenAISettingsInput.providerID)
-                        } label: {
-                            Label("OpenAI", systemImage: providerIcon(for: .openAI))
-                        }
-
-                        Divider()
-
-                        Button {
-                            startNewProviderDraft(type: .custom)
-                        } label: {
-                            Label("Custom", systemImage: providerIcon(for: .custom))
-                        }
-
-                        Button {
-                            startNewProviderDraft(type: .ollama)
-                        } label: {
-                            Label("Ollama", systemImage: providerIcon(for: .ollama))
-                        }
-
-                        Button {
-                            startNewProviderDraft(type: .anthropic)
-                        } label: {
-                            Label("Anthropic", systemImage: providerIcon(for: .anthropic))
-                        }
+                    Button {
+                        startNewProviderDraft(type: .openAI)
                     } label: {
                         Label("New", systemImage: "plus")
                     }
@@ -238,7 +224,7 @@ struct ProviderSettingsView: View {
             ?? ProviderConfiguration(
                 id: providerID,
                 name: "",
-                type: .custom,
+                type: .openAI,
                 endpoint: "",
                 apiKeyEnvironmentVariable: "",
                 defaultModelID: "",
@@ -250,9 +236,7 @@ struct ProviderSettingsView: View {
                 providerHeader(config)
                 connectionSection(config)
 
-                if !isCreatingNew {
-                    catalogRefreshSection(providerID: providerID)
-                }
+                catalogRefreshSection(providerID: providerID)
 
                 if !saveMessage.isEmpty {
                     Text(saveMessage)
@@ -283,23 +267,6 @@ struct ProviderSettingsView: View {
                 TextField("Provider Name", text: $providerName)
                     .font(HushTypography.pageTitle)
                     .textFieldStyle(.plain)
-            }
-
-            if isCreatingNew {
-                Picker("", selection: $providerType) {
-                    ForEach(selectableProviderTypes) { type in
-                        Text(type.displayName).tag(type)
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: 180)
-            } else {
-                Text(config.type.displayName)
-                    .font(HushTypography.caption)
-                    .foregroundStyle(HushColors.secondaryText)
-                    .padding(.horizontal, HushSpacing.sm)
-                    .padding(.vertical, 2)
-                    .background(Color.white.opacity(0.08), in: Capsule())
             }
         }
     }
@@ -380,6 +347,7 @@ struct ProviderSettingsView: View {
         let allModels = container.cachedModels(forProviderID: providerID)
             .sorted { $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending }
         let isRefreshing = container.catalogRefreshingProviderIDs.contains(providerID)
+        let refreshError = container.catalogRefreshErrors[providerID]
 
         return VStack(alignment: .leading, spacing: HushSpacing.md) {
             HStack {
@@ -395,12 +363,23 @@ struct ProviderSettingsView: View {
                 }
 
                 Button {
-                    container.refreshCatalog(forProviderID: providerID)
+                    triggerRefreshFromForm(providerID: providerID)
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.bordered)
-                .disabled(isRefreshing || !hasPersistedProfile)
+                .disabled(isRefreshing)
+            }
+
+            if let refreshError {
+                HStack(spacing: HushSpacing.sm) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(HushColors.errorText)
+                    Text(refreshError)
+                        .font(HushTypography.caption)
+                        .foregroundStyle(HushColors.errorText)
+                }
+                .padding(.vertical, HushSpacing.xs)
             }
 
             if allModels.isEmpty {
@@ -543,6 +522,33 @@ struct ProviderSettingsView: View {
 
     // MARK: - Load / Save
 
+    private func triggerRefreshFromForm(providerID: String) {
+        if isCreatingNew {
+            saveMessage = "Save this provider before refreshing the model catalog."
+            saveFailed = true
+            return
+        }
+
+        guard let persistedConfig = container.settings.providerConfigurations.first(where: { $0.id == providerID }) else {
+            saveMessage = "Save this provider before refreshing the model catalog."
+            saveFailed = true
+            return
+        }
+
+        if ProviderCatalogRefreshGate.requiresSave(
+            persistedConfig: persistedConfig,
+            draftType: providerType,
+            draftEndpoint: endpoint,
+            pendingAPIKey: apiKeyToSave
+        ) {
+            saveMessage = "Save endpoint or API key changes before refreshing the model catalog."
+            saveFailed = true
+            return
+        }
+
+        container.refreshCatalog(forProviderID: providerID)
+    }
+
     private func loadDefaultsForNewProvider(type: ProviderType) {
         providerType = type
         providerName = defaultNewProviderName(for: type)
@@ -579,7 +585,7 @@ struct ProviderSettingsView: View {
             hasStoredCredential = container.hasProviderCredential(forRef: credentialRef)
         } else {
             providerName = ""
-            providerType = .custom
+            providerType = .openAI
             endpoint = ""
             defaultModelID = ""
             pinnedModelIDs = []
@@ -847,15 +853,15 @@ private struct ProviderListRowView: View {
                 provider: ProviderConfiguration(
                     id: "custom",
                     name: "Custom Provider",
-                    type: .custom,
+                    type: .openAI,
                     endpoint: "https://api.example.com/v1",
                     apiKeyEnvironmentVariable: "",
                     defaultModelID: "model-1",
                     isEnabled: true
                 ),
                 isDefault: false,
-                icon: "server.rack",
-                accent: .purple,
+                icon: "brain",
+                accent: .green,
                 onTap: {}
             )
         }

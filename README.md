@@ -25,6 +25,10 @@ make run     # 启动 .app 并 stream 日志
 make test    # 跑单元测试（Swift Testing）
 ```
 
+说明：
+- 默认 `DerivedData` / SwiftPM 缓存现在写到 `/tmp/hush-dd` 和 `/tmp/hush-spm`，避免 Dropbox / File Provider 给测试产物附加扩展属性，导致 macOS codesign 失败。
+- 如需自定义目录，可在命令前覆写，例如：`DERIVED_DATA=$PWD/.build/DerivedData SPM_DIR=$PWD/.build/SourcePackages make build`
+
 ## Release（DMG）
 
 ```bash
@@ -33,9 +37,9 @@ ls build/release
 ```
 
 说明：
-- 本项目默认不做 Developer ID 签名/公证：从互联网下载的 DMG 在部分 macOS 上会被 Gatekeeper 拦截。
-  - 用户侧常用打开方式：在 `/Applications` 里右键 `Hush.app` → 打开
-  - 或执行：`xattr -dr com.apple.quarantine /Applications/Hush.app`
+- 本项目默认生成面向外部分发的 ad-hoc 签名 `.app`，并在 `make release` 时关闭 `App Sandbox`，以避免“本机可运行、别的 Mac 直接无法打开”的兼容性问题。
+- 从互联网下载的 DMG 在 macOS 上仍可能被 Gatekeeper 标记为未验证应用；预期路径是用户可通过“右键打开”或“系统设置 → Privacy & Security → Open Anyway”继续。
+- 若希望用户下载后直接正常打开、不出现风险提示，仍需要 Developer ID 签名 + notarization。
 
 ## 目录结构
 

@@ -46,8 +46,8 @@ struct AppContainerCatalogTests {
         #expect(configs.count == countBefore + 1)
 
         let added = try #require(configs.last)
-        #expect(added.type == .custom)
-        #expect(added.name == "Custom Provider")
+        #expect(added.type == .openAI)
+        #expect(added.name == "OpenAI Compatible")
         #expect(added.isEnabled == true)
         #expect(added.id.hasPrefix("provider-"))
     }
@@ -60,7 +60,7 @@ struct AppContainerCatalogTests {
         container.addPlaceholderProvider()
 
         let customIDs = container.settings.providerConfigurations
-            .filter { $0.type == .custom }
+            .filter { $0.name == "OpenAI Compatible" }
             .map(\.id)
         #expect(Set(customIDs).count == customIDs.count)
     }
@@ -88,7 +88,7 @@ struct AppContainerCatalogTests {
         let newProfile = ProviderConfiguration(
             id: "anthropic",
             name: "Anthropic",
-            type: .anthropic,
+            type: .openAI,
             endpoint: "https://api.anthropic.com",
             apiKeyEnvironmentVariable: "",
             defaultModelID: "claude-3",
@@ -110,7 +110,7 @@ struct AppContainerCatalogTests {
         let initial = ProviderConfiguration(
             id: "custom-1",
             name: "Custom One",
-            type: .custom,
+            type: .openAI,
             endpoint: "https://example.com",
             apiKeyEnvironmentVariable: "",
             defaultModelID: "model-a",
@@ -165,7 +165,7 @@ struct AppContainerCatalogTests {
         )
 
         container.saveProviderProfile(ProviderConfiguration(
-            id: "custom-1", name: "Custom", type: .custom,
+            id: "custom-1", name: "Custom", type: .openAI,
             endpoint: "", apiKeyEnvironmentVariable: "",
             defaultModelID: "model-a", isEnabled: true
         ))
@@ -211,7 +211,7 @@ struct AppContainerCatalogTests {
         let settings = AppSettings(
             providerConfigurations: [
                 ProviderConfiguration(
-                    id: "custom-1", name: "Custom One", type: .custom,
+                    id: "custom-1", name: "Custom One", type: .openAI,
                     endpoint: "https://example.com", apiKeyEnvironmentVariable: "",
                     defaultModelID: "custom-model", isEnabled: true
                 ),

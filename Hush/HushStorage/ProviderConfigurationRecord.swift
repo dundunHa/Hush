@@ -61,7 +61,7 @@ public extension ProviderConfigurationRecord {
             from: Data(pinnedModelIDs.utf8)
         )) ?? []
 
-        let parsedType = ProviderType(rawValue: type) ?? .custom
+        let parsedType = ProviderType(rawValue: type) ?? .openAI
 
         return ProviderConfiguration(
             id: id,

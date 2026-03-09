@@ -5,9 +5,6 @@ public enum ProviderType: String, Codable, CaseIterable, Identifiable, Sendable 
         case mock
     #endif
     case openAI
-    case anthropic
-    case ollama
-    case custom
 
     public var id: String {
         rawValue
@@ -21,12 +18,6 @@ public enum ProviderType: String, Codable, CaseIterable, Identifiable, Sendable 
         #endif
         case .openAI:
             "OpenAI"
-        case .anthropic:
-            "Anthropic"
-        case .ollama:
-            "Ollama"
-        case .custom:
-            "Custom"
         }
     }
 }
@@ -82,7 +73,7 @@ public struct ProviderConfiguration: Identifiable, Codable, Equatable, Sendable 
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
-        type = try container.decode(ProviderType.self, forKey: .type)
+        type = (try? container.decode(ProviderType.self, forKey: .type)) ?? .openAI
         endpoint = try container.decode(String.self, forKey: .endpoint)
         apiKeyEnvironmentVariable = try container.decode(String.self, forKey: .apiKeyEnvironmentVariable)
         defaultModelID = try container.decode(String.self, forKey: .defaultModelID)
