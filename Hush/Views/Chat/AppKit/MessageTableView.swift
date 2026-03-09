@@ -9,6 +9,33 @@ private struct ScrollAnchor {
 }
 
 @MainActor
+private final class HorizontalLockedClipView: NSClipView {
+    override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
+        var constrained = super.constrainBoundsRect(proposedBounds)
+        constrained.origin.x = 0
+        return constrained
+    }
+}
+
+@MainActor
+private final class VerticalOnlyScrollView: NSScrollView {
+    override func scrollWheel(with event: NSEvent) {
+        let verticalMagnitude = abs(event.scrollingDeltaY)
+        let horizontalMagnitude = abs(event.scrollingDeltaX)
+        guard verticalMagnitude >= horizontalMagnitude else { return }
+        super.scrollWheel(with: event)
+    }
+
+    override func swipe(with _: NSEvent) {}
+
+    override func magnify(with _: NSEvent) {}
+
+    override func rotate(with _: NSEvent) {}
+
+    override func smartMagnify(with _: NSEvent) {}
+}
+
+@MainActor
 private final class MessageCopyOverlayButton: NSButton {
     private var resetTask: Task<Void, Never>?
     private var isHovered = false
@@ -139,7 +166,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         }
     #endif
 
-    private let scrollView = NSScrollView()
+    private let scrollView = VerticalOnlyScrollView()
     let tableView = NSTableView()
 
     var rows: [RowModel] = []
@@ -203,6 +230,10 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
 
+        let clipView = HorizontalLockedClipView()
+        clipView.drawsBackground = false
+        scrollView.contentView = clipView
+
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("message"))
         column.resizingMask = .autoresizingMask
         tableView.addTableColumn(column)
@@ -222,6 +253,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         scrollView.drawsBackground = false
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: HushSpacing.lg, right: 0)
+        scrollView.horizontalScrollElasticity = .none
         scrollView.verticalScrollElasticity = .none
         scrollView.borderType = .noBorder
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -952,7 +984,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         guard let documentView = scrollView.documentView else { return }
         let maxY = max(0, documentView.frame.height - scrollView.contentView.bounds.height)
         let target = NSPoint(
-            x: scrollView.contentView.bounds.origin.x,
+            x: 0,
             y: min(max(0, y), maxY)
         )
         scrollView.contentView.scroll(to: target)
@@ -1442,8 +1474,19 @@ final class MessageBodyTextView: NSTextView {
     }
 
     override func scrollWheel(with event: NSEvent) {
+        let verticalMagnitude = abs(event.scrollingDeltaY)
+        let horizontalMagnitude = abs(event.scrollingDeltaX)
+        guard verticalMagnitude >= horizontalMagnitude else { return }
         nextResponder?.scrollWheel(with: event)
     }
+
+    override func magnify(with _: NSEvent) {}
+
+    override func rotate(with _: NSEvent) {}
+
+    override func smartMagnify(with _: NSEvent) {}
+
+    override func swipe(with _: NSEvent) {}
 
     private func scanCodeBlockDescriptors() -> [CodeBlockDescriptor] {
         guard let textStorage else { return [] }
@@ -2300,7 +2343,7 @@ final class MessageTableCellView: NSTableCellView {
         func setScrollOriginYForTesting(_ y: CGFloat) {
             guard let documentView = scrollView.documentView else { return }
             let maxY = max(0, documentView.frame.height - scrollView.contentView.bounds.height)
-            let target = NSPoint(x: scrollView.contentView.bounds.origin.x, y: min(max(0, y), maxY))
+            let target = NSPoint(x: 0, y: min(max(0, y), maxY))
             scrollView.contentView.scroll(to: target)
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }

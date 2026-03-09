@@ -29,10 +29,20 @@ struct AppContainerProviderSettingsTests {
         #expect(!payload.contains("sk-test-plaintext"))
     }
 
-    @Test("enabled OpenAI save auto-selects provider and model")
-    func enabledOpenAISaveAutoSelects() throws {
+    @Test("enabled OpenAI save preserves current provider selection")
+    func enabledOpenAISavePreservesCurrentSelection() throws {
         let credentialStore = InMemoryCredentialStore()
-        let container = AppContainer.forTesting(credentialStore: credentialStore)
+        let settings = AppSettings(
+            providerConfigurations: [.mockDefault()],
+            selectedProviderID: "mock",
+            selectedModelID: "mock-text-1",
+            parameters: .standard,
+            quickBar: .standard
+        )
+        let container = AppContainer.forTesting(
+            settings: settings,
+            credentialStore: credentialStore
+        )
 
         _ = try container.saveOpenAISettings(
             OpenAISettingsInput(
@@ -43,8 +53,8 @@ struct AppContainerProviderSettingsTests {
             )
         )
 
-        #expect(container.settings.selectedProviderID == "openai")
-        #expect(container.settings.selectedModelID == "gpt-4.1-mini")
+        #expect(container.settings.selectedProviderID == "mock")
+        #expect(container.settings.selectedModelID == "mock-text-1")
     }
 
     @Test("enabled OpenAI save without any credential fails explicitly")
@@ -69,7 +79,7 @@ struct AppContainerProviderSettingsTests {
         }
     }
 
-    @Test("empty API key is allowed when credential already exists")
+    @Test("empty API key is allowed when credential already exists without auto-selecting OpenAI")
     func emptyAPIKeyAllowedWithStoredCredential() throws {
         let credentialStore = InMemoryCredentialStore(secrets: ["openai": "sk-existing"])
         let container = AppContainer.forTesting(credentialStore: credentialStore)
@@ -85,8 +95,8 @@ struct AppContainerProviderSettingsTests {
 
         #expect(snapshot.hasCredential)
         #expect(credentialStore.storedSecret(for: "openai") == "sk-existing")
-        #expect(container.settings.selectedProviderID == "openai")
-        #expect(container.settings.selectedModelID == "gpt-4.1")
+        #expect(container.settings.selectedProviderID.isEmpty)
+        #expect(container.settings.selectedModelID.isEmpty)
     }
 
     @Test("empty defaultModelID fails with defaultModelRequired")
@@ -133,6 +143,24 @@ struct AppContainerProviderSettingsTests {
         }
     }
 
+    @Test("disabled OpenAI can save without a default model")
+    func disabledOpenAICanSaveWithoutDefaultModel() throws {
+        let credentialStore = InMemoryCredentialStore()
+        let container = AppContainer.forTesting(credentialStore: credentialStore)
+
+        let snapshot = try container.saveOpenAISettings(
+            OpenAISettingsInput(
+                endpoint: "",
+                defaultModelID: "",
+                isEnabled: false,
+                apiKey: ""
+            )
+        )
+
+        #expect(snapshot.defaultModelID.isEmpty)
+        #expect(container.settings.selectedProviderID.isEmpty)
+    }
+
     @Test("disabling selected openai falls back to mock provider")
     func disablingSelectedOpenAIFallsBackToMock() throws {
         let credentialStore = InMemoryCredentialStore(secrets: ["openai": "sk-existing"])
@@ -169,6 +197,44 @@ struct AppContainerProviderSettingsTests {
 
         #expect(container.settings.selectedProviderID == "mock")
         #expect(container.settings.selectedModelID == "mock-text-1")
+    }
+
+    @Test("saving selected OpenAI updates selected model to its saved default")
+    func savingSelectedOpenAIUpdatesSelectedModel() throws {
+        let credentialStore = InMemoryCredentialStore(secrets: ["openai": "sk-existing"])
+        let openAIConfiguration = ProviderConfiguration(
+            id: "openai",
+            name: "OpenAI",
+            type: .openAI,
+            endpoint: OpenAIProvider.defaultEndpoint,
+            apiKeyEnvironmentVariable: "",
+            defaultModelID: "gpt-4o-mini",
+            isEnabled: true,
+            credentialRef: "openai"
+        )
+        let settings = AppSettings(
+            providerConfigurations: [.mockDefault(), openAIConfiguration],
+            selectedProviderID: "openai",
+            selectedModelID: "gpt-4o-mini",
+            parameters: .standard,
+            quickBar: .standard
+        )
+        let container = AppContainer.forTesting(
+            settings: settings,
+            credentialStore: credentialStore
+        )
+
+        _ = try container.saveOpenAISettings(
+            OpenAISettingsInput(
+                endpoint: OpenAIProvider.defaultEndpoint,
+                defaultModelID: "gpt-4.1",
+                isEnabled: true,
+                apiKey: ""
+            )
+        )
+
+        #expect(container.settings.selectedProviderID == "openai")
+        #expect(container.settings.selectedModelID == "gpt-4.1")
     }
 }
 

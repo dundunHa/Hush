@@ -130,6 +130,35 @@ struct AppContainerCatalogTests {
         #expect(configs[0].defaultModelID == "model-b")
     }
 
+    @Test("saveProviderProfile updates selected model when saving selected provider")
+    func saveProviderProfileUpdatesSelectedModel() throws {
+        let settings = AppSettings(
+            providerConfigurations: [
+                ProviderConfiguration(
+                    id: "custom-1",
+                    name: "Custom One",
+                    type: .openAI,
+                    endpoint: "https://example.com",
+                    apiKeyEnvironmentVariable: "",
+                    defaultModelID: "model-a",
+                    isEnabled: true
+                )
+            ],
+            selectedProviderID: "custom-1",
+            selectedModelID: "model-a",
+            parameters: .standard,
+            quickBar: .standard
+        )
+        let (container, _) = try makeContainerWithCatalog(settings: settings)
+
+        var updated = try #require(container.settings.providerConfigurations.first)
+        updated.defaultModelID = "model-b"
+        container.saveProviderProfile(updated)
+
+        #expect(container.settings.selectedProviderID == "custom-1")
+        #expect(container.settings.selectedModelID == "model-b")
+    }
+
     @Test("removeProviderProfile triggers deterministic fallback when removing selected provider")
     func removeSelectedProviderFallsBack() throws {
         let settings = AppSettings(
@@ -286,6 +315,100 @@ struct AppContainerCatalogTests {
         #expect(status?.modelCount == 1)
     }
 
+    // MARK: - Draft Catalog Preview
+
+    @Test("previewModels uses draft API key and does not persist catalog")
+    func previewModelsUsesDraftAPIKeyWithoutPersistence() async throws {
+        let db = try DatabaseManager.inMemory()
+        let catalogRepo = GRDBProviderCatalogRepository(dbManager: db)
+        let provider = PreviewCatalogProviderStub(
+            id: "draft-preview",
+            models: [ModelDescriptor(id: "draft-model", displayName: "Draft Model", capabilities: [.text])]
+        )
+        var registry = ProviderRegistry()
+        registry.register(provider)
+
+        let credentialStore = makeCredentialStore()
+        let container = AppContainer.forTesting(
+            credentialStore: credentialStore,
+            registry: registry,
+            catalogRepository: catalogRepo,
+            credentialResolver: CredentialResolver(secretStore: credentialStore)
+        )
+
+        let result = await container.previewModels(for: ProviderCatalogDraftInput(
+            providerID: "draft-preview",
+            type: .openAI,
+            endpoint: " https://draft.example.com/v1 ",
+            apiKey: "sk-draft-preview",
+            credentialRef: nil
+        ))
+
+        #expect(result.error == nil)
+        #expect(result.models.map(\.id) == ["draft-model"])
+        #expect(provider.lastContext?.endpoint == "https://draft.example.com/v1")
+        #expect(provider.lastContext?.bearerToken == "sk-draft-preview")
+
+        let persistedModels = try catalogRepo.models(forProviderID: "draft-preview")
+        #expect(persistedModels.isEmpty)
+    }
+
+    @Test("previewModels falls back to stored credential when draft API key is empty")
+    func previewModelsUsesStoredCredential() async {
+        let provider = PreviewCatalogProviderStub(
+            id: "openai",
+            models: [ModelDescriptor(id: "gpt-4.1", displayName: "GPT-4.1", capabilities: [.text])]
+        )
+        var registry = ProviderRegistry()
+        registry.register(provider)
+
+        let credentialStore = makeCredentialStore(secrets: ["openai": "sk-stored-preview"])
+        let container = AppContainer.forTesting(
+            credentialStore: credentialStore,
+            registry: registry,
+            credentialResolver: CredentialResolver(secretStore: credentialStore)
+        )
+
+        let result = await container.previewModels(for: ProviderCatalogDraftInput(
+            providerID: "openai",
+            type: .openAI,
+            endpoint: "",
+            apiKey: "",
+            credentialRef: "openai"
+        ))
+
+        #expect(result.error == nil)
+        #expect(result.models.map(\.id) == ["gpt-4.1"])
+        #expect(provider.lastContext?.endpoint == OpenAIProvider.defaultEndpoint)
+        #expect(provider.lastContext?.bearerToken == "sk-stored-preview")
+    }
+
+    @Test("previewModels requires API key when no draft or stored credential exists")
+    func previewModelsRequiresCredential() async {
+        let provider = PreviewCatalogProviderStub(id: "openai", models: [])
+        var registry = ProviderRegistry()
+        registry.register(provider)
+
+        let credentialStore = makeCredentialStore()
+        let container = AppContainer.forTesting(
+            credentialStore: credentialStore,
+            registry: registry,
+            credentialResolver: CredentialResolver(secretStore: credentialStore)
+        )
+
+        let result = await container.previewModels(for: ProviderCatalogDraftInput(
+            providerID: "openai",
+            type: .openAI,
+            endpoint: "",
+            apiKey: "",
+            credentialRef: nil
+        ))
+
+        #expect(result.models.isEmpty)
+        #expect(result.error == "Enter an API key to fetch models.")
+        #expect(provider.lastContext == nil)
+    }
+
     // MARK: - Strict Validation with Catalog
 
     @Test("Strict validation passes when model exists in cached catalog")
@@ -371,6 +494,45 @@ private final class FakeHTTPClientForCatalogTests: HTTPClient, @unchecked Sendab
             fatalError("streamSSEHandler not configured")
         }
         return try await handler(request)
+    }
+}
+
+private final class PreviewCatalogProviderStub: LLMProvider, @unchecked Sendable {
+    let id: String
+    let models: [ModelDescriptor]
+    nonisolated(unsafe) var lastContext: ProviderInvocationContext?
+
+    init(id: String, models: [ModelDescriptor]) {
+        self.id = id
+        self.models = models
+    }
+
+    func availableModels(context: ProviderInvocationContext) async throws -> [ModelDescriptor] {
+        await Task.yield()
+        lastContext = context
+        return models
+    }
+
+    func send(
+        messages _: [ChatMessage],
+        modelID _: String,
+        parameters _: ModelParameters,
+        context _: ProviderInvocationContext
+    ) async throws -> ChatMessage {
+        await Task.yield()
+        fatalError("Unused in catalog preview tests")
+    }
+
+    func sendStreaming(
+        messages _: [ChatMessage],
+        modelID _: String,
+        parameters _: ModelParameters,
+        requestID _: RequestID,
+        context _: ProviderInvocationContext
+    ) -> AsyncThrowingStream<StreamEvent, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish()
+        }
     }
 }
 

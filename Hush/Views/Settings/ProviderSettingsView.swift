@@ -4,7 +4,7 @@ import SwiftUI
 // swiftlint:disable type_body_length function_body_length file_length
 
 enum ProviderCatalogRefreshGate {
-    static func requiresSave(
+    static func usesDraftRefresh(
         persistedConfig: ProviderConfiguration?,
         draftType: ProviderType,
         draftEndpoint: String,
@@ -23,7 +23,7 @@ enum ProviderCatalogRefreshGate {
         return !pendingAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private static func normalizedEndpoint(_ raw: String, type: ProviderType) -> String {
+    static func normalizedEndpoint(_ raw: String, type: ProviderType) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             switch type {
@@ -37,6 +37,11 @@ enum ProviderCatalogRefreshGate {
         }
         return trimmed
     }
+}
+
+private struct ProviderCatalogDraftSignature: Equatable {
+    let type: ProviderType
+    let normalizedEndpoint: String
 }
 
 struct ProviderSettingsView: View {
@@ -56,7 +61,11 @@ struct ProviderSettingsView: View {
     @State private var saveFailed: Bool = false
     @State private var showDeleteConfirmation: Bool = false
     @State private var modelSearchText: String = ""
-    @State private var isDefaultProvider: Bool = false
+    @State private var draftCatalogModels: [ModelDescriptor] = []
+    @State private var draftCatalogError: String?
+    @State private var draftCatalogSignature: ProviderCatalogDraftSignature?
+    @State private var isDraftCatalogRefreshing: Bool = false
+    @State private var prefersManualDefaultModelEntry: Bool = false
 
     private var isCreatingNew: Bool {
         editingProviderID == "__new__"
@@ -154,6 +163,100 @@ struct ProviderSettingsView: View {
         return uniqueIDs
     }
 
+    private func currentCatalogDraftSignature() -> ProviderCatalogDraftSignature {
+        ProviderCatalogDraftSignature(
+            type: providerType,
+            normalizedEndpoint: ProviderCatalogRefreshGate.normalizedEndpoint(endpoint, type: providerType)
+        )
+    }
+
+    private func persistedConfig(for providerID: String) -> ProviderConfiguration? {
+        container.settings.providerConfigurations.first(where: { $0.id == providerID })
+    }
+
+    private func usesDraftRefresh(for providerID: String) -> Bool {
+        ProviderCatalogRefreshGate.usesDraftRefresh(
+            persistedConfig: persistedConfig(for: providerID),
+            draftType: providerType,
+            draftEndpoint: endpoint,
+            pendingAPIKey: apiKeyToSave
+        )
+    }
+
+    private func shouldDisplayDraftCatalog() -> Bool {
+        guard draftCatalogSignature == currentCatalogDraftSignature() else {
+            return false
+        }
+        return isDraftCatalogRefreshing || draftCatalogError != nil || !draftCatalogModels.isEmpty
+    }
+
+    private func visibleCatalogModels(for providerID: String) -> [ModelDescriptor] {
+        let models = shouldDisplayDraftCatalog()
+            ? draftCatalogModels
+            : container.cachedModels(forProviderID: providerID)
+        return models.sorted { $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending }
+    }
+
+    private func visibleCatalogRefreshError(for providerID: String) -> String? {
+        shouldDisplayDraftCatalog()
+            ? draftCatalogError
+            : container.catalogRefreshErrors[providerID]
+    }
+
+    private func isCatalogRefreshing(for providerID: String) -> Bool {
+        shouldDisplayDraftCatalog()
+            ? isDraftCatalogRefreshing
+            : container.catalogRefreshingProviderIDs.contains(providerID)
+    }
+
+    private func resetDraftCatalogState() {
+        draftCatalogModels = []
+        draftCatalogError = nil
+        draftCatalogSignature = nil
+        isDraftCatalogRefreshing = false
+    }
+
+    private func normalizedDefaultModel(for provider: ProviderConfiguration) -> String {
+        provider.defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func providerHasCredential(_ provider: ProviderConfiguration) -> Bool {
+        let credentialRef = container.normalizedCredentialRef(from: provider)
+        return container.hasProviderCredential(forRef: credentialRef)
+    }
+
+    private func canSetProviderAsDefault(_ provider: ProviderConfiguration) -> Bool {
+        provider.isEnabled && providerHasCredential(provider) && !normalizedDefaultModel(for: provider).isEmpty
+    }
+
+    private func providerStatusText(_ provider: ProviderConfiguration) -> String {
+        if !provider.isEnabled {
+            return "Disabled"
+        }
+        if !providerHasCredential(provider) {
+            return "API key required"
+        }
+        let defaultModel = normalizedDefaultModel(for: provider)
+        if defaultModel.isEmpty {
+            return "Choose a default model in the catalog"
+        }
+        return defaultModel
+    }
+
+    private func providerBadgeText(_ provider: ProviderConfiguration) -> String? {
+        guard container.settings.selectedProviderID != provider.id else { return nil }
+        if !provider.isEnabled {
+            return "Disabled"
+        }
+        if !providerHasCredential(provider) {
+            return "Key Needed"
+        }
+        if normalizedDefaultModel(for: provider).isEmpty {
+            return "Pick Model"
+        }
+        return nil
+    }
+
     private func openProviderSettings(providerID: String) {
         loadSnapshotForProvider(providerID)
         editingProviderID = providerID
@@ -182,6 +285,10 @@ struct ProviderSettingsView: View {
                     .buttonStyle(.borderedProminent)
                 }
 
+                Text("Set the app default here after a provider has an API key and a default model.")
+                    .font(HushTypography.footnote)
+                    .foregroundStyle(HushColors.secondaryText)
+
                 VStack(spacing: HushSpacing.sm) {
                     ForEach(providers) { provider in
                         providerListRow(provider)
@@ -199,10 +306,15 @@ struct ProviderSettingsView: View {
         ProviderListRowView(
             provider: provider,
             isDefault: container.settings.selectedProviderID == provider.id,
+            subtitle: providerStatusText(provider),
+            badgeText: providerBadgeText(provider),
+            canSetDefault: canSetProviderAsDefault(provider),
             icon: providerIcon(for: provider.type),
             accent: providerAccent(for: provider.type)
         ) {
             openProviderSettings(providerID: provider.id)
+        } onSetDefault: {
+            container.setDefaultProvider(id: provider.id)
         }
     }
 
@@ -279,27 +391,11 @@ struct ProviderSettingsView: View {
 
             Toggle("Enabled", isOn: $isEnabled)
 
-            Toggle("Set as Default Provider", isOn: $isDefaultProvider)
-                .disabled(!isEnabled)
-                .onChange(of: isEnabled) { _, newValue in
-                    if !newValue, isDefaultProvider {
-                        isDefaultProvider = false
-                    }
-                }
-
             VStack(alignment: .leading, spacing: HushSpacing.xs) {
                 Text("Endpoint")
                     .font(HushTypography.captionBold)
                     .foregroundStyle(HushColors.secondaryText)
                 TextField(defaultEndpointPlaceholder(for: config.type), text: $endpoint)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            VStack(alignment: .leading, spacing: HushSpacing.xs) {
-                Text("Default Model")
-                    .font(HushTypography.captionBold)
-                    .foregroundStyle(HushColors.secondaryText)
-                TextField("model-id", text: $defaultModelID)
                     .textFieldStyle(.roundedBorder)
             }
 
@@ -332,6 +428,19 @@ struct ProviderSettingsView: View {
                         .foregroundStyle(HushColors.secondaryText)
                 }
             }
+
+            HStack(alignment: .top, spacing: HushSpacing.sm) {
+                Image(systemName: "rectangle.stack.badge.person.crop")
+                    .foregroundStyle(HushColors.secondaryText)
+                Text(
+                    container.settings.selectedProviderID == config.id
+                        ? "This provider is currently the default. Change the default provider from the list on the left."
+                        : "Choose the default provider from the list after this provider has an API key and a default model."
+                )
+                .font(HushTypography.footnote)
+                .foregroundStyle(HushColors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(HushSpacing.lg)
         .cardStyle(
@@ -343,11 +452,11 @@ struct ProviderSettingsView: View {
     // MARK: - Catalog Refresh
 
     private func catalogRefreshSection(providerID: String) -> some View {
-        let hasPersistedProfile = container.settings.providerConfigurations.contains(where: { $0.id == providerID })
-        let allModels = container.cachedModels(forProviderID: providerID)
-            .sorted { $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending }
-        let isRefreshing = container.catalogRefreshingProviderIDs.contains(providerID)
-        let refreshError = container.catalogRefreshErrors[providerID]
+        let hasPersistedProfile = persistedConfig(for: providerID) != nil
+        let allModels = visibleCatalogModels(for: providerID)
+        let isRefreshing = isCatalogRefreshing(for: providerID)
+        let refreshError = visibleCatalogRefreshError(for: providerID)
+        let isDraftSource = shouldDisplayDraftCatalog()
 
         return VStack(alignment: .leading, spacing: HushSpacing.md) {
             HStack {
@@ -371,6 +480,33 @@ struct ProviderSettingsView: View {
                 .disabled(isRefreshing)
             }
 
+            HStack(spacing: HushSpacing.sm) {
+                Image(systemName: defaultModelID.isEmpty ? "target" : "checkmark.circle.fill")
+                    .foregroundStyle(defaultModelID.isEmpty ? HushColors.secondaryText : HushColors.successText)
+
+                Text(
+                    defaultModelID.isEmpty
+                        ? "Choose one default model here before making this provider the app default."
+                        : "Default model: \(defaultModelID)"
+                )
+                .font(HushTypography.body)
+                .foregroundStyle(defaultModelID.isEmpty ? HushColors.secondaryText : .white)
+                .lineLimit(1)
+
+                Spacer()
+
+                if !defaultModelID.isEmpty {
+                    Button("Clear") {
+                        defaultModelID = ""
+                    }
+                    .buttonStyle(.plain)
+                    .font(HushTypography.footnote)
+                }
+            }
+            .padding(.horizontal, HushSpacing.md)
+            .padding(.vertical, HushSpacing.sm)
+            .background(HushColors.rootBackground.opacity(0.65), in: RoundedRectangle(cornerRadius: 10))
+
             if let refreshError {
                 HStack(spacing: HushSpacing.sm) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -382,6 +518,41 @@ struct ProviderSettingsView: View {
                 .padding(.vertical, HushSpacing.xs)
             }
 
+            if prefersManualDefaultModelEntry {
+                VStack(alignment: .leading, spacing: HushSpacing.xs) {
+                    HStack {
+                        Text("Default Model ID")
+                            .font(HushTypography.captionBold)
+                            .foregroundStyle(HushColors.secondaryText)
+                        Spacer()
+                        Button("Use Catalog") {
+                            prefersManualDefaultModelEntry = false
+                        }
+                        .buttonStyle(.plain)
+                        .font(HushTypography.footnote)
+                    }
+
+                    TextField("model-id", text: $defaultModelID)
+                        .textFieldStyle(.roundedBorder)
+
+                    Text("Use manual entry only when the provider does not expose the model in the catalog.")
+                        .font(HushTypography.footnote)
+                        .foregroundStyle(HushColors.secondaryText)
+                }
+            } else {
+                HStack {
+                    Text("Select the default model directly in the catalog list.")
+                        .font(HushTypography.footnote)
+                        .foregroundStyle(HushColors.secondaryText)
+                    Spacer()
+                    Button("Model Missing? Enter ID") {
+                        prefersManualDefaultModelEntry = true
+                    }
+                    .buttonStyle(.plain)
+                    .font(HushTypography.footnote)
+                }
+            }
+
             if allModels.isEmpty {
                 HStack(spacing: HushSpacing.sm) {
                     Image(systemName: "info.circle")
@@ -389,9 +560,11 @@ struct ProviderSettingsView: View {
                     Text(
                         isRefreshing
                             ? "Fetching models…"
-                            : (hasPersistedProfile
-                                ? "No models cached. Tap Refresh to fetch."
-                                : "Save this provider to enable model refresh.")
+                            : (isDraftSource
+                                ? "No models returned for the current draft. Adjust API key or endpoint and refresh again."
+                                : (hasPersistedProfile
+                                    ? "No models cached. Tap Refresh to fetch."
+                                    : "Refresh to fetch models for this draft before saving."))
                     )
                     .font(HushTypography.caption)
                     .foregroundStyle(HushColors.secondaryText)
@@ -414,39 +587,48 @@ struct ProviderSettingsView: View {
 
                                 HStack(spacing: HushSpacing.md) {
                                     Button {
-                                        togglePinnedModel(model.id)
-                                    } label: {
-                                        Image(systemName: isPinned ? "checkmark.circle.fill" : "circle")
-                                            .foregroundStyle(isPinned ? HushColors.successText : HushColors.secondaryText)
-                                            .frame(width: 20)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help(isPinned ? "Unpin" : "Pin")
-
-                                    Text(model.id)
-                                        .font(HushTypography.body)
-                                        .lineLimit(1)
-
-                                    Spacer()
-
-                                    Text(model.modelType.rawValue)
-                                        .font(HushTypography.caption)
-                                        .foregroundStyle(HushColors.secondaryText)
-                                        .padding(.horizontal, HushSpacing.sm)
-                                        .padding(.vertical, 2)
-                                        .background(Color.white.opacity(0.08), in: Capsule())
-
-                                    Button {
                                         setDefaultModel(model.id)
                                     } label: {
-                                        Image(systemName: isDefault ? "star.fill" : "star")
-                                            .foregroundStyle(isDefault ? Color.yellow.opacity(0.9) : HushColors.secondaryText)
+                                        HStack(spacing: HushSpacing.md) {
+                                            Image(systemName: isDefault ? "largecircle.fill.circle" : "circle")
+                                                .foregroundStyle(isDefault ? HushColors.successText : HushColors.secondaryText)
+                                                .frame(width: 20)
+
+                                            Text(model.id)
+                                                .font(HushTypography.body)
+                                                .foregroundStyle(.white)
+                                                .lineLimit(1)
+
+                                            Spacer()
+
+                                            if model.modelType != .unknown {
+                                                Text(model.modelType.rawValue)
+                                                    .font(HushTypography.caption)
+                                                    .foregroundStyle(HushColors.secondaryText)
+                                                    .padding(.horizontal, HushSpacing.sm)
+                                                    .padding(.vertical, 2)
+                                                    .background(Color.white.opacity(0.08), in: Capsule())
+                                            }
+                                        }
                                     }
                                     .buttonStyle(.plain)
                                     .help(isDefault ? "Default model" : "Set as default model")
+
+                                    Button {
+                                        togglePinnedModel(model.id)
+                                    } label: {
+                                        Image(systemName: isPinned ? "pin.fill" : "pin")
+                                            .foregroundStyle(isPinned ? HushColors.successText : HushColors.secondaryText)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help(isPinned ? "Unpin" : "Pin")
                                 }
                                 .padding(.horizontal, HushSpacing.sm)
                                 .padding(.vertical, HushSpacing.xs)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(isDefault ? Color.white.opacity(0.06) : Color.clear)
+                                )
 
                                 if model.id != filtered.last?.id {
                                     Divider()
@@ -457,7 +639,7 @@ struct ProviderSettingsView: View {
                     }
                     .frame(maxHeight: 280)
 
-                    Text("\(allModels.count) models · \(pinnedModelIDs.count) pinned")
+                    Text("\(allModels.count) models · \(pinnedModelIDs.count) pinned · tap a row to set the default")
                         .font(HushTypography.footnote)
                         .foregroundStyle(HushColors.secondaryText)
                 }
@@ -483,6 +665,7 @@ struct ProviderSettingsView: View {
 
     private func setDefaultModel(_ modelID: String) {
         defaultModelID = modelID
+        prefersManualDefaultModelEntry = false
         if !pinnedModelIDs.contains(modelID) {
             pinnedModelIDs.append(modelID)
         }
@@ -523,29 +706,39 @@ struct ProviderSettingsView: View {
     // MARK: - Load / Save
 
     private func triggerRefreshFromForm(providerID: String) {
-        if isCreatingNew {
-            saveMessage = "Save this provider before refreshing the model catalog."
-            saveFailed = true
+        if usesDraftRefresh(for: providerID) {
+            let draftInput = ProviderCatalogDraftInput(
+                providerID: providerID,
+                type: providerType,
+                endpoint: endpoint,
+                apiKey: apiKeyToSave,
+                credentialRef: container.normalizedCredentialRef(from: persistedConfig(for: providerID))
+            )
+            let signature = currentCatalogDraftSignature()
+
+            draftCatalogSignature = signature
+            draftCatalogModels = []
+            isDraftCatalogRefreshing = true
+            draftCatalogError = nil
+            saveMessage = ""
+            saveFailed = false
+
+            Task {
+                let result = await container.previewModels(for: draftInput)
+                await MainActor.run {
+                    guard draftCatalogSignature == signature else { return }
+                    draftCatalogModels = result.models
+                    draftCatalogError = result.error
+                    isDraftCatalogRefreshing = false
+                    if !result.models.contains(where: { $0.id == defaultModelID }), !prefersManualDefaultModelEntry {
+                        defaultModelID = ""
+                    }
+                }
+            }
             return
         }
 
-        guard let persistedConfig = container.settings.providerConfigurations.first(where: { $0.id == providerID }) else {
-            saveMessage = "Save this provider before refreshing the model catalog."
-            saveFailed = true
-            return
-        }
-
-        if ProviderCatalogRefreshGate.requiresSave(
-            persistedConfig: persistedConfig,
-            draftType: providerType,
-            draftEndpoint: endpoint,
-            pendingAPIKey: apiKeyToSave
-        ) {
-            saveMessage = "Save endpoint or API key changes before refreshing the model catalog."
-            saveFailed = true
-            return
-        }
-
+        resetDraftCatalogState()
         container.refreshCatalog(forProviderID: providerID)
     }
 
@@ -556,9 +749,9 @@ struct ProviderSettingsView: View {
         defaultModelID = ""
         pinnedModelIDs = []
         isEnabled = true
-        isDefaultProvider = false
         hasStoredCredential = false
         modelSearchText = ""
+        prefersManualDefaultModelEntry = false
         resetEditState()
     }
 
@@ -592,8 +785,8 @@ struct ProviderSettingsView: View {
             isEnabled = false
             hasStoredCredential = false
         }
-        isDefaultProvider = container.settings.selectedProviderID == providerID
         modelSearchText = ""
+        prefersManualDefaultModelEntry = false
         resetEditState()
     }
 
@@ -603,14 +796,7 @@ struct ProviderSettingsView: View {
         showDeleteConfirmation = false
         saveMessage = ""
         saveFailed = false
-    }
-
-    private func reconcileDefaultProvider(for providerID: String) {
-        if isDefaultProvider, isEnabled {
-            container.setDefaultProvider(id: providerID)
-        } else if container.settings.selectedProviderID == providerID {
-            container.selectDeterministicFallback()
-        }
+        resetDraftCatalogState()
     }
 
     private func applyPostSave(providerID: String, keepOpen: Bool = false) {
@@ -618,7 +804,6 @@ struct ProviderSettingsView: View {
         isAPIKeyRevealed = false
         saveMessage = "Saved."
         saveFailed = false
-        reconcileDefaultProvider(for: providerID)
         if keepOpen {
             editingProviderID = providerID
         } else {
@@ -630,6 +815,101 @@ struct ProviderSettingsView: View {
         apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private func validateDefaultModel(_ modelID: String) -> Bool {
+        guard !isEnabled || !modelID.isEmpty else {
+            saveMessage = "Choose a default model from the catalog or enter one manually."
+            saveFailed = true
+            return false
+        }
+        return true
+    }
+
+    private func saveOpenAIProviderSettings(
+        providerID: String,
+        normalizedDefaultModelID: String,
+        normalizedPinnedModelIDs: [String]
+    ) {
+        do {
+            let snapshot = try container.saveOpenAISettings(
+                OpenAISettingsInput(
+                    endpoint: endpoint,
+                    defaultModelID: normalizedDefaultModelID,
+                    isEnabled: isEnabled,
+                    apiKey: apiKeyToSave
+                )
+            )
+
+            if var openAIConfig = container.settings.providerConfigurations.first(where: { $0.id == providerID }) {
+                openAIConfig.pinnedModelIDs = normalizedPinnedModelIDs
+                container.saveProviderProfile(openAIConfig)
+            }
+
+            hasStoredCredential = snapshot.hasCredential
+            applyPostSave(providerID: providerID)
+        } catch let error as OpenAISettingsSaveError {
+            saveMessage = error.errorDescription ?? "Failed to save provider settings."
+            saveFailed = true
+        } catch {
+            saveMessage = error.localizedDescription
+            saveFailed = true
+        }
+    }
+
+    private func saveCustomProviderSettings(
+        providerID: String,
+        normalizedDefaultModelID: String,
+        normalizedPinnedModelIDs: [String]
+    ) {
+        var config: ProviderConfiguration
+        if isCreatingNew {
+            let newID = "provider-\(UUID().uuidString.prefix(8))"
+            config = ProviderConfiguration(
+                id: newID,
+                name: providerName,
+                type: providerType,
+                endpoint: endpoint,
+                apiKeyEnvironmentVariable: "HUSH_API_KEY",
+                defaultModelID: normalizedDefaultModelID,
+                isEnabled: isEnabled,
+                pinnedModelIDs: normalizedPinnedModelIDs
+            )
+        } else {
+            guard var existing = container.settings.providerConfigurations.first(where: { $0.id == providerID }) else {
+                saveMessage = "Provider not found."
+                saveFailed = true
+                return
+            }
+            existing.name = providerName
+            existing.endpoint = endpoint
+            existing.defaultModelID = normalizedDefaultModelID
+            existing.isEnabled = isEnabled
+            existing.pinnedModelIDs = normalizedPinnedModelIDs
+            config = existing
+        }
+
+        let credentialRef = container.normalizedCredentialRef(from: config)
+        let keyToSave = apiKeyToSave
+
+        if !keyToSave.isEmpty {
+            do {
+                try container.saveProviderCredential(keyToSave, forRef: credentialRef)
+            } catch {
+                saveMessage = "Failed to save API key to Keychain."
+                saveFailed = true
+                return
+            }
+        }
+
+        config.credentialRef = credentialRef
+        container.saveProviderProfile(config)
+        hasStoredCredential = container.hasProviderCredential(forRef: credentialRef)
+        applyPostSave(providerID: config.id, keepOpen: isCreatingNew)
+
+        if config.isEnabled, hasStoredCredential {
+            container.refreshCatalog(forProviderID: config.id)
+        }
+    }
+
     private func saveSettings() {
         guard let providerID = editingProviderID else { return }
 
@@ -638,83 +918,23 @@ struct ProviderSettingsView: View {
             pinnedModelIDs + (normalizedDefaultModelID.isEmpty ? [] : [normalizedDefaultModelID])
         )
 
+        guard validateDefaultModel(normalizedDefaultModelID) else { return }
+
         defaultModelID = normalizedDefaultModelID
         pinnedModelIDs = normalizedPinnedModelIDs
 
         if providerID == OpenAISettingsInput.providerID {
-            do {
-                let snapshot = try container.saveOpenAISettings(
-                    OpenAISettingsInput(
-                        endpoint: endpoint,
-                        defaultModelID: normalizedDefaultModelID,
-                        isEnabled: isEnabled,
-                        apiKey: apiKeyToSave
-                    )
-                )
-
-                if var openAIConfig = container.settings.providerConfigurations.first(where: { $0.id == providerID }) {
-                    openAIConfig.pinnedModelIDs = normalizedPinnedModelIDs
-                    container.saveProviderProfile(openAIConfig)
-                }
-
-                hasStoredCredential = snapshot.hasCredential
-                applyPostSave(providerID: providerID)
-            } catch let error as OpenAISettingsSaveError {
-                saveMessage = error.errorDescription ?? "Failed to save provider settings."
-                saveFailed = true
-            } catch {
-                saveMessage = error.localizedDescription
-                saveFailed = true
-            }
+            saveOpenAIProviderSettings(
+                providerID: providerID,
+                normalizedDefaultModelID: normalizedDefaultModelID,
+                normalizedPinnedModelIDs: normalizedPinnedModelIDs
+            )
         } else {
-            var config: ProviderConfiguration
-            if isCreatingNew {
-                let newID = "provider-\(UUID().uuidString.prefix(8))"
-                config = ProviderConfiguration(
-                    id: newID,
-                    name: providerName,
-                    type: providerType,
-                    endpoint: endpoint,
-                    apiKeyEnvironmentVariable: "HUSH_API_KEY",
-                    defaultModelID: normalizedDefaultModelID,
-                    isEnabled: isEnabled,
-                    pinnedModelIDs: normalizedPinnedModelIDs
-                )
-            } else {
-                guard var existing = container.settings.providerConfigurations.first(where: { $0.id == providerID }) else {
-                    saveMessage = "Provider not found."
-                    saveFailed = true
-                    return
-                }
-                existing.name = providerName
-                existing.endpoint = endpoint
-                existing.defaultModelID = normalizedDefaultModelID
-                existing.isEnabled = isEnabled
-                existing.pinnedModelIDs = normalizedPinnedModelIDs
-                config = existing
-            }
-
-            let credentialRef = container.normalizedCredentialRef(from: config)
-            let keyToSave = apiKeyToSave
-
-            if !keyToSave.isEmpty {
-                do {
-                    try container.saveProviderCredential(keyToSave, forRef: credentialRef)
-                } catch {
-                    saveMessage = "Failed to save API key to Keychain."
-                    saveFailed = true
-                    return
-                }
-            }
-
-            config.credentialRef = credentialRef
-            container.saveProviderProfile(config)
-            hasStoredCredential = container.hasProviderCredential(forRef: credentialRef)
-            applyPostSave(providerID: config.id, keepOpen: isCreatingNew)
-
-            if config.isEnabled, hasStoredCredential {
-                container.refreshCatalog(forProviderID: config.id)
-            }
+            saveCustomProviderSettings(
+                providerID: providerID,
+                normalizedDefaultModelID: normalizedDefaultModelID,
+                normalizedPinnedModelIDs: normalizedPinnedModelIDs
+            )
         }
     }
 }
@@ -726,81 +946,90 @@ struct ProviderSettingsView: View {
 private struct ProviderListRowView: View {
     let provider: ProviderConfiguration
     let isDefault: Bool
+    let subtitle: String
+    let badgeText: String?
+    let canSetDefault: Bool
     let icon: String
     let accent: Color
     let onTap: () -> Void
+    let onSetDefault: () -> Void
 
     @State private var isHovered: Bool = false
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: HushSpacing.md) {
-                ZStack {
-                    Circle()
-                        .fill(accent.opacity(isHovered ? 0.20 : 0.12))
-                        .frame(width: 36, height: 36)
+        HStack(spacing: HushSpacing.md) {
+            Button(action: onTap) {
+                HStack(spacing: HushSpacing.md) {
+                    ZStack {
+                        Circle()
+                            .fill(accent.opacity(isHovered ? 0.20 : 0.12))
+                            .frame(width: 36, height: 36)
 
-                    Image(systemName: icon)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(accent)
+                        Image(systemName: icon)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(accent)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(provider.name)
+                            .font(HushTypography.body)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+
+                        Text(subtitle)
+                            .font(HushTypography.caption)
+                            .foregroundStyle(HushColors.secondaryText)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(
+                            HushColors.secondaryText.opacity(isHovered ? 1.0 : 0.6)
+                        )
                 }
-
-                Text(provider.name)
-                    .font(HushTypography.body)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-
-                Spacer()
-
-                if isDefault {
-                    Text("Default")
-                        .font(HushTypography.caption)
-                        .foregroundStyle(.blue)
-                        .padding(.horizontal, HushSpacing.sm)
-                        .padding(.vertical, 3)
-                        .background(Color.blue.opacity(0.15), in: Capsule())
-                }
-
-                if provider.isEnabled {
-                    Text("Enabled")
-                        .font(HushTypography.caption)
-                        .foregroundStyle(.green)
-                        .padding(.horizontal, HushSpacing.sm)
-                        .padding(.vertical, 3)
-                        .background(Color.green.opacity(0.15), in: Capsule())
-                } else {
-                    Text("Disabled")
-                        .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
-                        .padding(.horizontal, HushSpacing.sm)
-                        .padding(.vertical, 3)
-                        .background(Color.white.opacity(0.06), in: Capsule())
-                }
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(
-                        HushColors.secondaryText.opacity(isHovered ? 1.0 : 0.6)
-                    )
             }
-            .padding(.horizontal, HushSpacing.lg)
-            .padding(.vertical, HushSpacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
-                    .fill(isHovered ? Color.white.opacity(0.06) : HushColors.cardBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
-                            .stroke(
-                                isHovered ? Color.white.opacity(0.16) : HushColors.subtleStroke,
-                                lineWidth: 1
-                            )
-                    )
-            )
-            .animation(.easeInOut(duration: 0.15), value: isHovered)
+            .buttonStyle(.plain)
+
+            if isDefault {
+                Text("Default")
+                    .font(HushTypography.caption)
+                    .foregroundStyle(.blue)
+                    .padding(.horizontal, HushSpacing.sm)
+                    .padding(.vertical, 3)
+                    .background(Color.blue.opacity(0.15), in: Capsule())
+            } else if canSetDefault {
+                Button("Make Default") {
+                    onSetDefault()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            } else if let badgeText {
+                Text(badgeText)
+                    .font(HushTypography.caption)
+                    .foregroundStyle(HushColors.secondaryText)
+                    .padding(.horizontal, HushSpacing.sm)
+                    .padding(.vertical, 3)
+                    .background(Color.white.opacity(0.06), in: Capsule())
+            }
         }
-        .buttonStyle(.plain)
-        .contentShape(RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous))
+        .padding(.horizontal, HushSpacing.lg)
+        .padding(.vertical, HushSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
+                .fill(isHovered ? Color.white.opacity(0.06) : HushColors.cardBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
+                        .stroke(
+                            isHovered ? Color.white.opacity(0.16) : HushColors.subtleStroke,
+                            lineWidth: 1
+                        )
+                )
+        )
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
         }
@@ -845,9 +1074,13 @@ private struct ProviderListRowView: View {
                     isEnabled: true
                 ),
                 isDefault: true,
+                subtitle: "gpt-4o",
+                badgeText: nil,
+                canSetDefault: true,
                 icon: "brain",
                 accent: .green,
-                onTap: {}
+                onTap: {},
+                onSetDefault: {}
             )
             ProviderListRowView(
                 provider: ProviderConfiguration(
@@ -860,9 +1093,13 @@ private struct ProviderListRowView: View {
                     isEnabled: true
                 ),
                 isDefault: false,
+                subtitle: "Choose a default model in the catalog",
+                badgeText: "Pick Model",
+                canSetDefault: false,
                 icon: "brain",
                 accent: .green,
-                onTap: {}
+                onTap: {},
+                onSetDefault: {}
             )
         }
         .padding()

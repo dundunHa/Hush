@@ -22,6 +22,14 @@ struct OpenAISettingsInput: Equatable {
     var apiKey: String
 }
 
+struct ProviderCatalogDraftInput: Equatable {
+    var providerID: String
+    var type: ProviderType
+    var endpoint: String
+    var apiKey: String
+    var credentialRef: String?
+}
+
 enum OpenAISettingsSaveError: Error, Equatable {
     case defaultModelRequired
     case credentialRequired
@@ -658,7 +666,7 @@ final class AppContainer: ObservableObject {
 
     func saveOpenAISettings(_ input: OpenAISettingsInput) throws -> OpenAISettingsSnapshot {
         let normalizedModelID = input.defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedModelID.isEmpty else {
+        guard !input.isEnabled || !normalizedModelID.isEmpty else {
             throw OpenAISettingsSaveError.defaultModelRequired
         }
 
@@ -701,8 +709,7 @@ final class AppContainer: ObservableObject {
         // Persist to SQLite
         try? providerConfigRepository?.upsert(nextConfiguration)
 
-        if input.isEnabled, hasCredential {
-            settings.selectedProviderID = OpenAISettingsInput.providerID
+        if settings.selectedProviderID == OpenAISettingsInput.providerID, input.isEnabled {
             settings.selectedModelID = normalizedModelID
         } else if !input.isEnabled, settings.selectedProviderID == OpenAISettingsInput.providerID {
             if let fallbackProvider = fallbackProviderConfiguration() {
@@ -746,8 +753,15 @@ final class AppContainer: ObservableObject {
         // Persist to SQLite
         try? providerConfigRepository?.upsert(profile)
 
-        if wasSelectedProvider, !profile.isEnabled {
-            selectDeterministicFallbackProvider()
+        if wasSelectedProvider {
+            if !profile.isEnabled {
+                selectDeterministicFallbackProvider()
+            } else {
+                let normalizedModel = profile.defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !normalizedModel.isEmpty {
+                    settings.selectedModelID = normalizedModel
+                }
+            }
         }
     }
 
@@ -846,6 +860,47 @@ final class AppContainer: ObservableObject {
         return (sortedModels, fromCache, nil)
     }
 
+    /// Resolves model catalog data from the current draft provider settings without persisting it.
+    func previewModels(for draft: ProviderCatalogDraftInput) async -> (models: [ModelDescriptor], error: String?) {
+        let provider = previewProvider(for: draft)
+        let trimmedAPIKey = draft.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let bearerToken: String?
+        if !trimmedAPIKey.isEmpty {
+            bearerToken = trimmedAPIKey
+        } else if let credentialRef = draft.credentialRef?.trimmingCharacters(in: .whitespacesAndNewlines), !credentialRef.isEmpty {
+            bearerToken = try? CredentialResolver(secretStore: credentialStore)
+                .resolve(providerID: draft.providerID, credentialRef: credentialRef)
+        } else {
+            switch draft.type {
+            case .openAI:
+                return ([], "Enter an API key to fetch models.")
+            #if DEBUG
+                case .mock:
+                    bearerToken = nil
+            #endif
+            }
+        }
+
+        let context = ProviderInvocationContext(
+            endpoint: normalizedEndpoint(draft.endpoint, for: draft.type),
+            bearerToken: bearerToken
+        )
+
+        do {
+            let models = try await provider.availableModels(context: context)
+            let sortedModels = models.sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+            if sortedModels.isEmpty {
+                return ([], "Model catalog unavailable")
+            }
+            return (sortedModels, nil)
+        } catch {
+            return ([], error.localizedDescription)
+        }
+    }
+
     // MARK: - Catalog Refresh Triggers
 
     /// Triggers a catalog refresh for a provider. Non-blocking; runs asynchronously.
@@ -889,6 +944,13 @@ final class AppContainer: ObservableObject {
         ensureProviderRegistered(for: config)
     }
 
+    private func previewProvider(for draft: ProviderCatalogDraftInput) -> any LLMProvider {
+        if let provider = registry.provider(for: draft.providerID) {
+            return provider
+        }
+        return makeProviderRuntime(id: draft.providerID, type: draft.type)
+    }
+
     /// Ensures a provider runtime is registered for the given configuration.
     /// Returns the registered provider instance.
     @discardableResult
@@ -896,17 +958,20 @@ final class AppContainer: ObservableObject {
         if let existing = registry.provider(for: config.id) {
             return existing
         }
-        let provider: any LLMProvider
-        switch config.type {
-        case .openAI:
-            provider = OpenAIProvider(id: config.id)
-        #if DEBUG
-            case .mock:
-                provider = MockProvider(id: config.id)
-        #endif
-        }
+        let provider = makeProviderRuntime(id: config.id, type: config.type)
         registry.register(provider)
         return provider
+    }
+
+    private func makeProviderRuntime(id: String, type: ProviderType) -> any LLMProvider {
+        switch type {
+        case .openAI:
+            OpenAIProvider(id: id)
+        #if DEBUG
+            case .mock:
+                MockProvider(id: id)
+        #endif
+        }
     }
 
     /// Triggers catalog refresh if provider has no usable cache.
@@ -2274,6 +2339,21 @@ private extension AppContainer {
     func normalizeEndpoint(_ endpoint: String) -> String {
         let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? OpenAIProvider.defaultEndpoint : trimmed
+    }
+
+    func normalizedEndpoint(_ endpoint: String, for type: ProviderType) -> String {
+        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            switch type {
+            case .openAI:
+                return OpenAIProvider.defaultEndpoint
+            #if DEBUG
+                case .mock:
+                    return "local://mock-provider"
+            #endif
+            }
+        }
+        return trimmed
     }
 }
 

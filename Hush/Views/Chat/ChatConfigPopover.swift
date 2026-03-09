@@ -1,12 +1,37 @@
+import Foundation
 import SwiftUI
 
 struct ChatConfigPopover: View {
     @Binding var parameters: ModelParameters
 
-    private var contextLimitBinding: Binding<Double> {
+    private enum Limits {
+        static let contextMessages = 1 ... 30
+    }
+
+    private static let contextLimitFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .none
+        formatter.minimum = Limits.contextMessages.lowerBound as NSNumber
+        formatter.maximum = Limits.contextMessages.upperBound as NSNumber
+        formatter.allowsFloats = false
+        return formatter
+    }()
+
+    private var contextLimitValueBinding: Binding<Int> {
         Binding(
-            get: { Double(parameters.contextMessageLimit ?? ModelParameters.standard.contextMessageLimit ?? 10) },
-            set: { parameters.contextMessageLimit = Int($0) }
+            get: {
+                clampContextMessageLimit(
+                    parameters.contextMessageLimit ?? ModelParameters.standard.contextMessageLimit ?? 10
+                )
+            },
+            set: { parameters.contextMessageLimit = clampContextMessageLimit($0) }
+        )
+    }
+
+    private var contextLimitSliderBinding: Binding<Double> {
+        Binding(
+            get: { Double(contextLimitValueBinding.wrappedValue) },
+            set: { contextLimitValueBinding.wrappedValue = Int($0.rounded()) }
         )
     }
 
@@ -29,10 +54,21 @@ struct ChatConfigPopover: View {
             VStack(alignment: .leading, spacing: HushSpacing.md) {
                 configRow(
                     title: "Context Messages",
-                    value: "\(Int(contextLimitBinding.wrappedValue))"
+                    value: "\(contextLimitValueBinding.wrappedValue)"
                 ) {
-                    Slider(value: contextLimitBinding, in: 1 ... 100, step: 1)
-                        .frame(width: 120)
+                    HStack(spacing: HushSpacing.sm) {
+                        Slider(
+                            value: contextLimitSliderBinding,
+                            in: Double(Limits.contextMessages.lowerBound) ... Double(Limits.contextMessages.upperBound),
+                            step: 1
+                        )
+                        .frame(width: 110)
+
+                        TextField("", value: contextLimitValueBinding, formatter: Self.contextLimitFormatter)
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.center)
+                            .frame(width: 48)
+                    }
                 }
 
                 configRow(
@@ -69,11 +105,15 @@ struct ChatConfigPopover: View {
             }
         }
         .padding(HushSpacing.lg)
-        .frame(width: 320)
+        .frame(width: 360)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color(red: 0.12, green: 0.13, blue: 0.16))
         )
+    }
+
+    private func clampContextMessageLimit(_ value: Int) -> Int {
+        min(max(value, Limits.contextMessages.lowerBound), Limits.contextMessages.upperBound)
     }
 
     private func configRow<Content: View>(

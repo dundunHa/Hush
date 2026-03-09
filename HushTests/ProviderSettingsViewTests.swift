@@ -4,20 +4,20 @@ import Testing
 
 @Suite("Provider Settings View Tests")
 struct ProviderSettingsViewTests {
-    @Test("Manual refresh requires save when provider is not persisted")
-    func manualRefreshRequiresSaveForUnpersistedProvider() {
-        let requiresSave = ProviderCatalogRefreshGate.requiresSave(
+    @Test("Manual refresh uses draft mode when provider is not persisted")
+    func manualRefreshUsesDraftModeForUnpersistedProvider() {
+        let usesDraftRefresh = ProviderCatalogRefreshGate.usesDraftRefresh(
             persistedConfig: nil,
             draftType: .openAI,
             draftEndpoint: OpenAIProvider.defaultEndpoint,
             pendingAPIKey: ""
         )
 
-        #expect(requiresSave)
+        #expect(usesDraftRefresh)
     }
 
-    @Test("Manual refresh requires save when endpoint draft differs")
-    func manualRefreshRequiresSaveForDraftEndpoint() {
+    @Test("Manual refresh uses draft mode when endpoint draft differs")
+    func manualRefreshUsesDraftModeForDraftEndpoint() {
         let persistedConfig = ProviderConfiguration(
             id: "provider-1",
             name: "OpenAI Compatible",
@@ -29,18 +29,18 @@ struct ProviderSettingsViewTests {
             credentialRef: "legacy-ref"
         )
 
-        let requiresSave = ProviderCatalogRefreshGate.requiresSave(
+        let usesDraftRefresh = ProviderCatalogRefreshGate.usesDraftRefresh(
             persistedConfig: persistedConfig,
             draftType: .openAI,
             draftEndpoint: "https://api.other.example.com/v1",
             pendingAPIKey: ""
         )
 
-        #expect(requiresSave)
+        #expect(usesDraftRefresh)
     }
 
-    @Test("Manual refresh requires save when API key change is pending")
-    func manualRefreshRequiresSaveForPendingAPIKey() {
+    @Test("Manual refresh uses draft mode when API key change is pending")
+    func manualRefreshUsesDraftModeForPendingAPIKey() {
         let persistedConfig = ProviderConfiguration(
             id: "provider-1",
             name: "OpenAI Compatible",
@@ -52,18 +52,18 @@ struct ProviderSettingsViewTests {
             credentialRef: "legacy-ref"
         )
 
-        let requiresSave = ProviderCatalogRefreshGate.requiresSave(
+        let usesDraftRefresh = ProviderCatalogRefreshGate.usesDraftRefresh(
             persistedConfig: persistedConfig,
             draftType: .openAI,
             draftEndpoint: "https://api.example.com/v1",
             pendingAPIKey: "sk-unsaved"
         )
 
-        #expect(requiresSave)
+        #expect(usesDraftRefresh)
     }
 
     @Test("Manual refresh can reuse persisted provider state when draft is clean")
-    func manualRefreshAllowsSavedProviderState() {
+    func manualRefreshCanUsePersistedProviderState() {
         let persistedConfig = ProviderConfiguration(
             id: "provider-1",
             name: "OpenAI Compatible",
@@ -75,13 +75,13 @@ struct ProviderSettingsViewTests {
             credentialRef: "legacy-ref"
         )
 
-        let requiresSave = ProviderCatalogRefreshGate.requiresSave(
+        let usesDraftRefresh = ProviderCatalogRefreshGate.usesDraftRefresh(
             persistedConfig: persistedConfig,
             draftType: .openAI,
             draftEndpoint: " https://api.example.com/v1 ",
             pendingAPIKey: "   "
         )
 
-        #expect(!requiresSave)
+        #expect(!usesDraftRefresh)
     }
 }
