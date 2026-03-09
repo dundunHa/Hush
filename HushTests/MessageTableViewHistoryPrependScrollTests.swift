@@ -60,6 +60,7 @@ struct MessageTableViewHistoryPrependScrollTests {
             activeConversationID: "conv-prepend-scroll",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -92,6 +93,7 @@ struct MessageTableViewHistoryPrependScrollTests {
             activeConversationID: "conv-prepend-scroll",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )

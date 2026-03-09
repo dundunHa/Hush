@@ -72,6 +72,7 @@ struct MessageTableViewHeightInvalidationScrollTests {
             activeConversationID: "conv-height-invalidation",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -163,6 +164,7 @@ struct MessageTableViewHeightInvalidationScrollTests {
             activeConversationID: "conv-height-invalidation-live-scroll",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -180,9 +182,15 @@ struct MessageTableViewHeightInvalidationScrollTests {
         let before = table.scrollOriginYForTesting
         #expect(before >= 150)
 
+        let rawWidth = table.bounds.width > 1
+            ? table.bounds.width
+            : (HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2)
+        let availableWidth = min(rawWidth, HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2)
+        let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
+
         _ = renderer.render(MessageRenderInput(
             content: content,
-            availableWidth: 800,
+            availableWidth: contentWidth,
             style: RenderStyle.fromTheme(),
             isStreaming: false
         ))
@@ -259,6 +267,7 @@ struct MessageTableViewHeightInvalidationScrollTests {
             activeConversationID: "conv-height-invalidation-defer",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -274,9 +283,15 @@ struct MessageTableViewHeightInvalidationScrollTests {
         #expect(before >= 150)
 
         // Warm render cache so the next reload is a cache-hit rich apply.
+        let rawWidth = table.bounds.width > 1
+            ? table.bounds.width
+            : (HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2)
+        let availableWidth = min(rawWidth, HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2)
+        let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
+
         _ = renderer.render(MessageRenderInput(
             content: content,
-            availableWidth: 800,
+            availableWidth: contentWidth,
             style: RenderStyle.fromTheme(),
             isStreaming: false
         ))

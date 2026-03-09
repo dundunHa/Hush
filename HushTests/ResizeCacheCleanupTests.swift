@@ -87,12 +87,12 @@ struct ResizeCacheCleanupTests {
             messageRenderRuntime: runtime
         )
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         // Switch to B so A becomes hot.
         container.activateConversation(conversationId: conversationB)
         try await waitForConversationReady(container, conversationId: conversationB)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         // Seed an unrelated protected key for C to verify clearAllProtections.
         let style = RenderStyle.fromTheme()
@@ -114,7 +114,8 @@ struct ResizeCacheCleanupTests {
         #expect(renderCache.protectedKeyCountForTesting(conversationID: conversationC) == 1)
 
         let newViewWidth: CGFloat = 820
-        let newContentWidth = CGFloat(Int(max(1, newViewWidth - HushSpacing.xl * 2)))
+        let newAvailableWidth = min(newViewWidth, HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2)
+        let newContentWidth = CGFloat(Int(max(1, newAvailableWidth - HushSpacing.xl * 2)))
 
         let expectedA1New = MessageRenderInput(
             content: assistantA1,
@@ -219,15 +220,16 @@ struct ResizeCacheCleanupTests {
             messageRenderRuntime: runtime
         )
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         // Switch to B so A becomes hot.
         container.activateConversation(conversationId: conversationB)
         try await waitForConversationReady(container, conversationId: conversationB)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         let newViewWidth: CGFloat = 820
-        let newContentWidth = CGFloat(Int(max(1, newViewWidth - HushSpacing.xl * 2)))
+        let newAvailableWidth = min(newViewWidth, HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2)
+        let newContentWidth = CGFloat(Int(max(1, newAvailableWidth - HushSpacing.xl * 2)))
 
         let style = RenderStyle.fromTheme()
         let expectedA1New = MessageRenderInput(
@@ -249,7 +251,7 @@ struct ResizeCacheCleanupTests {
         // Immediate switch back while resize debounce is pending.
         container.activateConversation(conversationId: conversationA)
         try await waitForConversationReady(container, conversationId: conversationA)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         // After debounce, cleanup should prewarm active+hot at new width.
         let deadline = ContinuousClock.now + .seconds(2)

@@ -44,6 +44,7 @@ struct MessageTableViewFastTrackTests {
             activeConversationID: "conv-fast",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -71,6 +72,7 @@ struct MessageTableViewFastTrackTests {
             activeConversationID: "conv-fast",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -89,6 +91,7 @@ struct MessageTableViewFastTrackTests {
             activeConversationID: "conv-fast",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -111,6 +114,7 @@ struct MessageTableViewFastTrackTests {
             activeConversationID: "conv-fast",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -141,6 +145,7 @@ struct MessageTableViewFastTrackTests {
             activeConversationID: "conv-fast",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -171,6 +176,7 @@ struct MessageTableViewFastTrackTests {
             activeConversationID: "conv-fast",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )

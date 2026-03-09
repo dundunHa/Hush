@@ -55,11 +55,11 @@ struct HiddenSceneDeferredUpdateTests {
             activeConversationId: conversationA
         )
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         container.activateConversation(conversationId: conversationB)
         try await waitForConversationReady(container, conversationId: conversationB)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         let sceneA = try #require(pool.sceneFor(conversationID: conversationA))
         let applyCountBefore = sceneA.applyCountForTesting
@@ -74,12 +74,12 @@ struct HiddenSceneDeferredUpdateTests {
         #expect(sceneA.applyCountForTesting == applyCountBefore)
 
         // SwiftUI update should forward only to active scene (B), not to hidden A.
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
         #expect(sceneA.applyCountForTesting == applyCountBefore)
 
         container.activateConversation(conversationId: conversationA)
         try await waitForConversationReady(container, conversationId: conversationA)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         let sceneAAfter = try #require(pool.sceneFor(conversationID: conversationA))
         #expect(sceneAAfter.needsReload == false)

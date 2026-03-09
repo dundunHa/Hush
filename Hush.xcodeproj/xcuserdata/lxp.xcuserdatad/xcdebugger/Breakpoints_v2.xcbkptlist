@@ -16,8 +16,8 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "235"
             endingLineNumber = "235"
-            landmarkName = "init(settings:preferencesRepository:credentialStore:registry:messageRenderRuntime:persistence:catalogRepository:providerConfigRepository:agentPresetRepository:promptTemplateRepository:activeConversationId:messages:sidebarThreads:hasMoreOlderMessages:oldestLoadedOrderIndex:hasMoreSidebarThreads:sidebarThreadsCursor:)"
-            landmarkType = "7">
+            landmarkName = "AppContainer"
+            landmarkType = "3">
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

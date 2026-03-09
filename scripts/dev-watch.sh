@@ -3,9 +3,9 @@ set -euo pipefail
 
 PROJECT="${1:-Hush.xcodeproj}"
 SCHEME="${2:-Hush}"
-DERIVED_DATA="${3:-.build/DerivedData}"
-SPM_DIR="${4:-.build/SourcePackages}"
-APP_PATH="${5:-.build/DerivedData/Build/Products/Debug/Hush.app}"
+DERIVED_DATA="${3:-/tmp/hush-dd}"
+SPM_DIR="${4:-/tmp/hush-spm}"
+APP_PATH="${5:-/tmp/hush-dd/Build/Products/Debug/Hush.app}"
 
 if [ "$#" -ge 5 ]; then
     shift 5

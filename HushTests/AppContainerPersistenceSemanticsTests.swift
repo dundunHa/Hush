@@ -250,6 +250,28 @@ struct AppContainerPersistenceSemanticsTests {
         #expect(container.statusMessage == "All chat history cleared")
     }
 
+    @Test("deleteAllChatHistory deletes persisted message assets")
+    func deleteAllChatHistoryDeletesPersistedMessageAssets() async throws {
+        let db = try DatabaseManager.inMemory()
+        let coordinator = ChatPersistenceCoordinator(dbManager: db)
+        let assetStore = TrackingMessageAssetStore()
+
+        var registry = ProviderRegistry()
+        registry.register(MockProvider(id: "mock"))
+
+        let container = AppContainer.forTesting(
+            settings: .testDefault,
+            registry: registry,
+            persistence: coordinator,
+            messageAssetStore: assetStore
+        )
+
+        await container.deleteAllChatHistory()
+
+        #expect(await assetStore.deleteAllAssetsCallCount == 1)
+        #expect(container.statusMessage == "All chat history cleared")
+    }
+
     @Test("activateConversation applies cached snapshot immediately for smooth switch")
     func activateConversationAppliesCachedSnapshotImmediately() async throws {
         let db = try DatabaseManager.inMemory()
@@ -468,6 +490,26 @@ struct AppContainerPersistenceSemanticsTests {
     }
 }
 
+private actor TrackingMessageAssetStore: MessageAssetStore {
+    private(set) var deleteAllAssetsCallCount = 0
+
+    func materialize(
+        attachments _: [ProviderResponseAttachment],
+        conversationId _: String,
+        messageId _: UUID
+    ) async throws -> [MessageAttachment] {
+        []
+    }
+
+    func deleteAllAssets() async throws {
+        deleteAllAssetsCallCount += 1
+    }
+
+    nonisolated func url(forRelativePath _: String) -> URL? {
+        nil
+    }
+}
+
 private func waitForRequestToSettle(
     _ container: AppContainer,
     timeout: Duration = .seconds(2)
@@ -516,9 +558,9 @@ private struct LateEventProvider: LLMProvider {
         modelID _: String,
         parameters _: ModelParameters,
         context _: ProviderInvocationContext
-    ) async throws -> ChatMessage {
+    ) async throws -> ProviderResponse {
         await Task.yield()
-        return ChatMessage(role: .assistant, content: "unused")
+        return ProviderResponse(text: "unused")
     }
 
     func sendStreaming(

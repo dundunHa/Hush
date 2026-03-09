@@ -9,26 +9,17 @@ import Testing
 struct AppContainerCatalogTests {
     // MARK: - Helpers
 
-    private func makeCredentialStore(secrets: [String: String] = [:]) -> InMemoryCatalogCredentialStore {
-        InMemoryCatalogCredentialStore(secrets: secrets)
-    }
-
     private func makeContainerWithCatalog(
         settings: AppSettings? = nil,
-        secrets: [String: String] = [:],
         registry: ProviderRegistry? = nil
     ) throws -> (AppContainer, GRDBProviderCatalogRepository) {
         let db = try DatabaseManager.inMemory()
         let catalogRepo = GRDBProviderCatalogRepository(dbManager: db)
-        let credentialStore = makeCredentialStore(secrets: secrets)
-        let credentialResolver = CredentialResolver(secretStore: credentialStore)
 
         let container = AppContainer.forTesting(
             settings: settings,
-            credentialStore: credentialStore,
             registry: registry,
-            catalogRepository: catalogRepo,
-            credentialResolver: credentialResolver
+            catalogRepository: catalogRepo
         )
         return (container, catalogRepo)
     }
@@ -46,8 +37,8 @@ struct AppContainerCatalogTests {
         #expect(configs.count == countBefore + 1)
 
         let added = try #require(configs.last)
-        #expect(added.type == .custom)
-        #expect(added.name == "Custom Provider")
+        #expect(added.type == .openAI)
+        #expect(added.name == "OpenAI Compatible")
         #expect(added.isEnabled == true)
         #expect(added.id.hasPrefix("provider-"))
     }
@@ -60,7 +51,7 @@ struct AppContainerCatalogTests {
         container.addPlaceholderProvider()
 
         let customIDs = container.settings.providerConfigurations
-            .filter { $0.type == .custom }
+            .filter { $0.name == "OpenAI Compatible" }
             .map(\.id)
         #expect(Set(customIDs).count == customIDs.count)
     }
@@ -88,12 +79,11 @@ struct AppContainerCatalogTests {
         let newProfile = ProviderConfiguration(
             id: "anthropic",
             name: "Anthropic",
-            type: .anthropic,
+            type: .openAI,
             endpoint: "https://api.anthropic.com",
             apiKeyEnvironmentVariable: "",
             defaultModelID: "claude-3",
-            isEnabled: true,
-            credentialRef: "anthropic"
+            isEnabled: true
         )
         container.saveProviderProfile(newProfile)
 
@@ -110,7 +100,7 @@ struct AppContainerCatalogTests {
         let initial = ProviderConfiguration(
             id: "custom-1",
             name: "Custom One",
-            type: .custom,
+            type: .openAI,
             endpoint: "https://example.com",
             apiKeyEnvironmentVariable: "",
             defaultModelID: "model-a",
@@ -128,6 +118,35 @@ struct AppContainerCatalogTests {
         #expect(configs.count == 1)
         #expect(configs[0].name == "Custom One Updated")
         #expect(configs[0].defaultModelID == "model-b")
+    }
+
+    @Test("saveProviderProfile updates selected model when saving selected provider")
+    func saveProviderProfileUpdatesSelectedModel() throws {
+        let settings = AppSettings(
+            providerConfigurations: [
+                ProviderConfiguration(
+                    id: "custom-1",
+                    name: "Custom One",
+                    type: .openAI,
+                    endpoint: "https://example.com",
+                    apiKeyEnvironmentVariable: "",
+                    defaultModelID: "model-a",
+                    isEnabled: true
+                )
+            ],
+            selectedProviderID: "custom-1",
+            selectedModelID: "model-a",
+            parameters: .standard,
+            quickBar: .standard
+        )
+        let (container, _) = try makeContainerWithCatalog(settings: settings)
+
+        var updated = try #require(container.settings.providerConfigurations.first)
+        updated.defaultModelID = "model-b"
+        container.saveProviderProfile(updated)
+
+        #expect(container.settings.selectedProviderID == "custom-1")
+        #expect(container.settings.selectedModelID == "model-b")
     }
 
     @Test("removeProviderProfile triggers deterministic fallback when removing selected provider")
@@ -165,7 +184,7 @@ struct AppContainerCatalogTests {
         )
 
         container.saveProviderProfile(ProviderConfiguration(
-            id: "custom-1", name: "Custom", type: .custom,
+            id: "custom-1", name: "Custom", type: .openAI,
             endpoint: "", apiKeyEnvironmentVariable: "",
             defaultModelID: "model-a", isEnabled: true
         ))
@@ -211,7 +230,7 @@ struct AppContainerCatalogTests {
         let settings = AppSettings(
             providerConfigurations: [
                 ProviderConfiguration(
-                    id: "custom-1", name: "Custom One", type: .custom,
+                    id: "custom-1", name: "Custom One", type: .openAI,
                     endpoint: "https://example.com", apiKeyEnvironmentVariable: "",
                     defaultModelID: "custom-model", isEnabled: true
                 ),
@@ -286,6 +305,87 @@ struct AppContainerCatalogTests {
         #expect(status?.modelCount == 1)
     }
 
+    // MARK: - Draft Catalog Preview
+
+    @Test("previewModels uses draft API key and does not persist catalog")
+    func previewModelsUsesDraftAPIKeyWithoutPersistence() async throws {
+        let db = try DatabaseManager.inMemory()
+        let catalogRepo = GRDBProviderCatalogRepository(dbManager: db)
+        let provider = PreviewCatalogProviderStub(
+            id: "draft-preview",
+            models: [ModelDescriptor(id: "draft-model", displayName: "Draft Model", capabilities: [.text])]
+        )
+        var registry = ProviderRegistry()
+        registry.register(provider)
+
+        let container = AppContainer.forTesting(
+            registry: registry,
+            catalogRepository: catalogRepo
+        )
+
+        let result = await container.previewModels(for: ProviderCatalogDraftInput(
+            providerID: "draft-preview",
+            type: .openAI,
+            endpoint: " https://draft.example.com/v1 ",
+            apiKey: "sk-draft-preview",
+            persistedAPIKey: nil
+        ))
+
+        #expect(result.error == nil)
+        #expect(result.models.map(\.id) == ["draft-model"])
+        #expect(provider.lastContext?.endpoint == "https://draft.example.com/v1")
+        #expect(provider.lastContext?.bearerToken == "sk-draft-preview")
+
+        let persistedModels = try catalogRepo.models(forProviderID: "draft-preview")
+        #expect(persistedModels.isEmpty)
+    }
+
+    @Test("previewModels falls back to persisted API key when draft API key is empty")
+    func previewModelsUsesPersistedAPIKey() async {
+        let provider = PreviewCatalogProviderStub(
+            id: "openai",
+            models: [ModelDescriptor(id: "gpt-4.1", displayName: "GPT-4.1", capabilities: [.text])]
+        )
+        var registry = ProviderRegistry()
+        registry.register(provider)
+
+        let container = AppContainer.forTesting(registry: registry)
+
+        let result = await container.previewModels(for: ProviderCatalogDraftInput(
+            providerID: "openai",
+            type: .openAI,
+            endpoint: "",
+            apiKey: "",
+            persistedAPIKey: "sk-stored-preview"
+        ))
+
+        #expect(result.error == nil)
+        #expect(result.models.map(\.id) == ["gpt-4.1"])
+        #expect(provider.lastContext?.endpoint == OpenAIProvider.defaultEndpoint)
+        #expect(provider.lastContext?.bearerToken == "sk-stored-preview")
+    }
+
+    @Test("previewModels requires API key when no draft or stored credential exists")
+    func previewModelsRequiresCredential() async {
+        let provider = PreviewCatalogProviderStub(id: "openai", models: [])
+        var registry = ProviderRegistry()
+        registry.register(provider)
+
+        let container = AppContainer.forTesting(registry: registry)
+
+        let result = await container.previewModels(for: ProviderCatalogDraftInput(
+            providerID: "openai",
+            type: .openAI,
+            endpoint: "",
+            apiKey: "",
+            persistedAPIKey: nil
+        ))
+
+        #expect(result.models.isEmpty)
+        #expect(result.error == "Enter an API key to fetch models.")
+        #expect(provider.lastContext == nil)
+    }
+
     // MARK: - Strict Validation with Catalog
 
     @Test("Strict validation passes when model exists in cached catalog")
@@ -313,7 +413,7 @@ struct AppContainerCatalogTests {
                 ProviderConfiguration(
                     id: "openai", name: "OpenAI", type: .openAI,
                     endpoint: "https://api.openai.com/v1", apiKeyEnvironmentVariable: "",
-                    defaultModelID: "gpt-4", isEnabled: true, credentialRef: "openai"
+                    defaultModelID: "gpt-4", isEnabled: true, apiKey: "sk-test"
                 )
             ],
             selectedProviderID: "openai",
@@ -324,7 +424,6 @@ struct AppContainerCatalogTests {
 
         let db = try DatabaseManager.inMemory()
         let catalogRepo = GRDBProviderCatalogRepository(dbManager: db)
-        let credentialStore = InMemoryCatalogCredentialStore(secrets: ["openai": "sk-test"])
 
         // Pre-populate catalog
         try catalogRepo.upsertCatalog(
@@ -334,10 +433,8 @@ struct AppContainerCatalogTests {
 
         let container = AppContainer.forTesting(
             settings: settings,
-            credentialStore: credentialStore,
             registry: registry,
-            catalogRepository: catalogRepo,
-            credentialResolver: CredentialResolver(secretStore: credentialStore)
+            catalogRepository: catalogRepo
         )
         container.preflightTimeoutOverride = .seconds(2)
 
@@ -374,25 +471,41 @@ private final class FakeHTTPClientForCatalogTests: HTTPClient, @unchecked Sendab
     }
 }
 
-private final class InMemoryCatalogCredentialStore: KeychainCredentialStore, @unchecked Sendable {
-    private var secrets: [String: String]
+private final class PreviewCatalogProviderStub: LLMProvider, @unchecked Sendable {
+    let id: String
+    let models: [ModelDescriptor]
+    nonisolated(unsafe) var lastContext: ProviderInvocationContext?
 
-    init(secrets: [String: String] = [:]) {
-        self.secrets = secrets
+    init(id: String, models: [ModelDescriptor]) {
+        self.id = id
+        self.models = models
     }
 
-    func setSecret(_ secret: String, forCredentialRef credentialRef: String) throws {
-        secrets[credentialRef] = secret
+    func availableModels(context: ProviderInvocationContext) async throws -> [ModelDescriptor] {
+        await Task.yield()
+        lastContext = context
+        return models
     }
 
-    func secret(forCredentialRef credentialRef: String) throws -> String {
-        guard let secret = secrets[credentialRef] else {
-            throw KeychainError.itemNotFound
+    func send(
+        messages _: [ChatMessage],
+        modelID _: String,
+        parameters _: ModelParameters,
+        context _: ProviderInvocationContext
+    ) async throws -> ProviderResponse {
+        await Task.yield()
+        fatalError("Unused in catalog preview tests")
+    }
+
+    func sendStreaming(
+        messages _: [ChatMessage],
+        modelID _: String,
+        parameters _: ModelParameters,
+        requestID _: RequestID,
+        context _: ProviderInvocationContext
+    ) -> AsyncThrowingStream<StreamEvent, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish()
         }
-        return secret
-    }
-
-    func hasSecret(forCredentialRef credentialRef: String) -> Bool {
-        secrets[credentialRef] != nil
     }
 }

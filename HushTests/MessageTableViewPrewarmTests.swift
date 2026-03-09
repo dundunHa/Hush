@@ -57,6 +57,7 @@ struct MessageTableViewPrewarmTests {
             activeConversationID: "conv-prewarm",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -106,6 +107,7 @@ struct MessageTableViewPrewarmTests {
             activeConversationID: "conv-prewarm",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )

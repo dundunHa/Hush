@@ -36,8 +36,8 @@ struct MockProviderTests {
             context: dummyContext
         )
 
-        #expect(reply.role == .assistant)
-        #expect(reply.content == "Mock[mock-text-1] temp=0.70: Hello")
+        #expect(reply.text == "Mock[mock-text-1] temp=0.70: Hello")
+        #expect(reply.attachments.isEmpty)
     }
 
     @Test("send with no user message uses empty content fallback")
@@ -52,7 +52,8 @@ struct MockProviderTests {
             context: dummyContext
         )
 
-        #expect(reply.content == "Mock[test-model] temp=0.70: ")
+        #expect(reply.text == "Mock[test-model] temp=0.70: ")
+        #expect(reply.attachments.isEmpty)
     }
 
     // MARK: - MockStreamBehavior.failing factory

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 @testable import Hush
 import Testing
@@ -49,9 +50,9 @@ struct AppContainerSettingsPersistenceTests {
 
         let loaded = try repo.fetch()
         #expect(loaded != nil)
-        let customProviders = container.settings.providerConfigurations.filter { $0.type == .custom }
+        let customProviders = container.settings.providerConfigurations.filter { $0.name == "OpenAI Compatible" }
         #expect(customProviders.count == 1)
-        #expect(customProviders.first?.name == "Custom Provider")
+        #expect(customProviders.first?.name == "OpenAI Compatible")
     }
 
     @Test("flushSettings persists provider removal")
@@ -61,7 +62,7 @@ struct AppContainerSettingsPersistenceTests {
         container.addPlaceholderProvider()
         container.flushSettings()
 
-        let addedID = try #require(container.settings.providerConfigurations.first(where: { $0.type == .custom })?.id)
+        let addedID = try #require(container.settings.providerConfigurations.first(where: { $0.name == "OpenAI Compatible" })?.id)
         container.removeProviderProfile(id: addedID)
         container.flushSettings()
 
@@ -90,12 +91,12 @@ struct AppContainerSettingsPersistenceTests {
         let profile = ProviderConfiguration(
             id: "anthropic",
             name: "Anthropic",
-            type: .anthropic,
+            type: .openAI,
             endpoint: "https://api.anthropic.com",
             apiKeyEnvironmentVariable: "",
             defaultModelID: "claude-3",
             isEnabled: true,
-            credentialRef: "anthropic"
+            apiKey: "sk-anthropic"
         )
         container.saveProviderProfile(profile)
         container.flushSettings()
@@ -103,6 +104,7 @@ struct AppContainerSettingsPersistenceTests {
         let persisted = container.settings.providerConfigurations.first(where: { $0.id == "anthropic" })
         #expect(persisted != nil)
         #expect(persisted?.defaultModelID == "claude-3")
+        #expect(persisted?.apiKey == "sk-anthropic")
     }
 
     @Test("flushSettings preserves theme value in persisted preferences")
@@ -110,11 +112,12 @@ struct AppContainerSettingsPersistenceTests {
         let (repo, container) = try makeRepoAndContainer()
         #expect(container.settings.theme == .dark)
 
+        container.settings.theme = .readPaper
         container.settings.selectedModelID = "theme-persist-model"
         container.flushSettings()
 
         let loaded = try repo.fetch()
-        #expect(loaded?.theme == AppTheme.dark.rawValue)
+        #expect(loaded?.theme == AppTheme.readPaper.rawValue)
     }
 
     @Test("theme-related settings flush does not mutate sidebar threads")
@@ -127,11 +130,42 @@ struct AppContainerSettingsPersistenceTests {
         )
         container.sidebarThreads = [thread]
 
-        // Current app theme has a single supported case (.dark); assignment should be a no-op.
-        container.settings.theme = .dark
+        container.settings.theme = .light
         container.settings.selectedModelID = "theme-safety-model"
         container.flushSettings()
 
         #expect(container.sidebarThreads == [thread])
+    }
+
+    @Test("flushSettings preserves shared font settings in persisted preferences")
+    func flushSettingsPreservesFontSettings() throws {
+        let (repo, container) = try makeRepoAndContainer()
+
+        container.settings.fontSettings = AppFontSettings(
+            familyName: "Helvetica Neue",
+            size: 17
+        )
+        container.flushSettings()
+
+        let loaded = try repo.fetch()
+        let prefs = try #require(loaded?.toAppPreferences())
+        #expect(prefs.fontSettings.normalizedFamilyName == "Helvetica Neue")
+        #expect(prefs.fontSettings.normalizedSize == 17)
+    }
+
+    @Test("font settings stay scoped to message rendering typography")
+    func fontSettingsStayScopedToMessageRenderingTypography() throws {
+        let before = HushTypography.resolvedFontForTesting(14)
+
+        let (_, container) = try makeRepoAndContainer()
+        container.settings.fontSettings = AppFontSettings(
+            familyName: "Helvetica Neue",
+            size: 17
+        )
+
+        let after = HushTypography.resolvedFontForTesting(14)
+        #expect(before.fontName == after.fontName)
+        #expect(abs(before.pointSize - after.pointSize) < 0.001)
+        #expect(abs(after.pointSize - 14) < 0.001)
     }
 }

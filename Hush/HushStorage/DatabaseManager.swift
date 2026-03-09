@@ -264,6 +264,42 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v11: add reasoningEffort to appPreferences ───────────────
+        migrator.registerMigration("v11_app_preferences_reasoning_effort") { db in
+            try db.alter(table: "appPreferences") { t in
+                t.add(column: "reasoningEffort", .text)
+            }
+        }
+
+        // ── v12: add shared typography settings to appPreferences ────
+        migrator.registerMigration("v12_app_preferences_typography") { db in
+            try db.alter(table: "appPreferences") { t in
+                t.add(column: "fontFamilyName", .text)
+                t.add(column: "fontSize", .double)
+            }
+        }
+
+        // ── v13: persist provider API keys in SQLite ───────────────────
+        migrator.registerMigration("v13_provider_configuration_api_keys") { db in
+            try db.alter(table: "providerConfigurations") { t in
+                t.add(column: "apiKey", .text).notNull().defaults(to: "")
+            }
+        }
+
+        // ── v14: add attachments JSON to messages ───────────────────────
+        migrator.registerMigration("v14_messages_attachments") { db in
+            try db.alter(table: "messages") { t in
+                t.add(column: "attachments", .text).notNull().defaults(to: "[]")
+            }
+        }
+
+        // ── v15: add debug info JSON to messages ───────────────────────
+        migrator.registerMigration("v15_messages_debug_info") { db in
+            try db.alter(table: "messages") { t in
+                t.add(column: "debugInfo", .text)
+            }
+        }
+
         return migrator
     }
 

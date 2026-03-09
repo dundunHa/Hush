@@ -32,27 +32,18 @@ struct RenderStyle: Equatable {
 
     // MARK: - Factory
 
-    static func appDefault() -> RenderStyle {
-        let bodySize: CGFloat = NSFont.systemFontSize
-        let body = NSFont.systemFont(ofSize: bodySize)
-        let bodyBold = NSFont.boldSystemFont(ofSize: bodySize)
-        let bodyItalic: NSFont = {
-            let descriptor = body.fontDescriptor.withSymbolicTraits(.italic)
-            return NSFont(descriptor: descriptor, size: bodySize) ?? body
-        }()
-        let monoSize = bodySize * 0.9
-        let mono = NSFont.monospacedSystemFont(ofSize: monoSize, weight: .regular)
-        let monoSmall = NSFont.monospacedSystemFont(ofSize: monoSize * 0.85, weight: .regular)
+    static func appDefault(fontSettings: AppFontSettings = .default) -> RenderStyle {
+        let fonts = resolvedFonts(for: fontSettings)
 
         return RenderStyle(
-            bodyFont: body,
-            bodyBoldFont: bodyBold,
-            bodyItalicFont: bodyItalic,
-            heading1Font: NSFont.systemFont(ofSize: bodySize * 1.6, weight: .semibold),
-            heading2Font: NSFont.systemFont(ofSize: bodySize * 1.3, weight: .semibold),
-            heading3Font: NSFont.systemFont(ofSize: bodySize * 1.1, weight: .semibold),
-            codeFont: mono,
-            codeFontSmall: monoSmall,
+            bodyFont: fonts.body,
+            bodyBoldFont: fonts.bodyBold,
+            bodyItalicFont: fonts.bodyItalic,
+            heading1Font: fonts.heading1,
+            heading2Font: fonts.heading2,
+            heading3Font: fonts.heading3,
+            codeFont: fonts.code,
+            codeFontSmall: fonts.codeSmall,
             bodyColor: .white,
             headingColor: .white,
             codeColor: NSColor(red: 0.90, green: 0.85, blue: 0.75, alpha: 1.0),
@@ -70,16 +61,37 @@ struct RenderStyle: Equatable {
         )
     }
 
+    static func resolvedFonts(for fontSettings: AppFontSettings) -> ResolvedFonts {
+        ResolvedFonts(
+            body: HushFontResolver.contentFont(settings: fontSettings, referenceSize: 14),
+            bodyBold: HushFontResolver.contentFont(settings: fontSettings, referenceSize: 14, weight: .bold),
+            bodyItalic: HushFontResolver.contentFont(settings: fontSettings, referenceSize: 14, italic: true),
+            heading1: HushFontResolver.contentFont(settings: fontSettings, referenceSize: 22.4, weight: .semibold),
+            heading2: HushFontResolver.contentFont(settings: fontSettings, referenceSize: 18.2, weight: .semibold),
+            heading3: HushFontResolver.contentFont(settings: fontSettings, referenceSize: 15.4, weight: .semibold),
+            code: HushFontResolver.monospacedFont(settings: fontSettings, referenceSize: 12.6),
+            codeSmall: HushFontResolver.monospacedFont(settings: fontSettings, referenceSize: 10.71)
+        )
+    }
+
     /// Style identity hash for cache keying.
     nonisolated var cacheKey: Int {
         var hasher = Hasher()
+        hasher.combine(bodyFont.fontName)
         hasher.combine(bodyFont.pointSize)
+        hasher.combine(bodyBoldFont.fontName)
         hasher.combine(bodyBoldFont.pointSize)
+        hasher.combine(bodyItalicFont.fontName)
         hasher.combine(bodyItalicFont.pointSize)
+        hasher.combine(heading1Font.fontName)
         hasher.combine(heading1Font.pointSize)
+        hasher.combine(heading2Font.fontName)
         hasher.combine(heading2Font.pointSize)
+        hasher.combine(heading3Font.fontName)
         hasher.combine(heading3Font.pointSize)
+        hasher.combine(codeFont.fontName)
         hasher.combine(codeFont.pointSize)
+        hasher.combine(codeFontSmall.fontName)
         hasher.combine(codeFontSmall.pointSize)
 
         hasher.combine(bodyColor)
@@ -98,5 +110,18 @@ struct RenderStyle: Equatable {
         hasher.combine(codeBlockSpacing)
         hasher.combine(listIndent)
         return hasher.finalize()
+    }
+}
+
+extension RenderStyle {
+    struct ResolvedFonts {
+        let body: NSFont
+        let bodyBold: NSFont
+        let bodyItalic: NSFont
+        let heading1: NSFont
+        let heading2: NSFont
+        let heading3: NSFont
+        let code: NSFont
+        let codeSmall: NSFont
     }
 }

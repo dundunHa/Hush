@@ -4,6 +4,7 @@ import SwiftUI
 
 struct AgentSettingsView: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushThemePalette) private var palette
 
     @State private var presets: [AgentPreset] = []
     @State private var editingPresetID: String?
@@ -84,10 +85,7 @@ struct AgentSettingsView: View {
                     }
                 }
             }
-            .frame(maxWidth: 720, alignment: .leading)
-            .padding(.horizontal, HushSpacing.xl)
-            .padding(.vertical, HushSpacing.xl)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .settingsCenteredContentColumn()
         }
     }
 
@@ -95,14 +93,14 @@ struct AgentSettingsView: View {
         VStack(spacing: HushSpacing.md) {
             Image(systemName: "person.badge.key")
                 .font(.system(size: 40))
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
 
             Text("No Agent Presets")
                 .font(HushTypography.heading)
 
             Text("Create presets to save your favorite AI configurations.")
                 .font(HushTypography.body)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -128,14 +126,14 @@ struct AgentSettingsView: View {
                 .padding(.bottom, HushSpacing.lg)
 
             Divider()
-                .foregroundStyle(HushColors.separator)
+                .foregroundStyle(palette.separator)
 
             HStack(alignment: .top, spacing: HushSpacing.lg) {
                 leftColumn
                     .frame(width: 320)
 
                 Divider()
-                    .foregroundStyle(HushColors.separator)
+                    .foregroundStyle(palette.separator)
 
                 rightColumn
                     .frame(minWidth: 280)
@@ -146,14 +144,14 @@ struct AgentSettingsView: View {
             Spacer(minLength: 0)
 
             Divider()
-                .foregroundStyle(HushColors.separator)
+                .foregroundStyle(palette.separator)
 
             actionBar(presetID: presetID)
                 .padding(.horizontal, HushSpacing.xl)
                 .padding(.vertical, HushSpacing.lg)
         }
         .frame(width: 720, height: 720)
-        .background(HushColors.rootBackground)
+        .background(palette.rootBackground)
     }
 
     private var presetHeader: some View {
@@ -191,11 +189,11 @@ struct AgentSettingsView: View {
             VStack(alignment: .leading, spacing: HushSpacing.xs) {
                 Label("Provider & Model", systemImage: "cpu")
                     .font(HushTypography.captionBold)
-                    .foregroundStyle(HushColors.secondaryText)
+                    .foregroundStyle(palette.secondaryText)
 
                 Text("Select an API provider and one of its pinned models for this agent.")
                     .font(HushTypography.footnote)
-                    .foregroundStyle(HushColors.secondaryText.opacity(0.6))
+                    .foregroundStyle(palette.secondaryText.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -203,7 +201,7 @@ struct AgentSettingsView: View {
                 HStack {
                     Text("Provider")
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                         .frame(width: 60, alignment: .leading)
 
                     Picker("", selection: $selectedProviderID) {
@@ -222,7 +220,7 @@ struct AgentSettingsView: View {
                 HStack {
                     Text("Model")
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                         .frame(width: 60, alignment: .leading)
 
                     Picker("", selection: $selectedModelID) {
@@ -239,8 +237,8 @@ struct AgentSettingsView: View {
         }
         .padding(HushSpacing.lg)
         .cardStyle(
-            background: HushColors.cardBackground,
-            stroke: HushColors.subtleStroke
+            background: palette.cardBackground,
+            stroke: palette.subtleStroke
         )
     }
 
@@ -249,11 +247,11 @@ struct AgentSettingsView: View {
             VStack(alignment: .leading, spacing: HushSpacing.xs) {
                 Label("System Prompt", systemImage: "text.quote")
                     .font(HushTypography.captionBold)
-                    .foregroundStyle(HushColors.secondaryText)
+                    .foregroundStyle(palette.secondaryText)
 
                 Text("Instructions that define this agent's behavior and persona. Sent at the start of every conversation.")
                     .font(HushTypography.footnote)
-                    .foregroundStyle(HushColors.secondaryText.opacity(0.6))
+                    .foregroundStyle(palette.secondaryText.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -262,16 +260,16 @@ struct AgentSettingsView: View {
                 .scrollContentBackground(.hidden)
                 .padding(HushSpacing.sm)
                 .frame(minHeight: 200, maxHeight: 320)
-                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+                .background(palette.softFill, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(HushColors.subtleStroke, lineWidth: 1)
+                        .stroke(palette.subtleStroke, lineWidth: 1)
                 )
         }
         .padding(HushSpacing.lg)
         .cardStyle(
-            background: HushColors.cardBackground,
-            stroke: HushColors.subtleStroke
+            background: palette.cardBackground,
+            stroke: palette.subtleStroke
         )
     }
 
@@ -291,26 +289,26 @@ struct AgentSettingsView: View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
             Label("Generation", systemImage: "slider.horizontal.3")
                 .font(HushTypography.captionBold)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
 
             VStack(alignment: .leading, spacing: HushSpacing.xs) {
                 HStack {
                     Text("Temperature")
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                     Spacer()
                     Text(String(format: "%.1f", temperature))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(HushColors.secondaryText)
+                        .font(HushTypography.monospaced(12))
+                        .foregroundStyle(palette.secondaryText)
                         .padding(.horizontal, HushSpacing.sm)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
+                        .background(palette.softFillStrong, in: RoundedRectangle(cornerRadius: 4))
                 }
                 Slider(value: $temperature, in: 0 ... 2, step: 0.1)
                     .controlSize(.small)
                 Text("Controls randomness. Lower values produce more focused output, higher values increase creativity.")
                     .font(HushTypography.footnote)
-                    .foregroundStyle(HushColors.secondaryText.opacity(0.6))
+                    .foregroundStyle(palette.secondaryText.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -318,7 +316,7 @@ struct AgentSettingsView: View {
                 HStack {
                     Text("Max Tokens")
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                     Spacer()
                     TextField("4096", text: $maxTokensString)
                         .textFieldStyle(.roundedBorder)
@@ -327,14 +325,14 @@ struct AgentSettingsView: View {
                 }
                 Text("Maximum number of tokens the model can generate in a single response.")
                     .font(HushTypography.footnote)
-                    .foregroundStyle(HushColors.secondaryText.opacity(0.6))
+                    .foregroundStyle(palette.secondaryText.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(HushSpacing.lg)
         .cardStyle(
-            background: HushColors.cardBackground,
-            stroke: HushColors.subtleStroke
+            background: palette.cardBackground,
+            stroke: palette.subtleStroke
         )
     }
 
@@ -342,26 +340,26 @@ struct AgentSettingsView: View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
             Label("Sampling", systemImage: "dial.low")
                 .font(HushTypography.captionBold)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
 
             VStack(alignment: .leading, spacing: HushSpacing.xs) {
                 HStack {
                     Text("Top P")
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                     Spacer()
                     Text(String(format: "%.2f", topP))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(HushColors.secondaryText)
+                        .font(HushTypography.monospaced(12))
+                        .foregroundStyle(palette.secondaryText)
                         .padding(.horizontal, HushSpacing.sm)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
+                        .background(palette.softFillStrong, in: RoundedRectangle(cornerRadius: 4))
                 }
                 Slider(value: $topP, in: 0 ... 1, step: 0.05)
                     .controlSize(.small)
                 Text("Nucleus sampling. Only considers tokens within the top cumulative probability. Use with temperature.")
                     .font(HushTypography.footnote)
-                    .foregroundStyle(HushColors.secondaryText.opacity(0.6))
+                    .foregroundStyle(palette.secondaryText.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -369,7 +367,7 @@ struct AgentSettingsView: View {
                 HStack {
                     Text("Top K")
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                     Spacer()
                     TextField("Optional", text: $topKString)
                         .textFieldStyle(.roundedBorder)
@@ -378,14 +376,14 @@ struct AgentSettingsView: View {
                 }
                 Text("Limits sampling to the K most likely tokens. Leave empty to disable.")
                     .font(HushTypography.footnote)
-                    .foregroundStyle(HushColors.secondaryText.opacity(0.6))
+                    .foregroundStyle(palette.secondaryText.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(HushSpacing.lg)
         .cardStyle(
-            background: HushColors.cardBackground,
-            stroke: HushColors.subtleStroke
+            background: palette.cardBackground,
+            stroke: palette.subtleStroke
         )
     }
 
@@ -393,26 +391,26 @@ struct AgentSettingsView: View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
             Label("Penalties", systemImage: "arrow.triangle.branch")
                 .font(HushTypography.captionBold)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
 
             VStack(alignment: .leading, spacing: HushSpacing.xs) {
                 HStack {
                     Text("Presence Penalty")
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                     Spacer()
                     Text(String(format: "%.2f", presencePenalty))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(HushColors.secondaryText)
+                        .font(HushTypography.monospaced(12))
+                        .foregroundStyle(palette.secondaryText)
                         .padding(.horizontal, HushSpacing.sm)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
+                        .background(palette.softFillStrong, in: RoundedRectangle(cornerRadius: 4))
                 }
                 Slider(value: $presencePenalty, in: 0 ... 2, step: 0.05)
                     .controlSize(.small)
                 Text("Encourages the model to talk about new topics. Higher values reduce repetition of ideas.")
                     .font(HushTypography.footnote)
-                    .foregroundStyle(HushColors.secondaryText.opacity(0.6))
+                    .foregroundStyle(palette.secondaryText.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -420,27 +418,27 @@ struct AgentSettingsView: View {
                 HStack {
                     Text("Frequency Penalty")
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                     Spacer()
                     Text(String(format: "%.2f", frequencyPenalty))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(HushColors.secondaryText)
+                        .font(HushTypography.monospaced(12))
+                        .foregroundStyle(palette.secondaryText)
                         .padding(.horizontal, HushSpacing.sm)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
+                        .background(palette.softFillStrong, in: RoundedRectangle(cornerRadius: 4))
                 }
                 Slider(value: $frequencyPenalty, in: 0 ... 2, step: 0.05)
                     .controlSize(.small)
                 Text("Penalizes tokens based on how often they appear. Higher values discourage word repetition.")
                     .font(HushTypography.footnote)
-                    .foregroundStyle(HushColors.secondaryText.opacity(0.6))
+                    .foregroundStyle(palette.secondaryText.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(HushSpacing.lg)
         .cardStyle(
-            background: HushColors.cardBackground,
-            stroke: HushColors.subtleStroke
+            background: palette.cardBackground,
+            stroke: palette.subtleStroke
         )
     }
 
@@ -448,13 +446,13 @@ struct AgentSettingsView: View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
             Label("Thinking", systemImage: "brain")
                 .font(HushTypography.captionBold)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
 
             VStack(alignment: .leading, spacing: HushSpacing.xs) {
                 HStack {
                     Text("Thinking Budget")
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                     Spacer()
                     TextField("Optional", text: $thinkingBudgetString)
                         .textFieldStyle(.roundedBorder)
@@ -463,14 +461,14 @@ struct AgentSettingsView: View {
                 }
                 Text("Token budget for extended thinking models (e.g. o1, Claude 3.5). Leave empty if not supported.")
                     .font(HushTypography.footnote)
-                    .foregroundStyle(HushColors.secondaryText.opacity(0.6))
+                    .foregroundStyle(palette.secondaryText.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(HushSpacing.lg)
         .cardStyle(
-            background: HushColors.cardBackground,
-            stroke: HushColors.subtleStroke
+            background: palette.cardBackground,
+            stroke: palette.subtleStroke
         )
     }
 
@@ -501,7 +499,7 @@ struct AgentSettingsView: View {
 
                 Divider()
                     .frame(height: 20)
-                    .foregroundStyle(HushColors.separator)
+                    .foregroundStyle(palette.separator)
             }
 
             Toggle("Default", isOn: $isDefault)
@@ -623,6 +621,7 @@ struct AgentSettingsView: View {
 // MARK: - AgentPresetRow
 
 private struct AgentPresetRow: View {
+    @Environment(\.hushThemePalette) private var palette
     let preset: AgentPreset
     let subtitle: String
     let onTap: () -> Void
@@ -645,13 +644,13 @@ private struct AgentPresetRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(preset.name)
                         .font(HushTypography.body)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(palette.primaryText)
                         .lineLimit(1)
 
 //                    if !subtitle.isEmpty {
 //                        Text(subtitle)
 //                            .font(HushTypography.caption)
-//                            .foregroundStyle(HushColors.secondaryText)
+//                            .foregroundStyle(palette.secondaryText)
 //                            .lineLimit(1)
 //                    }
                 }
@@ -661,16 +660,16 @@ private struct AgentPresetRow: View {
                 if preset.isDefault {
                     Text("Default")
                         .font(HushTypography.caption)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(palette.accent)
                         .padding(.horizontal, HushSpacing.sm)
                         .padding(.vertical, 3)
-                        .background(Color.blue.opacity(0.15), in: Capsule())
+                        .background(palette.accentMutedBackground, in: Capsule())
                 }
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(
-                        HushColors.secondaryText.opacity(isHovered ? 1.0 : 0.6)
+                        palette.secondaryText.opacity(isHovered ? 1.0 : 0.6)
                     )
             }
             .padding(.horizontal, HushSpacing.lg)
@@ -678,11 +677,11 @@ private struct AgentPresetRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
-                    .fill(isHovered ? Color.white.opacity(0.06) : HushColors.cardBackground)
+                    .fill(isHovered ? palette.hoverFill : palette.cardBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
                             .stroke(
-                                isHovered ? Color.white.opacity(0.16) : HushColors.subtleStroke,
+                                isHovered ? palette.hoverStroke : palette.subtleStroke,
                                 lineWidth: 1
                             )
                     )
@@ -713,7 +712,7 @@ private struct AgentPresetRow: View {
         }
         .padding(HushSpacing.lg)
         .frame(width: 600)
-        .background(HushColors.rootBackground)
+        .background(HushColors.palette(for: .dark).rootBackground)
     }
 
 #endif

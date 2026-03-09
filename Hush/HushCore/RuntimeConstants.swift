@@ -21,8 +21,12 @@ public enum RuntimeConstants {
     /// Timeout budget for preflight model validation (seconds).
     public static let preflightTimeoutSeconds: Double = 3.0
 
-    /// Timeout budget for active generation (seconds).
+    /// Timeout budget for active streaming generation (seconds).
     public static let generationTimeoutSeconds: Double = 60.0
+
+    /// Timeout budget for image generation (seconds). Image generation is
+    /// non-streaming and inherently slower than text generation.
+    public static let imageGenerationTimeoutSeconds: Double = 180.0
 
     /// Preflight timeout as Duration.
     public static var preflightTimeout: Duration {
@@ -32,6 +36,11 @@ public enum RuntimeConstants {
     /// Generation timeout as Duration.
     public static var generationTimeout: Duration {
         .seconds(generationTimeoutSeconds)
+    }
+
+    /// Image generation timeout as Duration.
+    public static var imageGenerationTimeout: Duration {
+        .seconds(imageGenerationTimeoutSeconds)
     }
 
     /// Trailing debounce interval for settings persistence.

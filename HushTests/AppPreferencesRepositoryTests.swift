@@ -25,7 +25,12 @@ struct AppPreferencesRepositoryTests {
             selectedProviderID: "openai",
             selectedModelID: "gpt-4o-mini",
             parameters: .standard,
-            quickBar: .standard
+            quickBar: .standard,
+            theme: .readPaper,
+            fontSettings: AppFontSettings(
+                familyName: "Helvetica Neue",
+                size: 16
+            )
         )
 
         try repo.save(original)
@@ -37,7 +42,9 @@ struct AppPreferencesRepositoryTests {
         #expect(prefs.selectedModelID == "gpt-4o-mini")
         #expect(prefs.parameters == .standard)
         #expect(prefs.quickBar == .standard)
-        #expect(prefs.theme == .dark)
+        #expect(prefs.theme == .readPaper)
+        #expect(prefs.fontSettings.normalizedFamilyName == "Helvetica Neue")
+        #expect(prefs.fontSettings.normalizedSize == 16)
     }
 
     @Test("save overwrites previous preferences")
@@ -65,7 +72,8 @@ struct AppPreferencesRepositoryTests {
             topP: 0.8,
             maxTokens: 2048,
             presencePenalty: 0.5,
-            frequencyPenalty: 0.3
+            frequencyPenalty: 0.3,
+            reasoningEffort: .high
         )
 
         try repo.save(settings)
@@ -77,6 +85,7 @@ struct AppPreferencesRepositoryTests {
         #expect(prefs.parameters.maxTokens == 2048)
         #expect(prefs.parameters.presencePenalty == 0.5)
         #expect(prefs.parameters.frequencyPenalty == 0.3)
+        #expect(prefs.parameters.reasoningEffort == .high)
     }
 
     @Test("quickBar configuration round-trips correctly")
@@ -128,5 +137,29 @@ struct AppPreferencesRepositoryTests {
         let loaded = try repo.fetch()
         let prefs = try #require(loaded?.toAppPreferences())
         #expect(prefs.maxConcurrentRequests == RuntimeConstants.defaultMaxConcurrentRequests)
+    }
+
+    @Test("Missing font settings default to shared typography defaults")
+    func fontSettingsMissingDefaultsCorrectly() throws {
+        let dbManager = try DatabaseManager.inMemory()
+        let repo = GRDBAppPreferencesRepository(dbManager: dbManager)
+
+        try repo.save(.default)
+
+        try dbManager.write { db in
+            try db.execute(
+                sql: """
+                UPDATE appPreferences
+                SET fontFamilyName = NULL,
+                    fontSize = NULL
+                WHERE id = 'default'
+                """
+            )
+        }
+
+        let loaded = try repo.fetch()
+        let prefs = try #require(loaded?.toAppPreferences())
+        #expect(prefs.fontSettings.normalizedFamilyName == nil)
+        #expect(prefs.fontSettings.normalizedSize == AppFontSettings.defaultSize)
     }
 }

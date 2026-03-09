@@ -8,13 +8,28 @@ struct MessageTableViewApplyStrategyTests {
     private func makeMessage(
         id: UUID,
         role: ChatRole = .assistant,
-        content: String
+        content: String,
+        attachments: [MessageAttachment] = []
     ) -> ChatMessage {
         ChatMessage(
             id: id,
             role: role,
             content: content,
+            attachments: attachments,
             createdAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+    }
+
+    private func makeAttachment(path: String, sha256: String) -> MessageAttachment {
+        MessageAttachment(
+            id: UUID(),
+            kind: .image,
+            localRelativePath: path,
+            mimeType: "image/png",
+            pixelWidth: 1,
+            pixelHeight: 1,
+            sha256: sha256,
+            sourcePrompt: "Draw something"
         )
     }
 
@@ -32,6 +47,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -41,6 +57,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -63,6 +80,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -72,6 +90,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -94,6 +113,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -103,6 +123,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -125,6 +146,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -134,6 +156,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -156,6 +179,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -165,6 +189,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -187,6 +212,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -196,6 +222,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -218,6 +245,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -227,11 +255,53 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
 
         #expect(table.lastUpdateModeForTesting != .streamingRefresh(row: 0))
+    }
+
+    @Test("Attachment-only change refreshes the existing row")
+    func attachmentOnlyChangeRefreshesRow() throws {
+        let table = MessageTableView()
+        let runtime = MessageRenderRuntime()
+        let container = AppContainer.forTesting(settings: .testDefault)
+
+        let messageID = try #require(UUID(uuidString: "CCCCCCCC-4444-4444-4444-444444444444"))
+        let first = makeMessage(
+            id: messageID,
+            content: "Generated image.",
+            attachments: [makeAttachment(path: "first.png", sha256: "sha-first")]
+        )
+        let second = makeMessage(
+            id: messageID,
+            content: "Generated image.",
+            attachments: [makeAttachment(path: "second.png", sha256: "sha-second")]
+        )
+
+        table.apply(
+            messages: [first],
+            activeConversationID: "conv-1",
+            isActiveConversationSending: false,
+            switchGeneration: 1,
+            theme: container.settings.theme,
+            runtime: runtime,
+            container: container
+        )
+
+        table.apply(
+            messages: [second],
+            activeConversationID: "conv-1",
+            isActiveConversationSending: false,
+            switchGeneration: 1,
+            theme: container.settings.theme,
+            runtime: runtime,
+            container: container
+        )
+
+        #expect(table.lastUpdateModeForTesting == .streamingRefresh(row: 0))
     }
 
     @Test("Generation switch always uses full reload mode")
@@ -247,6 +317,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -256,6 +327,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 2,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -276,6 +348,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -288,6 +361,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 2,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )

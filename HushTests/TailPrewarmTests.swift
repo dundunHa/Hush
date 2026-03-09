@@ -105,14 +105,14 @@ struct TailPrewarmTests {
             messageRenderRuntime: runtime
         )
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         container.sendDraft("start streaming")
         try await waitForStreamingStart(container, conversationId: conversationA)
 
         container.activateConversation(conversationId: conversationB)
         try await waitForConversationReady(container, conversationId: conversationB)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         try await waitForStreamingComplete(container, conversationId: conversationA)
 
@@ -198,14 +198,14 @@ struct TailPrewarmTests {
             messageRenderRuntime: runtime
         )
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         container.sendDraft("start streaming")
         try await waitForStreamingStart(container, conversationId: conversationA)
 
         container.activateConversation(conversationId: conversationB)
         try await waitForConversationReady(container, conversationId: conversationB)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         try await waitForStreamingComplete(container, conversationId: conversationA)
 
@@ -282,14 +282,14 @@ struct TailPrewarmTests {
             messageRenderRuntime: runtime
         )
 
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         container.sendDraft("start streaming")
         try await waitForStreamingStart(container, conversationId: conversationA)
 
         container.activateConversation(conversationId: conversationB)
         try await waitForConversationReady(container, conversationId: conversationB)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         try await waitForStreamingComplete(container, conversationId: conversationA)
 

@@ -8,12 +8,7 @@ extension MessageTableView {
         let existingRow = rows[rowIndex]
         guard existingRow.message.content != content else { return }
 
-        let updatedMessage = ChatMessage(
-            id: existingRow.message.id,
-            role: existingRow.message.role,
-            content: content,
-            createdAt: existingRow.message.createdAt
-        )
+        let updatedMessage = existingRow.message.updatingContent(content)
         rows[rowIndex] = RowModel(
             message: updatedMessage,
             isStreaming: existingRow.isStreaming,

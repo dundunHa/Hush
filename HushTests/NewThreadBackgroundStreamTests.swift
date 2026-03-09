@@ -176,8 +176,8 @@ private actor DelayedStartProvider: LLMProvider {
         modelID _: String,
         parameters _: ModelParameters,
         context _: ProviderInvocationContext
-    ) async throws -> ChatMessage {
-        ChatMessage(role: .assistant, content: "unused")
+    ) async throws -> ProviderResponse {
+        ProviderResponse(text: "unused")
     }
 
     // swiftlint:enable async_without_await

@@ -11,6 +11,20 @@ struct ChatPersistenceCoordinatorTests {
         return ChatPersistenceCoordinator(dbManager: db)
     }
 
+    private func makeAttachment() throws -> MessageAttachment {
+        try MessageAttachment(
+            id: #require(UUID(uuidString: "AAAAAAAA-1111-2222-3333-444444444444")),
+            kind: .image,
+            localRelativePath: "generated/image.png",
+            mimeType: "image/png",
+            pixelWidth: 512,
+            pixelHeight: 512,
+            sha256: "attachment-sha",
+            sourcePrompt: "Draw a lighthouse",
+            providerMetadataJSON: #"{"revised_prompt":"Draw a bright lighthouse"}"#
+        )
+    }
+
     @Test("Bootstrap creates conversation when none exist")
     func bootstrapCreatesConversation() throws {
         let coordinator = try makeCoordinator()
@@ -208,6 +222,84 @@ struct ChatPersistenceCoordinatorTests {
         let reloaded = try coordinator2.bootstrap()
         #expect(reloaded.messages.count == 1)
         #expect(reloaded.messages[0].content == "Error: Something went wrong")
+    }
+
+    @Test("Persist system message round-trips debug info JSON")
+    func persistSystemMessageRoundTripsDebugInfo() throws {
+        let db = try DatabaseManager.inMemory()
+        let coordinator = ChatPersistenceCoordinator(dbManager: db)
+        let result = try coordinator.bootstrap()
+
+        let debugInfoJSON = MessageDebugInfo(
+            providerID: "openai",
+            modelID: "gemini-2.5-flash-image",
+            requestURL: "https://example.invalid/v1/images/generations",
+            responseStatusCode: 500
+        ).prettyJSONString()
+        let errorMsg = ChatMessage(
+            role: .assistant,
+            content: "Error: Something went wrong",
+            debugInfoJSON: debugInfoJSON
+        )
+        try coordinator.persistSystemMessage(
+            errorMsg,
+            conversationId: result.conversationId,
+            status: .failed
+        )
+
+        let reloaded = try ChatPersistenceCoordinator(dbManager: db).bootstrap()
+        let persisted = try #require(reloaded.messages.first(where: { $0.role == .assistant }))
+        #expect(persisted.debugInfoJSON == debugInfoJSON)
+    }
+
+    @Test("Persist system message round-trips attachments JSON")
+    func persistSystemMessageRoundTripsAttachments() throws {
+        let db = try DatabaseManager.inMemory()
+        let coordinator = ChatPersistenceCoordinator(dbManager: db)
+        let result = try coordinator.bootstrap()
+
+        let attachment = try makeAttachment()
+        let message = ChatMessage(
+            role: .assistant,
+            content: "Generated image.",
+            attachments: [attachment]
+        )
+        try coordinator.persistSystemMessage(
+            message,
+            conversationId: result.conversationId,
+            status: .completed
+        )
+
+        let reloaded = try ChatPersistenceCoordinator(dbManager: db).bootstrap()
+        let persisted = try #require(reloaded.messages.first(where: { $0.role == .assistant }))
+        #expect(persisted.attachments == [attachment])
+    }
+
+    @Test("Finalize assistant message updates attachments payload")
+    func finalizeAssistantMessageUpdatesAttachments() throws {
+        let db = try DatabaseManager.inMemory()
+        let coordinator = ChatPersistenceCoordinator(dbManager: db)
+        let result = try coordinator.bootstrap()
+
+        let draft = ChatMessage(role: .assistant, content: "Generating image...")
+        try coordinator.persistAssistantDraft(
+            draft,
+            conversationId: result.conversationId,
+            requestId: UUID().uuidString
+        )
+
+        let attachment = try makeAttachment()
+        try coordinator.finalizeAssistantMessage(
+            messageId: draft.id.uuidString,
+            content: "Generated image.",
+            attachments: [attachment],
+            status: .completed
+        )
+
+        let reloaded = try ChatPersistenceCoordinator(dbManager: db).bootstrap()
+        let persisted = try #require(reloaded.messages.first(where: { $0.id == draft.id }))
+        #expect(persisted.content == "Generated image.")
+        #expect(persisted.attachments == [attachment])
     }
 
     @Test("Sidebar threads page paginates with cursor")

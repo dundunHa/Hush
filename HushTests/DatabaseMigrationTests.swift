@@ -56,6 +56,8 @@ struct DatabaseMigrationTests {
         #expect(columnNames.contains("conversationId"))
         #expect(columnNames.contains("role"))
         #expect(columnNames.contains("content"))
+        #expect(columnNames.contains("attachments"))
+        #expect(columnNames.contains("debugInfo"))
         #expect(columnNames.contains("status"))
         #expect(columnNames.contains("requestId"))
         #expect(columnNames.contains("orderIndex"))
@@ -64,6 +66,23 @@ struct DatabaseMigrationTests {
         #expect(columnNames.contains("deletedAt"))
         #expect(columnNames.contains("syncState"))
         #expect(columnNames.contains("sourceDeviceId"))
+    }
+
+    @Test("messages attachments column defaults to empty JSON array")
+    func messagesAttachmentsColumnDefaultsToEmptyArray() throws {
+        let db = try DatabaseManager.inMemory()
+        let defaultValue = try db.read { db in
+            try String.fetchOne(
+                db,
+                sql: """
+                SELECT dflt_value
+                FROM pragma_table_info('messages')
+                WHERE name = 'attachments'
+                """
+            )
+        }
+
+        #expect(defaultValue == "'[]'")
     }
 
     @Test("Sync outbox table has expected columns")
@@ -104,5 +123,15 @@ struct DatabaseMigrationTests {
         }
         let columnNames = columns.map { $0["name"] as String }
         #expect(columnNames.contains("maxConcurrentRequests"))
+    }
+
+    @Test("appPreferences table includes reasoningEffort column after v11 migration")
+    func appPreferencesReasoningEffortColumn() throws {
+        let db = try DatabaseManager.inMemory()
+        let columns = try db.read { db in
+            try Row.fetchAll(db, sql: "PRAGMA table_info(appPreferences)")
+        }
+        let columnNames = columns.map { $0["name"] as String }
+        #expect(columnNames.contains("reasoningEffort"))
     }
 }

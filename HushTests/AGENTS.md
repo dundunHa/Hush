@@ -12,8 +12,8 @@ Tests organized by module, named <Module>Tests.swift:
   ChatPersistenceCoordinatorTests.swift# Streaming flush + finalization
   GRDB*RepositoryTests.swift           # One per repository (7+ files)
   DatabaseManagerTests.swift           # Migrations, WAL mode
-  KeychainAdapterTests.swift           # Keychain CRUD
-  CredentialResolverTests.swift        # Ref → secret resolution
+  KeychainAdapterTests.swift           # Provider credential persistence + resolver behavior
+  CredentialResolverTests.swift        # Persisted API key validation
   SSEParserTests.swift                 # Server-sent events parsing
   HTTPClientTests.swift                # URLSession + StubURLProtocol
   OpenAIProviderTests.swift            # Provider request/response

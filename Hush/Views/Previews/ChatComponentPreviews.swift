@@ -7,8 +7,8 @@
             .padding()
     }
 
-    #Preview("ChatConfigPopover") {
-        ChatConfigPopover(parameters: .constant(.standard))
+    #Preview("ChatConfigDrawer") {
+        ChatConfigDrawer(parameters: .constant(.standard))
     }
 
 #endif

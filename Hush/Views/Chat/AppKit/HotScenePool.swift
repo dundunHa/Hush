@@ -34,6 +34,10 @@ final class HotScenePool {
         scenesByConversationID[conversationID]
     }
 
+    func generationForConversation(conversationID: String) -> UInt64? {
+        generationsByConversationID[conversationID]
+    }
+
     func markNeedsReload(conversationID: String) {
         guard conversationID != activeConversationID else { return }
         guard let scene = scenesByConversationID[conversationID] else { return }

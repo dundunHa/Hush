@@ -1,14 +1,15 @@
 import SwiftUI
 
 struct ComposerDock: View {
+    @Binding var isConfigDrawerPresented: Bool
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushThemePalette) private var palette
     @State private var draft: String = ""
     @State private var availableModels: [ModelDescriptor] = []
     @State private var catalogStateMessage: String?
     @State private var isModelHovered = false
     @State private var isStrengthHovered = false
     @State private var isConfigHovered = false
-    @State private var showConfigPopover = false
     @State private var isOpenSettingsHovered = false
 
     var body: some View {
@@ -20,7 +21,7 @@ struct ComposerDock: View {
                     Button {} label: {
                         Image(systemName: "plus")
                             .font(.system(size: 22, weight: .light))
-                            .foregroundStyle(.white.opacity(0.70))
+                            .foregroundStyle(palette.controlForegroundMuted)
                             .frame(width: 34, height: 34)
                     }
                     .buttonStyle(.plain)
@@ -28,14 +29,15 @@ struct ComposerDock: View {
 
                     modelMenu
                     thinkingStrengthMenu
-                    configButton
 
                     Spacer(minLength: 0)
+
+                    configButton
 
                     Button {} label: {
                         Image(systemName: "mic")
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.58))
+                            .foregroundStyle(palette.controlForegroundMuted)
                             .frame(width: 25, height: 25)
                     }
                     .buttonStyle(.plain)
@@ -47,7 +49,7 @@ struct ComposerDock: View {
                 if let catalogStateMessage, !catalogStateMessage.isEmpty {
                     Text(catalogStateMessage)
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.errorText)
+                        .foregroundStyle(palette.errorText)
                 }
             } else {
                 noProviderConfiguredView
@@ -60,8 +62,8 @@ struct ComposerDock: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.16, green: 0.17, blue: 0.21),
-                            Color(red: 0.13, green: 0.14, blue: 0.18)
+                            palette.composerShellTop,
+                            palette.composerShellBottom
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -69,7 +71,7 @@ struct ComposerDock: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 30, style: .continuous)
-                        .stroke(Color.white.opacity(0.13), lineWidth: 1)
+                        .stroke(palette.composerShellStroke, lineWidth: 1)
                 )
         }
         .frame(maxWidth: HushSpacing.chatContentMaxWidth)
@@ -86,7 +88,7 @@ struct ComposerDock: View {
     private var composerEditor: some View {
         TextEditor(text: $draft)
             .font(HushTypography.body)
-            .foregroundStyle(.primary)
+            .foregroundStyle(palette.primaryText)
             .frame(minHeight: 28, maxHeight: 44)
             .scrollContentBackground(.hidden)
             .background(Color.clear)
@@ -126,7 +128,7 @@ struct ComposerDock: View {
         Menu {
             ForEach(ThinkingStrength.allCases) { strength in
                 Button {
-                    container.settings.parameters = strength.parameters(preserving: container.settings.parameters)
+                    container.settings.parameters.reasoningEffort = strength.reasoningEffort
                 } label: {
                     HStack(spacing: HushSpacing.sm) {
                         if strength == selectedThinkingStrength {
@@ -145,24 +147,42 @@ struct ComposerDock: View {
 
     private var configButton: some View {
         Button {
-            showConfigPopover.toggle()
+            isConfigDrawerPresented.toggle()
         } label: {
-            Image(systemName: "slider.horizontal.3")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.white.opacity(isConfigHovered ? 0.74 : 0.58))
-                .frame(width: 28, height: 28)
-                .background(
+            HStack(spacing: HushSpacing.xs) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 13, weight: .semibold))
+
+                Text("Tune")
+                    .font(HushTypography.scaled(13, weight: .medium))
+                    .lineLimit(1)
+
+                if hasCustomizedOptions {
                     Circle()
-                        .fill(Color.white.opacity(isConfigHovered ? 0.06 : 0))
-                        .overlay(Circle().stroke(Color.white.opacity(isConfigHovered ? 0.12 : 0), lineWidth: 1))
-                )
+                        .fill(palette.accent)
+                        .frame(width: 6, height: 6)
+                        .accessibilityHidden(true)
+                }
+            }
+            .foregroundStyle(configButtonForeground)
+            .padding(.leading, HushSpacing.sm)
+            .padding(.trailing, HushSpacing.sm)
+            .padding(.vertical, HushSpacing.xs + 2)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(configButtonFill)
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(configButtonStroke, lineWidth: 1)
+                    )
+            )
+            .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { isConfigHovered = $0 }
-        .popover(isPresented: $showConfigPopover, arrowEdge: .top) {
-            ChatConfigPopover(parameters: $container.settings.parameters)
-        }
-        .accessibilityLabel("Chat configuration")
+        .help(chatOptionsSummary)
+        .accessibilityLabel("Chat tuning")
+        .accessibilityValue(chatOptionsSummary)
     }
 
     private var sendOrStopButton: some View {
@@ -191,14 +211,14 @@ struct ComposerDock: View {
             Image(systemName: "chevron.down")
                 .font(.system(size: 11, weight: .semibold))
         }
-        .font(Font.body.weight(.medium))
-        .foregroundStyle(.white.opacity(0.74))
+        .font(HushTypography.scaled(14, weight: .medium))
+        .foregroundStyle(palette.controlForeground)
         .padding(.horizontal, HushSpacing.sm)
         .padding(.vertical, HushSpacing.xs + 2)
         .background(
             Capsule()
-                .fill(Color.white.opacity(isHovered ? 0.06 : 0))
-                .overlay(Capsule().stroke(Color.white.opacity(isHovered ? 0.12 : 0), lineWidth: 1))
+                .fill(isHovered ? palette.hoverFill : .clear)
+                .overlay(Capsule().stroke(isHovered ? palette.hoverStroke : .clear, lineWidth: 1))
         )
         .animation(.easeInOut(duration: 0.15), value: isHovered)
     }
@@ -235,27 +255,96 @@ struct ComposerDock: View {
     }
 
     private var selectedThinkingStrength: ThinkingStrength {
-        ThinkingStrength.from(parameters: container.settings.parameters)
+        ThinkingStrength.from(reasoningEffort: container.settings.parameters.reasoningEffort)
+    }
+
+    private var chatOptionsSummary: String {
+        let topK = container.settings.parameters.topK.map(String.init) ?? "off"
+        let maxTokens = maxTokensSummary == 0 ? "unlimited" : compactTokenCount(maxTokensSummary)
+        return "\(contextLimitSummary) context, temp \(temperatureSummary), " +
+            "top p \(topPSummary), top k \(topK), max \(maxTokens) tokens"
+    }
+
+    private var contextLimitSummary: Int {
+        container.settings.parameters.contextMessageLimit ?? ModelParameters.standard.contextMessageLimit ?? 10
+    }
+
+    private var temperatureSummary: String {
+        String(format: "%.2f", container.settings.parameters.temperature)
+    }
+
+    private var topPSummary: String {
+        String(format: "%.2f", container.settings.parameters.topP)
+    }
+
+    private var maxTokensSummary: Int {
+        container.settings.parameters.maxTokens
+    }
+
+    private var hasCustomizedOptions: Bool {
+        let standard = ModelParameters.standard
+        let standardContextLimit = standard.contextMessageLimit ?? 10
+
+        return contextLimitSummary != standardContextLimit ||
+            container.settings.parameters.maxTokens != standard.maxTokens ||
+            abs(container.settings.parameters.temperature - standard.temperature) > 0.001 ||
+            abs(container.settings.parameters.topP - standard.topP) > 0.001 ||
+            container.settings.parameters.topK != standard.topK
+    }
+
+    private var configButtonFill: Color {
+        if isConfigDrawerPresented {
+            return palette.selectionFill
+        }
+        if isConfigHovered {
+            return palette.hoverFill
+        }
+        return palette.softFill
+    }
+
+    private var configButtonStroke: Color {
+        if isConfigDrawerPresented {
+            return palette.selectionStroke
+        }
+        if isConfigHovered {
+            return palette.hoverStroke
+        }
+        return palette.subtleStroke
+    }
+
+    private var configButtonForeground: Color {
+        if isConfigDrawerPresented || hasCustomizedOptions {
+            return palette.controlForeground
+        }
+        if isConfigHovered {
+            return palette.controlForeground
+        }
+        return palette.controlForegroundMuted
+    }
+
+    private func compactTokenCount(_ value: Int) -> String {
+        guard value >= 1000 else { return "\(value)" }
+        return String(format: "%.1fK", Double(value) / 1000)
     }
 
     private var sendButtonBackground: Color {
         if container.isActiveConversationSending {
-            return Color.red.opacity(0.85)
+            return palette.destructiveActionBackground
         }
         if canSendDraft {
-            return Color.white.opacity(0.88)
+            return palette.primaryActionBackground
         }
-        return Color.white.opacity(0.22)
+        return palette.disabledActionBackground
     }
 
     private var sendButtonForeground: Color {
         if container.isActiveConversationSending {
-            return .white
+            return palette.destructiveActionForeground
         }
         if canSendDraft {
-            return Color.black.opacity(0.85)
+            return palette.primaryActionForeground
         }
-        return Color.black.opacity(0.38)
+        return palette.disabledActionForeground
     }
 
     // MARK: - No Provider Empty State
@@ -264,11 +353,11 @@ struct ComposerDock: View {
         HStack(alignment: .center, spacing: HushSpacing.sm) {
             Image(systemName: "bolt.horizontal")
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(Color.white.opacity(0.44))
+                .foregroundStyle(palette.tertiaryText)
 
             Text("Add a provider to start chatting")
                 .font(HushTypography.body)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
 
             Spacer(minLength: 0)
 
@@ -277,15 +366,18 @@ struct ComposerDock: View {
             } label: {
                 Label("Open Settings", systemImage: "gearshape")
                     .font(HushTypography.body)
-                    .foregroundStyle(Color.white.opacity(isOpenSettingsHovered ? 0.88 : 0.74))
+                    .foregroundStyle(isOpenSettingsHovered ? palette.controlForeground : palette.controlForegroundMuted)
                     .padding(.horizontal, HushSpacing.md)
                     .padding(.vertical, HushSpacing.xs + 2)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(Color.white.opacity(isOpenSettingsHovered ? 0.08 : 0.04))
+                            .fill(isOpenSettingsHovered ? palette.softFillStrong : palette.softFill)
                             .overlay(
                                 Capsule(style: .continuous)
-                                    .stroke(Color.white.opacity(isOpenSettingsHovered ? 0.16 : 0.10), lineWidth: 1)
+                                    .stroke(
+                                        isOpenSettingsHovered ? palette.hoverStroke : palette.subtleStroke,
+                                        lineWidth: 1
+                                    )
                             )
                     )
             }
@@ -351,48 +443,34 @@ private enum ThinkingStrength: String, CaseIterable, Identifiable {
     case low = "Low"
     case medium = "Medium"
     case high = "High"
-    case extraHigh = "Extra High"
 
     var id: String {
         rawValue
     }
 
-    func parameters(preserving existing: ModelParameters) -> ModelParameters {
+    var reasoningEffort: ModelReasoningEffort? {
         switch self {
         case .default:
-            var params = existing
-            params.useModelDefaults = true
-            return params
-        case .low, .medium, .high, .extraHigh:
-            let (temp, topP, maxTokens) = switch self {
-            case .low: (0.30, 0.80, 512)
-            case .medium: (0.50, 0.90, 768)
-            case .high: (0.70, 1.00, 1024)
-            case .extraHigh: (0.90, 1.00, 1536)
-            case .default: (0.0, 0.0, 0) // unreachable
-            }
-            return ModelParameters(
-                temperature: temp,
-                topP: topP,
-                topK: existing.topK,
-                maxTokens: maxTokens,
-                presencePenalty: 0,
-                frequencyPenalty: 0,
-                contextMessageLimit: existing.contextMessageLimit
-            )
+            return nil
+        case .low:
+            return .low
+        case .medium:
+            return .medium
+        case .high:
+            return .high
         }
     }
 
-    var parameters: ModelParameters {
-        parameters(preserving: .standard)
-    }
-
-    static func from(parameters: ModelParameters) -> ThinkingStrength {
-        if parameters.useModelDefaults { return .default }
-        let presets: [ThinkingStrength] = [.low, .medium, .high, .extraHigh]
-        return presets.min {
-            abs($0.parameters.temperature - parameters.temperature)
-                < abs($1.parameters.temperature - parameters.temperature)
-        } ?? .high
+    static func from(reasoningEffort: ModelReasoningEffort?) -> ThinkingStrength {
+        switch reasoningEffort {
+        case nil:
+            return .default
+        case .some(.none), .some(.minimal), .some(.low):
+            return .low
+        case .some(.medium):
+            return .medium
+        case .some(.high), .some(.xhigh):
+            return .high
+        }
     }
 }

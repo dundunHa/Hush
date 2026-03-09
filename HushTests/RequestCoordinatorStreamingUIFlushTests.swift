@@ -44,7 +44,7 @@ struct RequestCoordinatorStreamingUIFlushTests {
         let conversationID = try #require(container.activeConversationId)
         let pool = HotScenePool(capacity: 2)
         container.registerHotScenePool(pool)
-        let scene = ConversationViewController(container: container)
+        let scene = ConversationViewController(container: container, theme: container.settings.theme)
         _ = pool.switchTo(conversationID: conversationID, messageCount: 0, generation: 1) {
             scene
         }
@@ -458,8 +458,8 @@ private actor RapidDeltaProvider: LLMProvider {
         modelID _: String,
         parameters _: ModelParameters,
         context _: ProviderInvocationContext
-    ) async throws -> ChatMessage {
-        ChatMessage(role: .assistant, content: "unused")
+    ) async throws -> ProviderResponse {
+        ProviderResponse(text: "unused")
     }
 
     // swiftlint:enable async_without_await
@@ -507,8 +507,8 @@ private actor SlowDeltaProvider: LLMProvider {
         modelID _: String,
         parameters _: ModelParameters,
         context _: ProviderInvocationContext
-    ) async throws -> ChatMessage {
-        ChatMessage(role: .assistant, content: "unused")
+    ) async throws -> ProviderResponse {
+        ProviderResponse(text: "unused")
     }
 
     // swiftlint:enable async_without_await
@@ -564,8 +564,8 @@ private actor SingleBurstProvider: LLMProvider {
         modelID _: String,
         parameters _: ModelParameters,
         context _: ProviderInvocationContext
-    ) async throws -> ChatMessage {
-        ChatMessage(role: .assistant, content: "unused")
+    ) async throws -> ProviderResponse {
+        ProviderResponse(text: "unused")
     }
 
     // swiftlint:enable async_without_await
@@ -615,8 +615,8 @@ private actor BurstThenWaitProvider: LLMProvider {
         modelID _: String,
         parameters _: ModelParameters,
         context _: ProviderInvocationContext
-    ) async throws -> ChatMessage {
-        ChatMessage(role: .assistant, content: "unused")
+    ) async throws -> ProviderResponse {
+        ProviderResponse(text: "unused")
     }
 
     // swiftlint:enable async_without_await

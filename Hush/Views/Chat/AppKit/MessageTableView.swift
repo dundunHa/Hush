@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import SwiftUI
 
 // swiftlint:disable file_length type_body_length
 
@@ -9,30 +10,67 @@ private struct ScrollAnchor {
 }
 
 @MainActor
-private final class MessageCopyOverlayButton: NSButton {
+private final class HorizontalLockedClipView: NSClipView {
+    override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
+        var constrained = super.constrainBoundsRect(proposedBounds)
+        constrained.origin.x = 0
+        return constrained
+    }
+}
+
+@MainActor
+private final class VerticalOnlyScrollView: NSScrollView {
+    override func scrollWheel(with event: NSEvent) {
+        let verticalMagnitude = abs(event.scrollingDeltaY)
+        let horizontalMagnitude = abs(event.scrollingDeltaX)
+        guard verticalMagnitude >= horizontalMagnitude else { return }
+        super.scrollWheel(with: event)
+    }
+
+    override func swipe(with _: NSEvent) {}
+
+    override func magnify(with _: NSEvent) {}
+
+    override func rotate(with _: NSEvent) {}
+
+    override func smartMagnify(with _: NSEvent) {}
+}
+
+@MainActor
+private final class MessageActionOverlayButton: NSButton {
+    var themePalette: HushThemePalette = HushColors.palette(for: .dark) {
+        didSet { updateVisualState() }
+    }
+
     private var resetTask: Task<Void, Never>?
     private var isHovered = false
     private var isCopied = false
     private var trackingArea: NSTrackingArea?
 
     private static let symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
-    private static let copyImage: NSImage = .init(
-        systemSymbolName: "doc.on.doc",
-        accessibilityDescription: "Copy"
-    )?.withSymbolConfiguration(symbolConfiguration) ?? NSImage()
-    private static let copiedImage: NSImage = .init(
-        systemSymbolName: "checkmark",
-        accessibilityDescription: "Copied"
-    )?.withSymbolConfiguration(symbolConfiguration) ?? NSImage()
+    private let defaultImage: NSImage
+    private let copiedImage: NSImage
+    private let defaultToolTip: String
+    private let copiedToolTip: String
 
-    override init(frame frameRect: NSRect) {
+    init(
+        frame frameRect: NSRect,
+        defaultSymbolName: String,
+        copiedSymbolName: String = "checkmark",
+        defaultToolTip: String,
+        copiedToolTip: String
+    ) {
+        defaultImage = Self.makeSymbol(named: defaultSymbolName, description: defaultToolTip)
+        copiedImage = Self.makeSymbol(named: copiedSymbolName, description: copiedToolTip)
+        self.defaultToolTip = defaultToolTip
+        self.copiedToolTip = copiedToolTip
         super.init(frame: frameRect)
 
         isBordered = false
         bezelStyle = .shadowlessSquare
-        image = Self.copyImage
+        image = defaultImage
         imagePosition = .imageOnly
-        toolTip = "Copy message"
+        toolTip = defaultToolTip
         focusRingType = .none
 
         wantsLayer = true
@@ -103,15 +141,20 @@ private final class MessageCopyOverlayButton: NSButton {
     }
 
     private func updateVisualState() {
-        image = isCopied ? Self.copiedImage : Self.copyImage
+        image = isCopied ? copiedImage : defaultImage
+        toolTip = isCopied ? copiedToolTip : defaultToolTip
         contentTintColor = isCopied
-            ? NSColor.systemGreen
-            : (isHovered ? NSColor.labelColor : NSColor.secondaryLabelColor)
+            ? NSColor(themePalette.successText)
+            : (isHovered ? NSColor(themePalette.controlForeground) : NSColor(themePalette.controlForegroundMuted))
+        layer?.backgroundColor = NSColor(isHovered ? themePalette.hoverFill : themePalette.softFillStrong).cgColor
+        layer?.borderColor = NSColor(isHovered ? themePalette.hoverStroke : themePalette.subtleStroke).cgColor
+    }
 
-        let backgroundAlpha: CGFloat = isHovered ? 0.14 : 0.10
-        let borderAlpha: CGFloat = isHovered ? 0.22 : 0.16
-        layer?.backgroundColor = NSColor.white.withAlphaComponent(backgroundAlpha).cgColor
-        layer?.borderColor = NSColor.white.withAlphaComponent(borderAlpha).cgColor
+    private static func makeSymbol(named name: String, description: String) -> NSImage {
+        NSImage(
+            systemSymbolName: name,
+            accessibilityDescription: description
+        )?.withSymbolConfiguration(symbolConfiguration) ?? NSImage()
     }
 }
 
@@ -139,12 +182,14 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         }
     #endif
 
-    private let scrollView = NSScrollView()
+    private let scrollView = VerticalOnlyScrollView()
     let tableView = NSTableView()
 
     var rows: [RowModel] = []
     private var runtime: MessageRenderRuntime?
     private weak var container: AppContainer?
+    private var theme: AppTheme = .dark
+    private var fontSettings: AppFontSettings = .default
     private var lastGeneration: UInt64?
     private var tailFollowState = TailFollowState()
     private let tailFollowConfig = TailFollowConfig()
@@ -194,6 +239,14 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         // swiftlint:enable identifier_name
     #endif
 
+    private var palette: HushThemePalette {
+        HushColors.palette(for: theme)
+    }
+
+    private var renderStyle: RenderStyle {
+        RenderStyle.fromPalette(palette, fontSettings: fontSettings)
+    }
+
     var userHasScrolledUp: Bool {
         get { !tailFollowState.isFollowingTail }
         set { tailFollowState.isFollowingTail = !newValue }
@@ -202,6 +255,10 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
+
+        let clipView = HorizontalLockedClipView()
+        clipView.drawsBackground = false
+        scrollView.contentView = clipView
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("message"))
         column.resizingMask = .autoresizingMask
@@ -222,6 +279,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         scrollView.drawsBackground = false
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: HushSpacing.lg, right: 0)
+        scrollView.horizontalScrollElasticity = .none
         scrollView.verticalScrollElasticity = .none
         scrollView.borderType = .noBorder
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -306,7 +364,11 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     override func layout() {
         super.layout()
         guard tableView.numberOfColumns > 0 else { return }
-        tableView.tableColumns[0].width = max(1, bounds.width)
+        let targetWidth = max(1, bounds.width.rounded(.down))
+        let currentWidth = tableView.tableColumns[0].width
+        if abs(currentWidth - targetWidth) > 0.5 {
+            tableView.tableColumns[0].width = targetWidth
+        }
 
         let newHeight = bounds.height
         defer { lastLayoutHeight = newHeight }
@@ -322,7 +384,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
                 guard let self, self.pendingShrinkScroll else { return }
                 self.pendingShrinkScroll = false
                 guard !self.userHasScrolledUp, !self.rows.isEmpty else { return }
-                self.layoutSubtreeIfNeeded()
                 self.performScrollToBottom(animated: false, reason: .resizeShrink)
                 #if DEBUG
                     self.scrollToBottomCountForTesting += 1
@@ -337,11 +398,15 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         activeConversationID: String?,
         isActiveConversationSending: Bool,
         switchGeneration: UInt64,
+        theme: AppTheme,
         runtime: MessageRenderRuntime,
-        container: AppContainer
+        container: AppContainer,
+        forceFullReload: Bool = false
     ) {
         self.runtime = runtime
         self.container = container
+        self.theme = theme
+        fontSettings = container.settings.fontSettings
 
         let previousRows = rows
         let oldCount = previousRows.count
@@ -401,7 +466,8 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
             previousRows: previousRows,
             newRows: newRows,
             generationChanged: generationChanged,
-            didPrependOlder: didPrependOlder
+            didPrependOlder: didPrependOlder,
+            forceFullReload: forceFullReload
         )
         rows = newRows
 
@@ -423,7 +489,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         if !assistantMessages.isEmpty {
             let targetAssistants = assistantMessages.suffix(RenderConstants.switchPriorityRenderCount)
             if !targetAssistants.isEmpty {
-                let style = RenderStyle.fromTheme()
+                let style = renderStyle
                 let availableWidth = effectiveAvailableWidth()
                 let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
                 var hits = 0
@@ -510,6 +576,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
                 row: rows[row],
                 runtime: runtime,
                 availableWidth: availableWidth,
+                theme: theme,
                 container: container,
                 owningTableView: tableView,
                 rowIndex: row,
@@ -523,8 +590,10 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         previousRows: [RowModel],
         newRows: [RowModel],
         generationChanged: Bool,
-        didPrependOlder: Bool
+        didPrependOlder: Bool,
+        forceFullReload: Bool
     ) -> ApplyUpdateMode {
+        guard !forceFullReload else { return .fullReload }
         guard !generationChanged else { return .fullReload }
         guard !didPrependOlder else { return .fullReload }
 
@@ -536,25 +605,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         }
 
         if newCount == oldCount {
-            guard newCount > 0 else { return .fullReload }
-
-            let stableIDs = zip(previousRows, newRows).allSatisfy { lhs, rhs in
-                lhs.message.id == rhs.message.id
-            }
-            guard stableIDs else { return .fullReload }
-
-            let oldLast = previousRows[newCount - 1]
-            let newLast = newRows[newCount - 1]
-            let wasOrIsStreaming = oldLast.isStreaming || newLast.isStreaming
-            if wasOrIsStreaming,
-               oldLast.message.id == newLast.message.id,
-               oldLast.message.content != newLast.message.content
-               || oldLast.isStreaming != newLast.isStreaming
-            {
-                return .streamingRefresh(row: newCount - 1)
-            }
-
-            return .noOp
+            return resolveSameCountUpdate(previousRows: previousRows, newRows: newRows)
         }
 
         // newCount > oldCount
@@ -566,6 +617,42 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         guard isSafeAppend else { return .fullReload }
 
         return .appendInsert(startIndex: oldCount, count: newCount - oldCount)
+    }
+
+    private func resolveSameCountUpdate(
+        previousRows: [RowModel],
+        newRows: [RowModel]
+    ) -> ApplyUpdateMode {
+        let count = newRows.count
+        guard count > 0 else { return .fullReload }
+
+        let stableIDs = zip(previousRows, newRows).allSatisfy { lhs, rhs in
+            lhs.message.id == rhs.message.id
+        }
+        guard stableIDs else { return .fullReload }
+
+        let oldLast = previousRows[count - 1]
+        let newLast = newRows[count - 1]
+        let wasOrIsStreaming = oldLast.isStreaming || newLast.isStreaming
+        if oldLast.message.id == newLast.message.id,
+           oldLast.message.attachments != newLast.message.attachments
+        {
+            return .streamingRefresh(row: count - 1)
+        }
+        if oldLast.message.id == newLast.message.id,
+           oldLast.message.debugInfoJSON != newLast.message.debugInfoJSON
+        {
+            return .streamingRefresh(row: count - 1)
+        }
+        if wasOrIsStreaming,
+           oldLast.message.id == newLast.message.id,
+           oldLast.message.content != newLast.message.content
+           || oldLast.isStreaming != newLast.isStreaming
+        {
+            return .streamingRefresh(row: count - 1)
+        }
+
+        return .noOp
     }
 
     private func applyTableUpdate(mode: ApplyUpdateMode) {
@@ -752,9 +839,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         guard let pendingAnchor = pendingScrollAnchorRestore else { return }
         pendingScrollAnchorRestore = nil
 
-        tableView.layoutSubtreeIfNeeded()
-        scrollView.layoutSubtreeIfNeeded()
-
         let visibleRows = tableView.rows(in: tableView.visibleRect)
         guard visibleRows.length > 0 else { return }
         guard visibleRows.location != NSNotFound else { return }
@@ -813,9 +897,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         let invalidated = pendingRowHeightInvalidations
         pendingRowHeightInvalidations = []
 
-        tableView.layoutSubtreeIfNeeded()
-        scrollView.layoutSubtreeIfNeeded()
-
         let anchor = userHasScrolledUp ? captureScrollAnchor(rowModels: rows) : nil
         tableView.noteHeightOfRows(withIndexesChanged: invalidated)
         if let anchor {
@@ -832,9 +913,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
 
         let invalidated = pendingPinnedRowHeightInvalidations
         pendingPinnedRowHeightInvalidations = []
-
-        tableView.layoutSubtreeIfNeeded()
-        scrollView.layoutSubtreeIfNeeded()
 
         let anchor = userHasScrolledUp ? captureScrollAnchor(rowModels: rows) : nil
         tableView.noteHeightOfRows(withIndexesChanged: invalidated)
@@ -944,7 +1022,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     }
 
     private func performCoalescedScrollToBottom() {
-        layoutSubtreeIfNeeded()
         scrollToBottom()
     }
 
@@ -952,7 +1029,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         guard let documentView = scrollView.documentView else { return }
         let maxY = max(0, documentView.frame.height - scrollView.contentView.bounds.height)
         let target = NSPoint(
-            x: scrollView.contentView.bounds.origin.x,
+            x: 0,
             y: min(max(0, y), maxY)
         )
         scrollView.contentView.scroll(to: target)
@@ -1003,9 +1080,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
             guard let pendingAnchor = self.pendingScrollAnchorRestore else { return }
             self.pendingScrollAnchorRestore = nil
 
-            self.tableView.layoutSubtreeIfNeeded()
-            self.scrollView.layoutSubtreeIfNeeded()
-
             let visibleRows = self.tableView.rows(in: self.tableView.visibleRect)
             guard visibleRows.length > 0 else { return }
             guard visibleRows.location != NSNotFound else { return }
@@ -1030,8 +1104,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         guard now.timeIntervalSince(lastOlderLoadTriggerAt) >= olderLoadThrottleInterval else { return }
         lastOlderLoadTriggerAt = now
 
-        Task { [weak self] in
-            guard let self else { return }
+        Task { [container] in
             _ = await container.loadOlderMessagesIfNeeded()
         }
     }
@@ -1039,9 +1112,6 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     private func restoreScroll(anchor: ScrollAnchor) {
         guard let newIndex = rows.firstIndex(where: { $0.message.id == anchor.messageID }) else { return }
         guard newIndex >= 0, newIndex < tableView.numberOfRows else { return }
-
-        tableView.layoutSubtreeIfNeeded()
-        scrollView.layoutSubtreeIfNeeded()
 
         _ = TailFollow.reduce(
             state: &tailFollowState,
@@ -1101,7 +1171,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         let indices = lookaheadIndices(visibleRows: visibleRows)
         guard !indices.isEmpty else { return [] }
 
-        let style = RenderStyle.fromTheme()
+        let style = renderStyle
         let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
         var candidates: [PrewarmCandidate] = []
         candidates.reserveCapacity(min(indices.count, lookaheadPrewarmMaxBatch))
@@ -1185,6 +1255,13 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
 }
 
 final class MessageBodyTextView: NSTextView {
+    var themePalette: HushThemePalette = HushColors.palette(for: .dark) {
+        didSet {
+            codeBlockCopyButtons.forEach { $0.themePalette = themePalette }
+            needsDisplay = true
+        }
+    }
+
     private struct CodeBlockDescriptor {
         let containerRange: NSRange
         let contentRange: NSRange
@@ -1214,6 +1291,10 @@ final class MessageBodyTextView: NSTextView {
     }
 
     private final class CodeBlockCopyButton: NSButton {
+        var themePalette: HushThemePalette = HushColors.palette(for: .dark) {
+            didSet { updateVisualState() }
+        }
+
         private weak var sourceTextView: NSTextView?
         private var contentRange: NSRange = .init(location: 0, length: 0)
         private var resetTask: Task<Void, Never>?
@@ -1318,13 +1399,10 @@ final class MessageBodyTextView: NSTextView {
         private func updateVisualState() {
             image = isCopied ? Self.copiedImage : Self.copyImage
             contentTintColor = isCopied
-                ? NSColor.systemGreen
-                : (isHovered ? NSColor.labelColor : NSColor.secondaryLabelColor)
-
-            let backgroundAlpha: CGFloat = isHovered ? 0.14 : 0.10
-            let borderAlpha: CGFloat = isHovered ? 0.22 : 0.16
-            layer?.backgroundColor = NSColor.white.withAlphaComponent(backgroundAlpha).cgColor
-            layer?.borderColor = NSColor.white.withAlphaComponent(borderAlpha).cgColor
+                ? NSColor(themePalette.successText)
+                : (isHovered ? NSColor(themePalette.controlForeground) : NSColor(themePalette.controlForegroundMuted))
+            layer?.backgroundColor = NSColor(isHovered ? themePalette.hoverFill : themePalette.softFillStrong).cgColor
+            layer?.borderColor = NSColor(isHovered ? themePalette.hoverStroke : themePalette.subtleStroke).cgColor
         }
     }
 
@@ -1356,9 +1434,9 @@ final class MessageBodyTextView: NSTextView {
         isSelectable = true
         isRichText = true
         importsGraphics = true
-        // Our renderer already emits dark-theme colors (e.g. white body text).
-        // Adaptive color mapping would treat those as "light-mode colors" and remap them,
-        // causing inconsistent/dim output in the transcript.
+        // Our renderer already emits theme-aware colors directly.
+        // Adaptive color mapping would remap those authored colors again,
+        // causing inconsistent transcript output after theme switches.
         usesAdaptiveColorMappingForDarkAppearance = false
         allowsUndo = false
 
@@ -1382,8 +1460,9 @@ final class MessageBodyTextView: NSTextView {
         guard let textContainer else { return }
         guard bounds.width > 0 else { return }
 
-        let nextSize = NSSize(width: bounds.width, height: CGFloat.greatestFiniteMagnitude)
-        if textContainer.containerSize.width != nextSize.width {
+        let targetWidth = max(1, bounds.width.rounded(.down))
+        let nextSize = NSSize(width: targetWidth, height: CGFloat.greatestFiniteMagnitude)
+        if abs(textContainer.containerSize.width - nextSize.width) > 0.5 {
             textContainer.containerSize = nextSize
             cachedIntrinsicHeight = nil
         }
@@ -1442,8 +1521,19 @@ final class MessageBodyTextView: NSTextView {
     }
 
     override func scrollWheel(with event: NSEvent) {
+        let verticalMagnitude = abs(event.scrollingDeltaY)
+        let horizontalMagnitude = abs(event.scrollingDeltaX)
+        guard verticalMagnitude >= horizontalMagnitude else { return }
         nextResponder?.scrollWheel(with: event)
     }
+
+    override func magnify(with _: NSEvent) {}
+
+    override func rotate(with _: NSEvent) {}
+
+    override func smartMagnify(with _: NSEvent) {}
+
+    override func swipe(with _: NSEvent) {}
 
     private func scanCodeBlockDescriptors() -> [CodeBlockDescriptor] {
         guard let textStorage else { return [] }
@@ -1480,6 +1570,7 @@ final class MessageBodyTextView: NSTextView {
         }
         while codeBlockCopyButtons.count < codeBlockDescriptors.count {
             let button = CodeBlockCopyButton(frame: .zero)
+            button.themePalette = themePalette
             codeBlockCopyButtons.append(button)
             addSubview(button)
         }
@@ -1607,9 +1698,9 @@ final class MessageBodyTextView: NSTextView {
     private func drawCodeBlockBackgrounds(in dirtyRect: NSRect) {
         guard !codeBlockLayouts.isEmpty else { return }
 
-        let fillColor = NSColor.white.withAlphaComponent(0.10)
-        let borderColor = NSColor.white.withAlphaComponent(0.16)
-        let separatorColor = NSColor.white.withAlphaComponent(0.12)
+        let fillColor = NSColor(themePalette.codeBlockBackground)
+        let borderColor = NSColor(themePalette.codeBlockBorder)
+        let separatorColor = NSColor(themePalette.codeBlockSeparator)
 
         for layout in codeBlockLayouts where layout.backgroundFrame.intersects(dirtyRect) {
             let fillPath = NSBezierPath(
@@ -1660,32 +1751,55 @@ final class MessageTableCellView: NSTableCellView {
     private struct RenderInputFingerprint: Equatable {
         let messageID: UUID
         let contentHash: Int
+        let attachmentHash: Int
+        let debugInfoHash: Int
         let generation: UInt64
         let isStreaming: Bool
         let contentWidth: Int
         let styleKey: Int
     }
 
-    private static let sharedRenderStyle = RenderStyle.fromTheme()
-
+    private let contentContainer = NSView()
     private let metaLabel = NSTextField(labelWithString: "")
     private let bodyTextView = MessageBodyTextView()
-    private let copyButton = MessageCopyOverlayButton(frame: .zero)
+    private let attachmentPreviewView = MessageAttachmentPreviewView()
+    private let debugButton = MessageActionOverlayButton(
+        frame: .zero,
+        defaultSymbolName: "ladybug",
+        defaultToolTip: "Copy debug details",
+        copiedToolTip: "Debug copied"
+    )
+    private let copyButton = MessageActionOverlayButton(
+        frame: .zero,
+        defaultSymbolName: "doc.on.doc",
+        defaultToolTip: "Copy message",
+        copiedToolTip: "Copied"
+    )
     private weak var owningTableView: NSTableView?
     private weak var messageTableView: MessageTableView?
     private var hoverTrackingArea: NSTrackingArea?
     private var isMouseHovering = false
-    private var metaLeadingConstraint: NSLayoutConstraint!
-    private var metaTrailingConstraint: NSLayoutConstraint!
-    private var bodyLeadingConstraint: NSLayoutConstraint!
-    private var bodyTrailingConstraint: NSLayoutConstraint!
     private var bodyBottomWithoutActionBar: NSLayoutConstraint!
-    private var bodyBottomWithActionBar: NSLayoutConstraint!
+    private var copyButtonTopToBodyConstraint: NSLayoutConstraint!
+    private var copyButtonTopToPreviewConstraint: NSLayoutConstraint!
     private var copyButtonBottomConstraint: NSLayoutConstraint!
     private var copyButtonHeightConstraint: NSLayoutConstraint!
-    private var copyButtonLeadingConstraint: NSLayoutConstraint!
+    private var copyButtonLeadingToBodyConstraint: NSLayoutConstraint!
+    private var copyButtonLeadingToDebugConstraint: NSLayoutConstraint!
     private var copyButtonWidthConstraint: NSLayoutConstraint!
+    private var debugButtonTopToBodyConstraint: NSLayoutConstraint!
+    private var debugButtonTopToPreviewConstraint: NSLayoutConstraint!
+    private var debugButtonBottomConstraint: NSLayoutConstraint!
+    private var debugButtonHeightConstraint: NSLayoutConstraint!
+    private var debugButtonLeadingConstraint: NSLayoutConstraint!
+    private var debugButtonWidthConstraint: NSLayoutConstraint!
+    private var previewTopConstraint: NSLayoutConstraint!
+    private var previewLeadingConstraint: NSLayoutConstraint!
+    private var previewTrailingConstraint: NSLayoutConstraint!
+    private var previewBottomConstraint: NSLayoutConstraint!
     private var isActionBarActive = false
+    private var isPreviewVisible = false
+    private var isDebugButtonVisible = false
     private var renderController: RenderController?
     private var outputObservation: AnyCancellable?
     private weak var container: AppContainer?
@@ -1696,10 +1810,40 @@ final class MessageTableCellView: NSTableCellView {
     private var streamingDisplayedLength: Int = 0
     private var currentContentWidth: CGFloat = 0
     private var isShowingStreamingRichOutput = false
-    private static let plainTextAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
-        .foregroundColor: NSColor.labelColor
-    ]
+    private var theme: AppTheme = .dark {
+        didSet {
+            metaLabel.textColor = NSColor(palette.secondaryText)
+            bodyTextView.themePalette = palette
+            debugButton.themePalette = palette
+            copyButton.themePalette = palette
+        }
+    }
+
+    private var fontSettings: AppFontSettings = .default {
+        didSet {
+            metaLabel.font = HushFontResolver.contentFont(
+                settings: fontSettings,
+                referenceSize: 11,
+                weight: .semibold
+            )
+        }
+    }
+
+    private var palette: HushThemePalette {
+        HushColors.palette(for: theme)
+    }
+
+    private var renderStyle: RenderStyle {
+        RenderStyle.fromPalette(palette, fontSettings: fontSettings)
+    }
+
+    private var plainTextAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: HushFontResolver.contentFont(settings: fontSettings, referenceSize: 14),
+            .foregroundColor: NSColor(palette.primaryText)
+        ]
+    }
+
     #if DEBUG
         // swiftlint:disable identifier_name
         private(set) var renderRequestCountForTesting = 0
@@ -1713,40 +1857,104 @@ final class MessageTableCellView: NSTableCellView {
         self.identifier = identifier
         translatesAutoresizingMaskIntoConstraints = false
 
-        metaLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        metaLabel.textColor = NSColor.secondaryLabelColor
+        contentContainer.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(contentContainer)
+
+        let maxContentWidth = HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+        let fillLeading = contentContainer.leadingAnchor.constraint(equalTo: leadingAnchor)
+        fillLeading.priority = .defaultHigh
+        let fillTrailing = contentContainer.trailingAnchor.constraint(equalTo: trailingAnchor)
+        fillTrailing.priority = .defaultHigh
+        let preferredWidth = contentContainer.widthAnchor.constraint(equalToConstant: maxContentWidth)
+        preferredWidth.priority = .defaultHigh
+
+        NSLayoutConstraint.activate([
+            contentContainer.topAnchor.constraint(equalTo: topAnchor),
+            contentContainer.bottomAnchor.constraint(equalTo: bottomAnchor),
+            contentContainer.centerXAnchor.constraint(equalTo: centerXAnchor),
+            contentContainer.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor),
+            contentContainer.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+            contentContainer.widthAnchor.constraint(lessThanOrEqualToConstant: maxContentWidth),
+            fillLeading,
+            fillTrailing,
+            preferredWidth
+        ])
+
+        metaLabel.font = HushFontResolver.contentFont(
+            settings: fontSettings,
+            referenceSize: 11,
+            weight: .semibold
+        )
+        metaLabel.textColor = NSColor(palette.secondaryText)
         metaLabel.translatesAutoresizingMaskIntoConstraints = false
 
         bodyTextView.translatesAutoresizingMaskIntoConstraints = false
         bodyTextView.setContentCompressionResistancePriority(.required, for: .vertical)
         bodyTextView.setContentHuggingPriority(.required, for: .vertical)
 
-        addSubview(metaLabel)
-        addSubview(bodyTextView)
+        contentContainer.addSubview(metaLabel)
+        contentContainer.addSubview(bodyTextView)
+        attachmentPreviewView.translatesAutoresizingMaskIntoConstraints = false
+        attachmentPreviewView.isHidden = true
+        contentContainer.addSubview(attachmentPreviewView)
+
+        debugButton.translatesAutoresizingMaskIntoConstraints = false
+        debugButton.alphaValue = 0
+        debugButton.isHidden = true
+        debugButton.target = self
+        debugButton.action = #selector(handleDebugButtonPressed)
+        contentContainer.addSubview(debugButton)
 
         copyButton.translatesAutoresizingMaskIntoConstraints = false
         copyButton.alphaValue = 0
         copyButton.isHidden = true
         copyButton.target = self
         copyButton.action = #selector(handleCopyButtonPressed)
-        addSubview(copyButton)
+        contentContainer.addSubview(copyButton)
 
-        metaLeadingConstraint = metaLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: HushSpacing.xl)
-        metaTrailingConstraint = metaLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -HushSpacing.xl)
-        bodyLeadingConstraint = bodyTextView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: HushSpacing.xl)
-        bodyTrailingConstraint = bodyTextView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -HushSpacing.xl)
-
-        bodyBottomWithoutActionBar = bodyTextView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -HushSpacing.sm)
-        bodyBottomWithActionBar = copyButton.topAnchor.constraint(equalTo: bodyTextView.bottomAnchor, constant: HushSpacing.sm)
-        copyButtonBottomConstraint = copyButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -HushSpacing.sm)
+        bodyBottomWithoutActionBar = bodyTextView.bottomAnchor.constraint(
+            equalTo: contentContainer.bottomAnchor,
+            constant: -HushSpacing.sm
+        )
+        previewTopConstraint = attachmentPreviewView.topAnchor.constraint(equalTo: bodyTextView.bottomAnchor, constant: HushSpacing.sm)
+        previewLeadingConstraint = attachmentPreviewView.leadingAnchor.constraint(equalTo: bodyTextView.leadingAnchor)
+        previewTrailingConstraint = attachmentPreviewView.trailingAnchor.constraint(equalTo: bodyTextView.trailingAnchor)
+        previewBottomConstraint = attachmentPreviewView.bottomAnchor.constraint(
+            equalTo: contentContainer.bottomAnchor,
+            constant: -HushSpacing.sm
+        )
+        debugButtonTopToBodyConstraint = debugButton.topAnchor.constraint(equalTo: bodyTextView.bottomAnchor, constant: HushSpacing.sm)
+        debugButtonTopToPreviewConstraint = debugButton.topAnchor.constraint(
+            equalTo: attachmentPreviewView.bottomAnchor,
+            constant: HushSpacing.sm
+        )
+        debugButtonBottomConstraint = debugButton.bottomAnchor.constraint(
+            equalTo: contentContainer.bottomAnchor,
+            constant: -HushSpacing.sm
+        )
+        debugButtonHeightConstraint = debugButton.heightAnchor.constraint(equalToConstant: HushSpacing.xl)
+        debugButtonLeadingConstraint = debugButton.leadingAnchor.constraint(equalTo: bodyTextView.leadingAnchor)
+        debugButtonWidthConstraint = debugButton.widthAnchor.constraint(equalToConstant: HushSpacing.xl)
+        copyButtonTopToBodyConstraint = copyButton.topAnchor.constraint(equalTo: bodyTextView.bottomAnchor, constant: HushSpacing.sm)
+        copyButtonTopToPreviewConstraint = copyButton.topAnchor.constraint(
+            equalTo: attachmentPreviewView.bottomAnchor,
+            constant: HushSpacing.sm
+        )
+        copyButtonBottomConstraint = copyButton.bottomAnchor.constraint(
+            equalTo: contentContainer.bottomAnchor,
+            constant: -HushSpacing.sm
+        )
         copyButtonHeightConstraint = copyButton.heightAnchor.constraint(equalToConstant: HushSpacing.xl)
-        copyButtonLeadingConstraint = copyButton.leadingAnchor.constraint(equalTo: bodyTextView.leadingAnchor)
+        copyButtonLeadingToBodyConstraint = copyButton.leadingAnchor.constraint(equalTo: bodyTextView.leadingAnchor)
+        copyButtonLeadingToDebugConstraint = copyButton.leadingAnchor.constraint(equalTo: debugButton.trailingAnchor, constant: HushSpacing.xs)
         copyButtonWidthConstraint = copyButton.widthAnchor.constraint(equalToConstant: HushSpacing.xl)
 
         NSLayoutConstraint.activate([
-            metaLeadingConstraint, metaTrailingConstraint,
-            metaLabel.topAnchor.constraint(equalTo: topAnchor, constant: HushSpacing.sm),
-            bodyLeadingConstraint, bodyTrailingConstraint,
+            metaLabel.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor, constant: HushSpacing.xl),
+            metaLabel.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor, constant: -HushSpacing.xl),
+            metaLabel.topAnchor.constraint(equalTo: contentContainer.topAnchor, constant: HushSpacing.sm),
+            bodyTextView.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor, constant: HushSpacing.xl),
+            bodyTextView.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor, constant: -HushSpacing.xl),
             bodyTextView.topAnchor.constraint(equalTo: metaLabel.bottomAnchor, constant: HushSpacing.xs),
             bodyBottomWithoutActionBar
         ])
@@ -1757,15 +1965,23 @@ final class MessageTableCellView: NSTableCellView {
         nil
     }
 
-    override func layout() {
-        let padding = max(HushSpacing.xl, (bounds.width - HushSpacing.chatContentMaxWidth) / 2)
-        if bodyLeadingConstraint.constant != padding {
-            metaLeadingConstraint.constant = padding
-            metaTrailingConstraint.constant = -padding
-            bodyLeadingConstraint.constant = padding
-            bodyTrailingConstraint.constant = -padding
+    override func setFrameSize(_ newSize: NSSize) {
+        let oldWidth = frame.size.width
+        let previousHeight = bodyIntrinsicHeight
+        super.setFrameSize(newSize)
+        if abs(oldWidth - newSize.width) > 0.5 {
+            needsUpdateConstraints = true
+            contentContainer.needsUpdateConstraints = true
+            contentContainer.needsLayout = true
+            needsLayout = true
+            refreshAttachmentPreviewForCurrentWidth(previousHeight: previousHeight)
         }
+    }
+
+    override func layout() {
+        let previousHeight = bodyIntrinsicHeight
         super.layout()
+        refreshAttachmentPreviewForCurrentWidth(previousHeight: previousHeight)
     }
 
     override func prepareForReuse() {
@@ -1780,9 +1996,37 @@ final class MessageTableCellView: NSTableCellView {
         owningTableView = nil
         messageTableView = nil
         isMouseHovering = false
+        NSLayoutConstraint.deactivate([
+            previewTopConstraint,
+            previewLeadingConstraint,
+            previewTrailingConstraint,
+            previewBottomConstraint,
+            debugButtonTopToBodyConstraint,
+            debugButtonTopToPreviewConstraint,
+            debugButtonBottomConstraint,
+            debugButtonHeightConstraint,
+            debugButtonLeadingConstraint,
+            debugButtonWidthConstraint,
+            copyButtonTopToBodyConstraint,
+            copyButtonTopToPreviewConstraint,
+            copyButtonBottomConstraint,
+            copyButtonHeightConstraint,
+            copyButtonLeadingToBodyConstraint,
+            copyButtonLeadingToDebugConstraint,
+            copyButtonWidthConstraint
+        ])
+        bodyBottomWithoutActionBar.isActive = true
+        isActionBarActive = false
+        isDebugButtonVisible = false
+        debugButton.resetState()
+        debugButton.alphaValue = 0
+        debugButton.isHidden = true
         copyButton.resetState()
         copyButton.alphaValue = 0
+        copyButton.isHidden = true
         bodyTextView.setAttributedText(NSAttributedString(), cachedHeight: nil)
+        attachmentPreviewView.reset()
+        isPreviewVisible = false
     }
 
     override func updateTrackingAreas() {
@@ -1805,13 +2049,13 @@ final class MessageTableCellView: NSTableCellView {
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
         isMouseHovering = true
-        if isActionBarActive { setCopyButtonVisible(true, animated: true) }
+        if isActionBarActive { setActionButtonsVisible(true, animated: true) }
     }
 
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         isMouseHovering = false
-        if isActionBarActive { setCopyButtonVisible(false, animated: true) }
+        if isActionBarActive { setActionButtonsVisible(false, animated: true) }
     }
 
     func cancelRenderWork() {
@@ -1832,7 +2076,7 @@ final class MessageTableCellView: NSTableCellView {
     }
 
     var bodyIntrinsicHeight: CGFloat {
-        bodyTextView.intrinsicContentSize.height
+        bodyTextView.intrinsicContentSize.height + attachmentPreviewView.renderedHeight
     }
 
     func updateStreamingText(_ content: String) {
@@ -1861,12 +2105,7 @@ final class MessageTableCellView: NSTableCellView {
         guard let currentRow else { return }
         guard currentRow.message.content != content else { return }
 
-        let updatedMessage = ChatMessage(
-            id: currentRow.message.id,
-            role: currentRow.message.role,
-            content: content,
-            createdAt: currentRow.message.createdAt
-        )
+        let updatedMessage = currentRow.message.updatingContent(content)
         self.currentRow = MessageTableView.RowModel(
             message: updatedMessage,
             isStreaming: currentRow.isStreaming,
@@ -1919,7 +2158,7 @@ final class MessageTableCellView: NSTableCellView {
                 let heightInput = MessageRenderInput(
                     content: activeRow.message.content,
                     availableWidth: contentWidth,
-                    style: Self.sharedRenderStyle,
+                    style: renderStyle,
                     isStreaming: false
                 )
                 cachedHeight = runtime.cachedRowHeight(for: heightInput)
@@ -1960,7 +2199,7 @@ final class MessageTableCellView: NSTableCellView {
         renderController.requestRender(
             content: content,
             availableWidth: currentContentWidth,
-            style: Self.sharedRenderStyle,
+            style: renderStyle,
             isStreaming: true,
             hint: currentRow.renderHint
         )
@@ -1977,7 +2216,7 @@ final class MessageTableCellView: NSTableCellView {
             let delta = String(content.dropFirst(existing.count))
             if !delta.isEmpty {
                 textStorage.beginEditing()
-                textStorage.append(NSAttributedString(string: delta, attributes: Self.plainTextAttributes))
+                textStorage.append(NSAttributedString(string: delta, attributes: plainTextAttributes))
                 textStorage.endEditing()
                 bodyTextView.cachedIntrinsicHeight = nil
                 bodyTextView.finalizeTextMutation()
@@ -1987,7 +2226,7 @@ final class MessageTableCellView: NSTableCellView {
             }
         } else {
             bodyTextView.setAttributedText(
-                NSAttributedString(string: content, attributes: Self.plainTextAttributes),
+                NSAttributedString(string: content, attributes: plainTextAttributes),
                 cachedHeight: nil
             )
             #if DEBUG
@@ -2000,7 +2239,7 @@ final class MessageTableCellView: NSTableCellView {
 
     private func applyPlainText(_ content: String, cachedHeight: CGFloat?) {
         bodyTextView.setAttributedText(
-            NSAttributedString(string: content, attributes: Self.plainTextAttributes),
+            NSAttributedString(string: content, attributes: plainTextAttributes),
             cachedHeight: cachedHeight
         )
     }
@@ -2069,6 +2308,7 @@ final class MessageTableCellView: NSTableCellView {
         row: MessageTableView.RowModel,
         runtime: MessageRenderRuntime,
         availableWidth: CGFloat,
+        theme: AppTheme = .dark,
         container: AppContainer?,
         owningTableView: NSTableView? = nil,
         rowIndex: Int? = nil,
@@ -2078,16 +2318,20 @@ final class MessageTableCellView: NSTableCellView {
         self.messageTableView = messageTableView
         currentRowIndex = rowIndex
         renderRuntime = runtime
+        self.theme = theme
+        fontSettings = container?.settings.fontSettings ?? .default
 
         let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
         currentContentWidth = contentWidth
         let fingerprint = RenderInputFingerprint(
             messageID: row.message.id,
             contentHash: row.message.content.hashValue,
+            attachmentHash: Self.attachmentHash(row.message.attachments),
+            debugInfoHash: row.message.debugInfoJSON?.hashValue ?? 0,
             generation: row.renderHint.switchGeneration,
             isStreaming: row.isStreaming,
             contentWidth: Int(contentWidth.rounded(.down)),
-            styleKey: Self.sharedRenderStyle.cacheKey
+            styleKey: renderStyle.cacheKey
         )
         if fingerprint == lastFingerprint {
             return
@@ -2104,7 +2348,14 @@ final class MessageTableCellView: NSTableCellView {
         bodyTextView.cachedIntrinsicHeight = nil
 
         let shouldShowActionBar = row.message.role == .assistant && !row.isStreaming
-        updateActionBarLayout(showActionBar: shouldShowActionBar)
+        let shouldShowDebugButton = shouldShowActionBar && row.message.debugInfoJSON != nil
+        let renderableAttachment = row.message.attachments.first(where: { $0.kind == .image })
+        updateAttachmentPreview(attachment: renderableAttachment, availableWidth: contentWidth)
+        updateActionBarLayout(
+            showActionBar: shouldShowActionBar,
+            showPreview: renderableAttachment != nil,
+            showDebugButton: shouldShowDebugButton
+        )
 
         guard row.message.role == ChatRole.assistant else {
             applyPlainText(row.message.content, cachedHeight: nil)
@@ -2148,7 +2399,7 @@ final class MessageTableCellView: NSTableCellView {
             let input = MessageRenderInput(
                 content: row.message.content,
                 availableWidth: contentWidth,
-                style: Self.sharedRenderStyle,
+                style: renderStyle,
                 isStreaming: false
             )
             if let cached = runtime.cachedOutput(for: input) {
@@ -2194,53 +2445,172 @@ final class MessageTableCellView: NSTableCellView {
         renderController.requestRender(
             content: row.message.content,
             availableWidth: contentWidth,
-            style: Self.sharedRenderStyle,
+            style: renderStyle,
             isStreaming: false,
             hint: row.renderHint
         )
     }
 
-    private func updateActionBarLayout(showActionBar: Bool) {
-        guard showActionBar != isActionBarActive else { return }
+    private func updateAttachmentPreview(attachment: MessageAttachment?, availableWidth: CGFloat) {
+        guard let attachment else {
+            attachmentPreviewView.reset()
+            return
+        }
+        attachmentPreviewView.configure(
+            attachment: attachment,
+            resolvedURL: container?.resolveURL(for: attachment),
+            availableWidth: availableWidth,
+            palette: palette
+        )
+    }
+
+    private func refreshAttachmentPreviewForCurrentWidth(previousHeight: CGFloat) {
+        guard let row = currentRow,
+              row.message.attachments.contains(where: { $0.kind == .image }),
+              !attachmentPreviewView.isHidden
+        else {
+            return
+        }
+
+        let maxAvailableWidth = HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+        let clampedAvailableWidth = min(bounds.width, maxAvailableWidth)
+        let nextContentWidth = max(1, (clampedAvailableWidth - HushSpacing.xl * 2).rounded(.down))
+        guard abs(nextContentWidth - currentContentWidth) > 0.5 else { return }
+
+        currentContentWidth = nextContentWidth
+        if attachmentPreviewView.updateAvailableWidth(nextContentWidth) {
+            invalidateOwningRowHeightIfNeeded(
+                owningTableView: owningTableView,
+                rowIndex: currentRowIndex,
+                previousHeight: previousHeight,
+                messageTableView: messageTableView
+            )
+        }
+    }
+
+    private func updateActionBarLayout(
+        showActionBar: Bool,
+        showPreview: Bool,
+        showDebugButton: Bool
+    ) {
+        guard showActionBar != isActionBarActive
+            || showPreview != isPreviewVisible
+            || showDebugButton != isDebugButtonVisible
+        else {
+            return
+        }
         isActionBarActive = showActionBar
+        isPreviewVisible = showPreview
+        isDebugButtonVisible = showDebugButton
+
+        NSLayoutConstraint.deactivate([
+            bodyBottomWithoutActionBar,
+            previewTopConstraint,
+            previewLeadingConstraint,
+            previewTrailingConstraint,
+            previewBottomConstraint,
+            debugButtonTopToBodyConstraint,
+            debugButtonTopToPreviewConstraint,
+            debugButtonBottomConstraint,
+            debugButtonHeightConstraint,
+            debugButtonLeadingConstraint,
+            debugButtonWidthConstraint,
+            copyButtonTopToBodyConstraint,
+            copyButtonTopToPreviewConstraint,
+            copyButtonBottomConstraint,
+            copyButtonHeightConstraint,
+            copyButtonLeadingToBodyConstraint,
+            copyButtonLeadingToDebugConstraint,
+            copyButtonWidthConstraint
+        ])
+
+        if showPreview {
+            NSLayoutConstraint.activate([
+                previewTopConstraint,
+                previewLeadingConstraint,
+                previewTrailingConstraint
+            ])
+        }
 
         if showActionBar {
-            bodyBottomWithoutActionBar.isActive = false
-            NSLayoutConstraint.activate([
-                bodyBottomWithActionBar,
-                copyButtonBottomConstraint,
-                copyButtonHeightConstraint,
-                copyButtonLeadingConstraint,
-                copyButtonWidthConstraint
-            ])
+            let debugTopConstraint: NSLayoutConstraint = showPreview ? debugButtonTopToPreviewConstraint : debugButtonTopToBodyConstraint
+            let copyTopConstraint: NSLayoutConstraint = showPreview ? copyButtonTopToPreviewConstraint : copyButtonTopToBodyConstraint
+            if showDebugButton {
+                NSLayoutConstraint.activate([
+                    debugTopConstraint,
+                    debugButtonBottomConstraint,
+                    debugButtonHeightConstraint,
+                    debugButtonLeadingConstraint,
+                    debugButtonWidthConstraint
+                ])
+                NSLayoutConstraint.activate([
+                    copyTopConstraint,
+                    copyButtonBottomConstraint,
+                    copyButtonHeightConstraint,
+                    copyButtonLeadingToDebugConstraint,
+                    copyButtonWidthConstraint
+                ])
+            } else {
+                NSLayoutConstraint.activate([
+                    copyTopConstraint,
+                    copyButtonBottomConstraint,
+                    copyButtonHeightConstraint,
+                    copyButtonLeadingToBodyConstraint,
+                    copyButtonWidthConstraint
+                ])
+            }
+            debugButton.isHidden = !showDebugButton
+            debugButton.alphaValue = showDebugButton && isMouseHovering ? 1 : 0
             copyButton.isHidden = false
             copyButton.alphaValue = isMouseHovering ? 1 : 0
         } else {
-            NSLayoutConstraint.deactivate([
-                bodyBottomWithActionBar,
-                copyButtonBottomConstraint,
-                copyButtonHeightConstraint,
-                copyButtonLeadingConstraint,
-                copyButtonWidthConstraint
-            ])
-            bodyBottomWithoutActionBar.isActive = true
+            if showPreview {
+                previewBottomConstraint.isActive = true
+            } else {
+                bodyBottomWithoutActionBar.isActive = true
+            }
+            debugButton.isHidden = true
+            debugButton.alphaValue = 0
             copyButton.isHidden = true
             copyButton.alphaValue = 0
         }
     }
 
-    private func setCopyButtonVisible(_ isVisible: Bool, animated: Bool) {
+    private func setActionButtonsVisible(_ isVisible: Bool, animated: Bool) {
         let targetAlpha: CGFloat = isVisible ? 1 : 0
-        guard copyButton.alphaValue != targetAlpha else { return }
+
+        let updateAlpha = { [self] in
+            if isDebugButtonVisible {
+                debugButton.alphaValue = targetAlpha
+            }
+            if !copyButton.isHidden {
+                copyButton.alphaValue = targetAlpha
+            }
+        }
 
         if animated {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.12
-                copyButton.animator().alphaValue = targetAlpha
+                if isDebugButtonVisible {
+                    debugButton.animator().alphaValue = targetAlpha
+                }
+                if !copyButton.isHidden {
+                    copyButton.animator().alphaValue = targetAlpha
+                }
             }
         } else {
-            copyButton.alphaValue = targetAlpha
+            updateAlpha()
         }
+    }
+
+    @objc private func handleDebugButtonPressed() {
+        guard let debugInfoJSON = currentRow?.message.debugInfoJSON, !debugInfoJSON.isEmpty else { return }
+
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(debugInfoJSON, forType: .string)
+
+        debugButton.flashCopied()
     }
 
     @objc private func handleCopyButtonPressed() {
@@ -2280,6 +2650,154 @@ final class MessageTableCellView: NSTableCellView {
             return "You"
         }
     }
+
+    private static func attachmentHash(_ attachments: [MessageAttachment]) -> Int {
+        attachments
+            .map {
+                [
+                    $0.id.uuidString,
+                    $0.kind.rawValue,
+                    $0.localRelativePath,
+                    $0.mimeType,
+                    $0.pixelWidth.map(String.init) ?? "",
+                    $0.pixelHeight.map(String.init) ?? "",
+                    $0.sha256,
+                    $0.sourcePrompt,
+                    $0.providerMetadataJSON ?? ""
+                ].joined(separator: "|")
+            }
+            .joined(separator: "::")
+            .hashValue
+    }
+}
+
+@MainActor
+private final class MessageAttachmentPreviewView: NSView {
+    private let imageView = NSImageView()
+    private let placeholderLabel = NSTextField(labelWithString: "Image unavailable")
+    private var heightConstraint: NSLayoutConstraint!
+    private var currentAttachment: MessageAttachment?
+    private var currentResolvedURL: URL?
+    private var currentIntrinsicSize = NSSize(width: 1, height: 1)
+
+    var renderedHeight: CGFloat {
+        isHidden ? 0 : heightConstraint.constant + HushSpacing.sm
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = 16
+        layer?.masksToBounds = true
+        translatesAutoresizingMaskIntoConstraints = false
+
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.imageAlignment = .alignCenter
+
+        placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
+        placeholderLabel.alignment = .center
+        placeholderLabel.isHidden = true
+
+        addSubview(imageView)
+        addSubview(placeholderLabel)
+
+        heightConstraint = heightAnchor.constraint(equalToConstant: 0)
+        heightConstraint.isActive = true
+
+        NSLayoutConstraint.activate([
+            imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            placeholderLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            placeholderLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        nil
+    }
+
+    func configure(
+        attachment: MessageAttachment,
+        resolvedURL: URL?,
+        availableWidth: CGFloat,
+        palette: HushThemePalette
+    ) {
+        layer?.backgroundColor = NSColor(palette.softFillStrong).cgColor
+        layer?.borderColor = NSColor(palette.subtleStroke).cgColor
+        layer?.borderWidth = 1
+        placeholderLabel.textColor = NSColor(palette.secondaryText)
+
+        if currentAttachment != attachment || currentResolvedURL != resolvedURL {
+            let loadedImage = resolvedURL.flatMap { NSImage(contentsOf: $0) }
+            imageView.image = loadedImage
+            let hasImage = loadedImage != nil
+            imageView.isHidden = !hasImage
+            placeholderLabel.isHidden = hasImage
+            currentIntrinsicSize = loadedImage?.size ?? inferredSize(from: attachment)
+            currentAttachment = attachment
+            currentResolvedURL = resolvedURL
+        }
+        isHidden = false
+
+        _ = updateAvailableWidth(availableWidth)
+    }
+
+    @discardableResult
+    func updateAvailableWidth(_ availableWidth: CGFloat) -> Bool {
+        guard !isHidden else { return false }
+        let previousHeight = heightConstraint.constant
+        let targetWidth = max(1, availableWidth.rounded(.down))
+        let nextHeight = Self.displayHeight(for: currentIntrinsicSize, availableWidth: targetWidth)
+        if abs(nextHeight - previousHeight) > 0.5 {
+            heightConstraint.constant = nextHeight
+            return true
+        }
+        return false
+    }
+
+    func reset() {
+        imageView.image = nil
+        imageView.isHidden = true
+        placeholderLabel.isHidden = true
+        heightConstraint.constant = 0
+        currentAttachment = nil
+        currentResolvedURL = nil
+        currentIntrinsicSize = NSSize(width: 1, height: 1)
+        isHidden = true
+    }
+
+    private func inferredSize(from attachment: MessageAttachment) -> NSSize {
+        let width = attachment.pixelWidth.map(CGFloat.init) ?? 1
+        let height = attachment.pixelHeight.map(CGFloat.init) ?? width
+        return NSSize(width: width, height: height)
+    }
+
+    private static func displayHeight(for intrinsicSize: NSSize, availableWidth: CGFloat) -> CGFloat {
+        let maxDisplayWidth = max(1, availableWidth)
+        if intrinsicSize.width > 0, intrinsicSize.height > 0 {
+            let scaledHeight = maxDisplayWidth * intrinsicSize.height / intrinsicSize.width
+            return min(max(120, scaledHeight), 420)
+        }
+        return 240
+    }
+
+    #if DEBUG
+        var hasLoadedImageForTesting: Bool {
+            imageView.image != nil
+        }
+
+        var showsPlaceholderForTesting: Bool {
+            !placeholderLabel.isHidden
+        }
+
+        var renderedHeightForTesting: CGFloat {
+            renderedHeight
+        }
+    #endif
 }
 
 #if DEBUG
@@ -2300,7 +2818,7 @@ final class MessageTableCellView: NSTableCellView {
         func setScrollOriginYForTesting(_ y: CGFloat) {
             guard let documentView = scrollView.documentView else { return }
             let maxY = max(0, documentView.frame.height - scrollView.contentView.bounds.height)
-            let target = NSPoint(x: scrollView.contentView.bounds.origin.x, y: min(max(0, y), maxY))
+            let target = NSPoint(x: 0, y: min(max(0, y), maxY))
             scrollView.contentView.scroll(to: target)
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
@@ -2342,6 +2860,7 @@ final class MessageTableCellView: NSTableCellView {
                 row: rows[row],
                 runtime: runtime,
                 availableWidth: effectiveAvailableWidth(),
+                theme: theme,
                 container: container,
                 owningTableView: tableView,
                 rowIndex: row,
@@ -2389,6 +2908,26 @@ final class MessageTableCellView: NSTableCellView {
 
         var streamingUpdateAssignmentCountForTesting: Int {
             streamingUpdateAssignmentsForTesting
+        }
+
+        var attachmentPreviewVisibleForTesting: Bool {
+            !attachmentPreviewView.isHidden
+        }
+
+        var attachmentPreviewHasImageForTesting: Bool {
+            attachmentPreviewView.hasLoadedImageForTesting
+        }
+
+        var attachmentPreviewShowsPlaceholderForTesting: Bool {
+            attachmentPreviewView.showsPlaceholderForTesting
+        }
+
+        var attachmentPreviewRenderedHeightForTesting: CGFloat {
+            attachmentPreviewView.renderedHeightForTesting
+        }
+
+        var debugButtonVisibleForTesting: Bool {
+            !debugButton.isHidden
         }
         // swiftlint:enable identifier_name
     }

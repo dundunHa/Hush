@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ConversationSidebarView: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushThemePalette) private var palette
     @Binding var showSettings: Bool
 
     var body: some View {
@@ -11,7 +12,12 @@ struct ConversationSidebarView: View {
             threadList
             settingsButton
         }
-        .background(.ultraThinMaterial)
+        .padding(.top, HushSpacing.topBarHeight)
+        .background(palette.sidebarBackground)
+        .background(alignment: .top) {
+            WindowDragArea()
+                .frame(height: HushSpacing.topBarHeight)
+        }
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
@@ -48,7 +54,7 @@ struct ConversationSidebarView: View {
         VStack(alignment: .leading, spacing: HushSpacing.sm) {
             Text("Threads")
                 .font(HushTypography.captionBold)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
                 .padding(.horizontal, 14)
                 .padding(.top, HushSpacing.sm)
 
@@ -109,7 +115,7 @@ struct ConversationSidebarView: View {
         } else if !container.sidebarThreads.isEmpty {
             Text("No more threads")
                 .font(HushTypography.caption)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, HushSpacing.sm)
         }
@@ -140,11 +146,11 @@ struct ConversationSidebarView: View {
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.white.opacity(isSettingsHovered ? 0.06 : 0))
+                        .fill(isSettingsHovered ? palette.hoverFill : .clear)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .stroke(
-                                    isSettingsHovered ? Color.white.opacity(0.12) : .clear,
+                                    isSettingsHovered ? palette.hoverStroke : .clear,
                                     lineWidth: 1
                                 )
                         )
@@ -169,6 +175,7 @@ enum SidebarActivityState: Equatable {
 }
 
 private struct SidebarThreadRow: View {
+    @Environment(\.hushThemePalette) private var palette
     let thread: ConversationSidebarThread
     let isActive: Bool
     let isDisabled: Bool
@@ -196,7 +203,7 @@ private struct SidebarThreadRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(thread.lastActivityAt, style: .time)
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                 }
 
                 trailingAccessory
@@ -283,7 +290,7 @@ private struct SidebarThreadRow: View {
         } label: {
             Image(systemName: archiveConfirmPending ? "archivebox.fill" : "archivebox")
                 .font(.system(size: 13))
-                .foregroundStyle(archiveConfirmPending ? HushColors.badgeQueued : .white.opacity(0.5))
+                .foregroundStyle(archiveConfirmPending ? palette.badgeQueued : palette.tertiaryText)
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
                 .contentTransition(.symbolEffect(.replace))
@@ -311,17 +318,17 @@ private struct SidebarThreadRow: View {
         switch activityState {
         case .running:
             Circle()
-                .fill(HushColors.badgeRunning)
+                .fill(palette.badgeRunning)
                 .frame(width: 8, height: 8)
                 .accessibilityLabel("Generating")
         case .queued:
             Circle()
-                .fill(HushColors.badgeQueued)
+                .fill(palette.badgeQueued)
                 .frame(width: 8, height: 8)
                 .accessibilityLabel("Queued")
         case .unreadCompletion:
             Circle()
-                .fill(HushColors.badgeUnread)
+                .fill(palette.badgeUnread)
                 .frame(width: 8, height: 8)
                 .accessibilityLabel("New response")
         case .idle:
@@ -331,11 +338,11 @@ private struct SidebarThreadRow: View {
 
     private var rowBackground: some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(Color.white.opacity(isActive ? 0.10 : (isHovered ? 0.06 : 0)))
+            .fill(isActive ? palette.selectionFill : (isHovered ? palette.hoverFill : .clear))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(
-                        isActive ? HushColors.subtleStroke : (isHovered ? Color.white.opacity(0.12) : .clear),
+                        isActive ? palette.selectionStroke : (isHovered ? palette.hoverStroke : .clear),
                         lineWidth: 1
                     )
             )
@@ -359,8 +366,13 @@ private struct SidebarThreadRow: View {
                     activeConversationId: "2",
                     sidebarThreads: [
                         ConversationSidebarThread(id: "1", title: "First conversation", lastActivityAt: Date()),
-                        ConversationSidebarThread(id: "2", title: "Second conversation", lastActivityAt: Date().addingTimeInterval(-3600)),
-                        ConversationSidebarThread(id: "3", title: "Third conversation", lastActivityAt: Date().addingTimeInterval(-7200))
+                        ConversationSidebarThread(
+                            id: "2", title: "Second conversation",
+                            lastActivityAt: Date().addingTimeInterval(-3600)
+                        ),
+                        ConversationSidebarThread(
+                            id: "3", title: "Third conversation", lastActivityAt: Date().addingTimeInterval(-7200)
+                        )
                     ]
                 )
             )

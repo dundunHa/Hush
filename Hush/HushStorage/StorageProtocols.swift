@@ -74,6 +74,20 @@ public protocol MessageRepository: Sendable {
     func softDeleteMessages(conversationId: String) throws
 }
 
+// MARK: - Message Asset Store
+
+public protocol MessageAssetStore: Sendable {
+    func materialize(
+        attachments: [ProviderResponseAttachment],
+        conversationId: String,
+        messageId: UUID
+    ) async throws -> [MessageAttachment]
+
+    func deleteAllAssets() async throws
+
+    func url(forRelativePath relativePath: String) -> URL?
+}
+
 // MARK: - Sync Outbox Repository
 
 /// Defines data access operations for the sync outbox.
@@ -93,10 +107,9 @@ public protocol SyncOutboxRepository: Sendable {
 
 // MARK: - Credential Reference Repository
 
-/// Defines data access for non-secret credential references.
-/// Secrets themselves live in Keychain; this stores only the reference key.
+/// Legacy data access for credential references kept for compatibility with older stored data.
 public protocol CredentialReferenceRepository: Sendable {
-    /// Returns the credential reference (Keychain service/account key) for a provider.
+    /// Returns the legacy credential reference for a provider.
     func credentialRef(forProviderID providerID: String) -> String?
 
     /// Stores or updates a credential reference for a provider.

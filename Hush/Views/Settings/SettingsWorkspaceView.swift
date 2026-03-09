@@ -2,8 +2,17 @@ import SwiftUI
 
 struct SettingsWorkspaceView: View {
     @Binding var showSettings: Bool
+    @Environment(\.hushThemePalette) private var themePalette
 
     @State private var selectedTab: SettingsTab = .general
+
+    private var detailPaneTopCornerRadius: CGFloat {
+        min(HushSpacing.splitPaneCornerRadius, HushSpacing.topBarHeight / 2)
+    }
+
+    private var detailPaneBottomCornerRadius: CGFloat {
+        HushSpacing.splitPaneCornerRadius
+    }
 
     private enum SettingsTab: String, CaseIterable {
         case general
@@ -18,25 +27,33 @@ struct SettingsWorkspaceView: View {
         HStack(spacing: 0) {
             sidebar
 
-            Divider()
-                .overlay(HushColors.separator)
+            ZStack {
+                Rectangle()
+                    .fill(themePalette.sidebarBackground)
 
-            switch selectedTab {
-            case .general:
-                GeneralSettingsView()
-            case .provider:
-                ProviderSettingsView()
-            case .agent:
-                AgentSettingsView()
-            case .prompts:
-                PromptLibraryView()
-            case .data:
-                DataSettingsView()
-            case .archived:
-                ArchivedThreadsSettingsView()
+                let shape = UnevenRoundedRectangle(
+                    topLeadingRadius: detailPaneTopCornerRadius,
+                    bottomLeadingRadius: detailPaneBottomCornerRadius,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 0,
+                    style: .continuous
+                )
+
+                settingsDetailPane
+                    .background(themePalette.rootBackground)
+                    .clipShape(shape)
+                    .overlay {
+                        shape
+                            .strokeBorder(themePalette.splitPaneEdgeStroke, lineWidth: 1)
+                            .mask(alignment: .leading) {
+                                Rectangle()
+                                    .frame(width: max(detailPaneTopCornerRadius, detailPaneBottomCornerRadius) + 2)
+                            }
+                    }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(HushColors.rootBackground)
+        .background(themePalette.sidebarBackground)
     }
 
     // MARK: - Sidebar
@@ -55,11 +72,11 @@ struct SettingsWorkspaceView: View {
                     .padding(.vertical, HushSpacing.sm)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.white.opacity(isBackHovered ? 0.06 : 0))
+                            .fill(isBackHovered ? themePalette.hoverFill : .clear)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .stroke(
-                                        isBackHovered ? Color.white.opacity(0.12) : .clear,
+                                        isBackHovered ? themePalette.hoverStroke : .clear,
                                         lineWidth: 1
                                     )
                             )
@@ -122,17 +139,43 @@ struct SettingsWorkspaceView: View {
 
             Spacer(minLength: 0)
         }
+        .padding(.top, HushSpacing.topBarHeight + HushSpacing.lg)
         .padding(.horizontal, HushSpacing.md)
-        .padding(.vertical, HushSpacing.lg)
+        .padding(.bottom, HushSpacing.lg)
         .frame(width: HushSpacing.sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(.ultraThinMaterial)
+        .background(themePalette.sidebarBackground)
+        .background(alignment: .top) {
+            WindowDragArea()
+                .frame(height: HushSpacing.topBarHeight)
+        }
+    }
+
+    private var settingsDetailPane: some View {
+        Group {
+            switch selectedTab {
+            case .general:
+                GeneralSettingsView()
+            case .provider:
+                ProviderSettingsView()
+            case .agent:
+                AgentSettingsView()
+            case .prompts:
+                PromptLibraryView()
+            case .data:
+                DataSettingsView()
+            case .archived:
+                ArchivedThreadsSettingsView()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
 // MARK: - SettingsSidebarItem
 
 private struct SettingsSidebarItem: View {
+    @Environment(\.hushThemePalette) private var themePalette
     let icon: String
     let label: String
     let isSelected: Bool
@@ -145,7 +188,7 @@ private struct SettingsSidebarItem: View {
             HStack(spacing: HushSpacing.sm) {
                 Image(systemName: icon)
                     .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(themePalette.controlForegroundMuted)
                     .frame(width: 20)
 
                 Text(label)
@@ -159,11 +202,11 @@ private struct SettingsSidebarItem: View {
             .padding(.vertical, HushSpacing.sm)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.white.opacity(isSelected ? 0.10 : (isHovered ? 0.06 : 0)))
+                    .fill(isSelected ? themePalette.selectionFill : (isHovered ? themePalette.hoverFill : .clear))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(
-                                isSelected ? HushColors.subtleStroke : (isHovered ? Color.white.opacity(0.12) : .clear),
+                                isSelected ? themePalette.selectionStroke : (isHovered ? themePalette.hoverStroke : .clear),
                                 lineWidth: 1
                             )
                     )
@@ -212,7 +255,7 @@ private struct SettingsSidebarItem: View {
         }
         .padding()
         .frame(width: 200)
-        .background(HushColors.sidebarBackground)
+        .background(HushColors.palette(for: .dark).sidebarBackground)
     }
 
 #endif

@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ChatDetailPane: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushThemePalette) private var palette
+    @State private var isConfigDrawerPresented = false
 
     private enum SwitchOverlayDebug {
         static var isEnabled: Bool {
@@ -20,26 +22,39 @@ struct ChatDetailPane: View {
     }
 
     var body: some View {
-        ZStack {
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
+            ZStack(alignment: .trailing) {
                 HotScenePoolRepresentable()
                     .environmentObject(container)
                     .frame(maxHeight: .infinity)
                     .clipped()
 
-                ComposerDock()
-            }
+                if container.isActiveConversationLoading, container.messages.isEmpty {
+                    loadingOverlay
+                } else if let error = container.activeConversationLoadError {
+                    errorOverlay(message: error)
+                }
 
-            if container.isActiveConversationLoading, container.messages.isEmpty {
-                loadingOverlay
-            } else if let error = container.activeConversationLoadError {
-                errorOverlay(message: error)
-            }
+                if isConfigDrawerPresented {
+                    drawerDismissLayer
+                        .zIndex(1)
+                }
 
-            if SwitchOverlayDebug.isEnabled {
-                switchDebugOverlay
+                if SwitchOverlayDebug.isEnabled {
+                    switchDebugOverlay
+                }
+
+                if isConfigDrawerPresented {
+                    configDrawer
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                        .zIndex(2)
+                }
             }
+            .frame(maxHeight: .infinity)
+
+            ComposerDock(isConfigDrawerPresented: $isConfigDrawerPresented)
         }
+        .animation(.spring(response: 0.24, dampingFraction: 0.9), value: isConfigDrawerPresented)
     }
 
     private var switchDebugOverlay: some View {
@@ -48,15 +63,35 @@ struct ChatDetailPane: View {
                 "messages=\(container.messages.count) " +
                 "loading=\(container.isActiveConversationLoading)"
         )
-        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-        .foregroundStyle(.white.opacity(0.92))
+        .font(HushTypography.monospaced(11, weight: .semibold))
+        .foregroundStyle(palette.debugOverlayForeground)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.black.opacity(0.55), in: Capsule())
+        .background(palette.debugOverlayBackground, in: Capsule())
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .padding(.top, 10)
         .padding(.trailing, 12)
         .allowsHitTesting(false)
+    }
+
+    private var drawerDismissLayer: some View {
+        Rectangle()
+            .fill(.clear)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                isConfigDrawerPresented = false
+            }
+    }
+
+    private var configDrawer: some View {
+        ChatConfigDrawer(
+            parameters: $container.settings.parameters,
+            onClose: {
+                isConfigDrawerPresented = false
+            }
+        )
+        .padding(.vertical, HushSpacing.lg)
+        .padding(.trailing, HushSpacing.lg)
     }
 
     private var loadingOverlay: some View {
@@ -66,14 +101,14 @@ struct ChatDetailPane: View {
 
             Text("Loading thread...")
                 .font(HushTypography.caption)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
         }
         .padding(.horizontal, HushSpacing.xl)
         .padding(.vertical, HushSpacing.lg)
-        .background(HushColors.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(palette.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(HushColors.subtleStroke, lineWidth: 1)
+                .stroke(palette.subtleStroke, lineWidth: 1)
         )
     }
 
@@ -81,11 +116,11 @@ struct ChatDetailPane: View {
         VStack(spacing: HushSpacing.sm) {
             Text("Failed to load thread")
                 .font(HushTypography.captionBold)
-                .foregroundStyle(HushColors.errorText)
+                .foregroundStyle(palette.errorText)
 
             Text(message)
                 .font(HushTypography.caption)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
                 .multilineTextAlignment(.center)
                 .lineLimit(6)
 
@@ -94,23 +129,23 @@ struct ChatDetailPane: View {
             } label: {
                 Text("Retry")
                     .font(HushTypography.captionBold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(palette.primaryActionForeground)
                     .padding(.horizontal, HushSpacing.lg)
                     .padding(.vertical, HushSpacing.sm)
-                    .background(Color.cyan.opacity(0.18), in: Capsule())
+                    .background(palette.primaryActionBackground, in: Capsule())
                     .overlay(
                         Capsule()
-                            .stroke(Color.cyan.opacity(0.35), lineWidth: 1)
+                            .stroke(palette.accentMutedStroke, lineWidth: 1)
                     )
             }
             .buttonStyle(.plain)
         }
         .padding(.horizontal, HushSpacing.xl)
         .padding(.vertical, HushSpacing.lg)
-        .background(HushColors.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(palette.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(HushColors.subtleStroke, lineWidth: 1)
+                .stroke(palette.subtleStroke, lineWidth: 1)
         )
     }
 }

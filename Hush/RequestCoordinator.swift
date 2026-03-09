@@ -11,6 +11,7 @@ final class RequestCoordinator {
     private weak var container: AppContainer?
     private let persistence: ChatPersistenceCoordinator?
     private let credentialResolver: CredentialResolver
+    private let messageAssetStore: (any MessageAssetStore)?
 
     // MARK: - Scheduler State
 
@@ -31,11 +32,13 @@ final class RequestCoordinator {
     init(
         container: AppContainer,
         persistence: ChatPersistenceCoordinator?,
-        credentialResolver: CredentialResolver
+        credentialResolver: CredentialResolver,
+        messageAssetStore: (any MessageAssetStore)?
     ) {
         self.container = container
         self.persistence = persistence
         self.credentialResolver = credentialResolver
+        self.messageAssetStore = messageAssetStore
     }
 
     private var streamingPresentationPolicy: StreamingPresentationPolicy {
@@ -245,7 +248,11 @@ extension RequestCoordinator {
         advanceQueue()
     }
 
-    private func failSession(requestID: RequestID, error: RequestError) {
+    private func failSession(
+        requestID: RequestID,
+        error: RequestError,
+        debugInfoJSON: String? = nil
+    ) {
         guard let container else { return }
         guard let state = container.requestStates[requestID],
               !state.isTerminal else { return }
@@ -266,7 +273,11 @@ extension RequestCoordinator {
             )
         }
 
-        let errorMessage = ChatMessage(role: .assistant, content: "Error: \(errorDescription)")
+        let errorMessage = ChatMessage(
+            role: .assistant,
+            content: "Error: \(errorDescription)",
+            debugInfoJSON: debugInfoJSON
+        )
         container.appendMessage(errorMessage, toConversation: owningConversationId)
         logger.info("[Request] Error message added to chat: \(errorDescription)")
         if !owningConversationId.isEmpty {
@@ -329,7 +340,7 @@ extension RequestCoordinator {
             do {
                 bearerToken = try credentialResolver.resolve(
                     providerID: providerID,
-                    credentialRef: config.credentialRef
+                    apiKey: config.apiKey
                 )
                 logger.info("[Request] Credential resolved successfully")
             } catch let error as CredentialResolutionError {
@@ -371,8 +382,9 @@ extension RequestCoordinator {
         ) else { return }
 
         let preflightTimeout = preflightTimeoutOverride ?? RuntimeConstants.preflightTimeout
+        let modelDescriptor: ModelDescriptor
         do {
-            try await preflightModelValidation(
+            modelDescriptor = try await preflightModelValidation(
                 provider: provider,
                 modelID: snapshot.modelID,
                 providerID: snapshot.providerID,
@@ -398,8 +410,23 @@ extension RequestCoordinator {
 
         guard let reqState = container.requestStates[requestID], !reqState.isTerminal else { return }
         container.requestStates[requestID]?.status = .streaming
+        logger.info(
+            "[Request] Model route decision: model=\(snapshot.modelID), type=\(modelDescriptor.modelType.rawValue), outputs=\(modelDescriptor.supportedOutputs.map(\.rawValue).joined(separator: ","))"
+        )
 
         let contextMessages = messagesForExecution(snapshot: snapshot)
+
+        if modelProducesImageOutput(modelDescriptor) {
+            logger.info("[Request] Routing image-capable model '\(snapshot.modelID)' through provider.send(...)")
+            await executeImageRequest(
+                snapshot: snapshot,
+                provider: provider,
+                modelDescriptor: modelDescriptor,
+                contextMessages: contextMessages,
+                context: invocationContext
+            )
+            return
+        }
 
         let stream = provider.sendStreaming(
             messages: contextMessages,
@@ -417,7 +444,7 @@ extension RequestCoordinator {
         providerID: String,
         providerName: String?,
         settings: PreflightValidationSettings
-    ) async throws {
+    ) async throws -> ModelDescriptor {
         logger.info("[Preflight] Validating model '\(modelID)' for provider '\(providerName ?? providerID)'")
         if let repo = settings.catalogRepository {
             do {
@@ -427,9 +454,9 @@ extension RequestCoordinator {
                 if status.hasUsableCache {
                     let cachedModels = try repo.models(forProviderID: providerID)
                     logger.info("[Preflight] Found \(cachedModels.count) cached models")
-                    if cachedModels.contains(where: { $0.id == modelID }) {
+                    if let model = cachedModels.first(where: { $0.id == modelID }) {
                         logger.info("[Preflight] Model validation passed (from cache)")
-                        return
+                        return model
                     } else {
                         logger.error("[Preflight] Model '\(modelID)' not found in cached models")
                         throw RequestError.modelInvalid(modelID: modelID, providerID: providerID, providerName: providerName)
@@ -446,12 +473,13 @@ extension RequestCoordinator {
             logger.info("[Preflight] No catalog repository, using live validation")
         }
 
-        try await withThrowingTaskGroup(of: Void.self) { group in
+        return try await withThrowingTaskGroup(of: ModelDescriptor.self) { group in
             group.addTask {
                 let models = try await provider.availableModels(context: settings.invocationContext)
-                guard models.contains(where: { $0.id == modelID }) else {
+                guard let model = models.first(where: { $0.id == modelID }) else {
                     throw RequestError.modelInvalid(modelID: modelID, providerID: providerID, providerName: providerName)
                 }
+                return model
             }
             group.addTask { [timeout = settings.timeout] in
                 try await Task.sleep(for: timeout)
@@ -459,8 +487,11 @@ extension RequestCoordinator {
                 let totalSeconds = Double(sec) + Double(atto) * 1e-18
                 throw RequestError.preflightTimeout(seconds: totalSeconds)
             }
-            try await group.next()
+            guard let result = try await group.next() else {
+                throw RequestError.remoteError(provider: providerID, message: "Model preflight produced no result")
+            }
             group.cancelAll()
+            return result
         }
     }
 
@@ -476,9 +507,172 @@ extension RequestCoordinator {
         let catalogRepository: (any ProviderCatalogRepository)?
     }
 
+    private func modelProducesImageOutput(_ descriptor: ModelDescriptor) -> Bool {
+        descriptor.modelType == .image || descriptor.supportedOutputs.contains(.image)
+    }
+
+    private func executeImageRequest(
+        snapshot: QueueItemSnapshot,
+        provider: any LLMProvider,
+        modelDescriptor: ModelDescriptor,
+        contextMessages: [ChatMessage],
+        context: ProviderInvocationContext
+    ) async {
+        guard let container else { return }
+        let requestID = snapshot.id
+        let baseDebugInfo = makeImageRequestDebugInfo(
+            snapshot: snapshot,
+            modelDescriptor: modelDescriptor,
+            context: context
+        )
+
+        let imageTimeout = generationTimeoutOverride ?? RuntimeConstants.imageGenerationTimeout
+        let timeoutTask = makeGenerationTimeoutTask(requestID: requestID, timeout: imageTimeout)
+        defer { timeoutTask.cancel() }
+
+        let imageTimeoutSec = durationSeconds(imageTimeout)
+        logger.info("[Image] Starting image generation: model=\(snapshot.modelID), timeout=\(imageTimeoutSec)s")
+        let startTime = ContinuousClock.now
+
+        do {
+            let response = try await provider.send(
+                messages: contextMessages,
+                modelID: snapshot.modelID,
+                parameters: snapshot.parameters,
+                context: context
+            )
+
+            guard let state = container.requestStates[requestID], !state.isTerminal else { return }
+
+            let providerElapsed = ContinuousClock.now - startTime
+            logger.info("[Image] Provider responded: text=\(response.text.prefix(50)), attachments=\(response.attachments.count), elapsed=\(providerElapsed)")
+
+            let attachments: [MessageAttachment]
+            let assistantMessageID = UUID()
+            if response.attachments.isEmpty {
+                attachments = []
+            } else if let messageAssetStore {
+                attachments = try await messageAssetStore.materialize(
+                    attachments: response.attachments,
+                    conversationId: snapshot.conversationId,
+                    messageId: assistantMessageID
+                )
+                logger.info("[Image] Assets materialized: \(attachments.count) attachment(s) persisted locally")
+            } else {
+                throw RequestError.remoteError(
+                    provider: snapshot.providerID,
+                    message: "Image assets could not be persisted locally"
+                )
+            }
+
+            guard !attachments.isEmpty else {
+                throw RequestError.remoteError(
+                    provider: snapshot.providerID,
+                    message: "Image generation did not produce a renderable attachment"
+                )
+            }
+
+            let assistantMessage = ChatMessage(
+                id: assistantMessageID,
+                role: .assistant,
+                content: response.text.isEmpty ? "Generated image." : response.text,
+                attachments: attachments
+            )
+            container.requestStates[requestID]?.assistantMessageID = assistantMessage.id
+            container.appendMessage(assistantMessage, toConversation: snapshot.conversationId)
+
+            if !snapshot.conversationId.isEmpty {
+                try persistence?.persistSystemMessage(
+                    assistantMessage,
+                    conversationId: snapshot.conversationId,
+                    status: .completed
+                )
+            }
+
+            if snapshot.conversationId != container.activeConversationId {
+                container.markUnreadCompletion(forConversation: snapshot.conversationId)
+            }
+
+            let totalElapsed = ContinuousClock.now - startTime
+            logger.info("[Image] Image generation complete: messageID=\(assistantMessageID), totalElapsed=\(totalElapsed)")
+            finishImageSession(requestID: requestID, conversationId: snapshot.conversationId)
+        } catch is CancellationError {
+            return
+        } catch let error as ProviderRequestDebugFailure {
+            let elapsed = ContinuousClock.now - startTime
+            logger.error("[Image] Image generation failed after \(elapsed): \(error.message)")
+            let mergedDebugInfo = baseDebugInfo.merged(with: error.debugInfo)
+            failSession(
+                requestID: requestID,
+                error: .remoteError(provider: error.providerID, message: error.message),
+                debugInfoJSON: mergedDebugInfo.prettyJSONString()
+            )
+        } catch let error as RequestError {
+            let elapsed = ContinuousClock.now - startTime
+            logger.error("[Image] Image generation failed after \(elapsed): \(error.errorDescription ?? "unknown")")
+            failSession(
+                requestID: requestID,
+                error: error,
+                debugInfoJSON: baseDebugInfo.prettyJSONString()
+            )
+        } catch {
+            let elapsed = ContinuousClock.now - startTime
+            logger.error("[Image] Image generation failed after \(elapsed): \(error.localizedDescription)")
+            var mergedDebugInfo = baseDebugInfo
+            mergedDebugInfo.providerError = error.localizedDescription
+            failSession(
+                requestID: requestID,
+                error: .remoteError(provider: snapshot.providerID, message: error.localizedDescription),
+                debugInfoJSON: mergedDebugInfo.prettyJSONString()
+            )
+        }
+    }
+
+    private func finishImageSession(requestID: RequestID, conversationId: String) {
+        guard let container else { return }
+        guard let state = container.requestStates[requestID], !state.isTerminal else { return }
+        container.requestStates[requestID]?.status = .completed
+        cleanupFlushState(requestID: requestID)
+        schedulerState.runningSessions.removeValue(forKey: requestID)
+        container.requestStates.removeValue(forKey: requestID)
+        container.statusMessage = conversationId == container.activeConversationId
+            ? "Response complete"
+            : "Background request complete"
+        container.syncPublishedSchedulerState()
+        container.scheduleIdlePrewarmFromCoordinator()
+        advanceQueue()
+    }
+
     private func durationSeconds(_ duration: Duration) -> Double {
         let (sec, atto) = duration.components
         return Double(sec) + Double(atto) * 1e-18
+    }
+
+    private func makeImageRequestDebugInfo(
+        snapshot: QueueItemSnapshot,
+        modelDescriptor: ModelDescriptor,
+        context: ProviderInvocationContext
+    ) -> MessageDebugInfo {
+        let supportedOutputs = modelDescriptor.supportedOutputs.map(\.rawValue)
+        return MessageDebugInfo(
+            requestID: snapshot.id.description,
+            providerID: snapshot.providerID,
+            modelID: snapshot.modelID,
+            requestKind: "image_generation",
+            routeDecision: "RequestCoordinator routed to provider.send because modelType=\(modelDescriptor.modelType.rawValue) and supportedOutputs=\(supportedOutputs.joined(separator: ","))",
+            endpoint: context.endpoint,
+            descriptorModelType: modelDescriptor.modelType.rawValue,
+            descriptorSupportedOutputs: supportedOutputs,
+            descriptorRawMetadataJSON: trimmedDebugPreview(modelDescriptor.rawMetadataJSON)
+        )
+    }
+
+    private func trimmedDebugPreview(_ value: String?, limit: Int = 4096) -> String? {
+        guard let value, !value.isEmpty else { return nil }
+        if value.count <= limit {
+            return value
+        }
+        return String(value.prefix(limit)) + "... [truncated]"
     }
 
     private func makeGenerationTimeoutTask(
@@ -976,6 +1170,10 @@ extension RequestCoordinator {
                         || flushState.pendingUIFlush != nil
                         || flushState.pendingStreamingFlush != nil)
             }
+        }
+
+        func flushStateCountForTesting() -> Int {
+            sessionFlushState.count
         }
     }
 #endif

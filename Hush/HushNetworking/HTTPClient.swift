@@ -25,12 +25,20 @@ public struct HTTPRequest: Sendable {
     public let url: String
     public var headers: [String: String]
     public var body: Data?
+    public var timeoutInterval: TimeInterval?
 
-    public init(method: String, url: String, headers: [String: String] = [:], body: Data? = nil) {
+    public init(
+        method: String,
+        url: String,
+        headers: [String: String] = [:],
+        body: Data? = nil,
+        timeoutInterval: TimeInterval? = nil
+    ) {
         self.method = method
         self.url = url
         self.headers = headers
         self.body = body
+        self.timeoutInterval = timeoutInterval
     }
 
     public mutating func setBearerAuth(_ token: String) {
@@ -58,6 +66,9 @@ public final class URLSessionHTTPClient: HTTPClient, Sendable {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = request.method
         urlRequest.httpBody = request.body
+        if let timeout = request.timeoutInterval {
+            urlRequest.timeoutInterval = timeout
+        }
         for (key, value) in request.headers {
             urlRequest.setValue(value, forHTTPHeaderField: key)
         }

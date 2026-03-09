@@ -3,6 +3,30 @@ import os
 
 private let logger = Logger(subsystem: "com.hush.app", category: "OpenAIProvider")
 
+private enum OpenAIProviderDebug {
+    static var isEnabled: Bool {
+        #if DEBUG
+            guard let raw = ProcessInfo.processInfo.environment["HUSH_PROVIDER_DEBUG"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            else {
+                return false
+            }
+            return raw == "1" || raw == "true" || raw == "yes"
+        #else
+            return false
+        #endif
+    }
+
+    static func log(_ message: String) {
+        guard isEnabled else { return }
+        logger.notice("[ImageDebug] \(message, privacy: .public)")
+        #if DEBUG
+            print("[ImageDebug] \(message)")
+        #endif
+    }
+}
+
 public struct OpenAIProvider: LLMProvider, Sendable {
     public let id: String
     private let httpClient: any HTTPClient
@@ -49,20 +73,339 @@ public struct OpenAIProvider: LLMProvider, Sendable {
 
     // MARK: - Streaming Chat Generation
 
-    // swiftlint:disable async_without_await
     public func send(
-        messages _: [ChatMessage],
-        modelID _: String,
-        parameters _: ModelParameters,
-        context _: ProviderInvocationContext
-    ) async throws -> ChatMessage {
-        throw RequestError.remoteError(
-            provider: id,
-            message: "Non-streaming send is not supported; use sendStreaming"
+        messages: [ChatMessage],
+        modelID: String,
+        parameters: ModelParameters,
+        context: ProviderInvocationContext
+    ) async throws -> ProviderResponse {
+        guard let token = context.bearerToken, !token.isEmpty else {
+            throw RequestError.credentialResolution(
+                providerID: id,
+                providerName: nil,
+                message: "Bearer token is required for OpenAI provider"
+            )
+        }
+
+        if Self.supportsOpenAIImageGenerationEndpoint(modelID: modelID) {
+            return try await sendDedicatedImageGeneration(
+                messages: messages, modelID: modelID, token: token, context: context
+            )
+        }
+        return try await sendChatBasedImageGeneration(
+            messages: messages, modelID: modelID, parameters: parameters,
+            token: token, context: context
         )
     }
 
-    // swiftlint:enable async_without_await
+    // MARK: - Dedicated Image Generation (/v1/images/generations)
+
+    private func sendDedicatedImageGeneration(
+        messages: [ChatMessage],
+        modelID: String,
+        token: String,
+        context: ProviderInvocationContext
+    ) async throws -> ProviderResponse {
+        guard let prompt = messages.last(where: { $0.role == .user })?.content
+            .trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty
+        else {
+            throw ProviderRequestDebugFailure(
+                providerID: id,
+                message: "Image generation requires a non-empty user prompt",
+                debugInfo: MessageDebugInfo(
+                    providerID: id, modelID: modelID,
+                    requestKind: "image_generation", endpoint: context.endpoint,
+                    providerError: "Image generation requires a non-empty user prompt"
+                )
+            )
+        }
+
+        let baseURL = try Self.normalizedEndpoint(context.endpoint, providerID: id)
+        let url = "\(baseURL)/images/generations"
+        let isGPTImage = modelID.lowercased().hasPrefix("gpt-image")
+        let body = isGPTImage
+            ? OpenAIImageGenerationRequest.forGPTImage(model: modelID, prompt: prompt)
+            : OpenAIImageGenerationRequest.forDallE(model: modelID, prompt: prompt)
+
+        let bodyData = try JSONEncoder().encode(body)
+        let httpTimeout = RuntimeConstants.imageGenerationTimeoutSeconds
+        var request = HTTPRequest(method: "POST", url: url, body: bodyData, timeoutInterval: httpTimeout)
+        request.setBearerAuth(token)
+        request.headers["Content-Type"] = "application/json"
+
+        var debugInfo = MessageDebugInfo(
+            providerID: id, modelID: modelID, requestKind: "image_generation",
+            endpoint: baseURL, requestURL: url, httpMethod: request.method,
+            requestHeaders: Self.sanitizedHeaders(request.headers),
+            requestBodyJSON: Self.prettyPrintedJSON(from: bodyData)
+        )
+        logger.info("[Image] Dedicated image request: model=\(modelID), endpoint=\(url), timeout=\(httpTimeout)s")
+        OpenAIProviderDebug.log("Request: \(debugInfo.prettyJSONString() ?? "{}")")
+
+        let requestStart = ContinuousClock.now
+        let (data, statusCode) = try await executeHTTPRequest(request, debugInfo: &debugInfo)
+        let elapsed = ContinuousClock.now - requestStart
+        logger.info("[Image] Dedicated image response: status=\(statusCode), bytes=\(data.count), elapsed=\(elapsed)")
+
+        debugInfo.responseStatusCode = statusCode
+        debugInfo.responseBodyPreview = Self.preview(data: data)
+        OpenAIProviderDebug.log("Response: \(debugInfo.prettyJSONString() ?? "{}")")
+
+        let response: OpenAIImageGenerationResponse
+        do {
+            response = try JSONDecoder().decode(OpenAIImageGenerationResponse.self, from: data)
+        } catch {
+            debugInfo.providerError = "Failed to decode image generation response: \(error.localizedDescription)"
+            throw ProviderRequestDebugFailure(
+                providerID: id,
+                message: "Image generation response could not be decoded",
+                debugInfo: debugInfo
+            )
+        }
+        guard let first = response.data.first else {
+            debugInfo.providerError = "Image generation response was empty"
+            throw ProviderRequestDebugFailure(
+                providerID: id, message: "Image generation response was empty",
+                debugInfo: debugInfo
+            )
+        }
+
+        let metadataJSON = try? String(data: JSONEncoder().encode(first), encoding: .utf8)
+        if let b64JSON = first.b64JSON,
+           let imageData = Data(base64Encoded: b64JSON), !imageData.isEmpty
+        {
+            return ProviderResponse(
+                text: "Generated image.",
+                attachments: [.image(ProviderImageAttachmentPayload(
+                    data: imageData, mimeType: "image/png",
+                    sourcePrompt: prompt, providerMetadataJSON: metadataJSON
+                ))]
+            )
+        }
+        if let remoteURL = first.url, !remoteURL.isEmpty {
+            return ProviderResponse(
+                text: "Generated image.",
+                attachments: [.image(ProviderImageAttachmentPayload(
+                    remoteURL: remoteURL,
+                    sourcePrompt: prompt, providerMetadataJSON: metadataJSON
+                ))]
+            )
+        }
+        debugInfo.providerError = "Image generation response did not include image data"
+        throw ProviderRequestDebugFailure(
+            providerID: id,
+            message: "Image generation response did not include image data",
+            debugInfo: debugInfo
+        )
+    }
+
+    // MARK: - Chat-Based Image Generation (/v1/chat/completions, non-streaming)
+
+    private func sendChatBasedImageGeneration(
+        messages: [ChatMessage],
+        modelID: String,
+        parameters: ModelParameters,
+        token: String,
+        context: ProviderInvocationContext
+    ) async throws -> ProviderResponse {
+        let baseURL = try Self.normalizedEndpoint(context.endpoint, providerID: id)
+        let url = "\(baseURL)/chat/completions"
+        let useDefaults = parameters.useModelDefaults
+        let body = OpenAIChatRequest(
+            model: modelID,
+            messages: messages.map { OpenAIChatMessage(role: $0.role.rawValue, content: $0.content) },
+            stream: false,
+            temperature: useDefaults ? nil : parameters.temperature,
+            topP: useDefaults ? nil : parameters.topP,
+            topK: useDefaults ? nil : parameters.topK,
+            maxCompletionTokens: useDefaults || parameters.maxTokens == 0 ? nil : parameters.maxTokens,
+            presencePenalty: useDefaults ? nil : parameters.presencePenalty,
+            frequencyPenalty: useDefaults ? nil : parameters.frequencyPenalty,
+            reasoningEffort: nil
+        )
+
+        let bodyData = try JSONEncoder().encode(body)
+        let httpTimeout = RuntimeConstants.imageGenerationTimeoutSeconds
+        var request = HTTPRequest(method: "POST", url: url, body: bodyData, timeoutInterval: httpTimeout)
+        request.setBearerAuth(token)
+        request.headers["Content-Type"] = "application/json"
+
+        let prompt = messages.last(where: { $0.role == .user })?.content ?? ""
+        var debugInfo = MessageDebugInfo(
+            providerID: id, modelID: modelID, requestKind: "chat_image_generation",
+            endpoint: baseURL, requestURL: url, httpMethod: request.method,
+            requestHeaders: Self.sanitizedHeaders(request.headers),
+            requestBodyJSON: Self.prettyPrintedJSON(from: bodyData)
+        )
+        logger.info("[Image] Chat image request: model=\(modelID), endpoint=\(url), timeout=\(httpTimeout)s")
+        OpenAIProviderDebug.log("Chat image request: \(debugInfo.prettyJSONString() ?? "{}")")
+
+        let requestStart = ContinuousClock.now
+        let (data, statusCode) = try await executeHTTPRequest(request, debugInfo: &debugInfo)
+        let elapsed = ContinuousClock.now - requestStart
+        logger.info("[Image] Chat image response: status=\(statusCode), bytes=\(data.count), elapsed=\(elapsed)")
+
+        debugInfo.responseStatusCode = statusCode
+        debugInfo.responseBodyPreview = Self.preview(data: data)
+        OpenAIProviderDebug.log("Chat image response: \(debugInfo.prettyJSONString() ?? "{}")")
+
+        let chatResponse: OpenAIChatCompletionResponse
+        do {
+            chatResponse = try JSONDecoder().decode(OpenAIChatCompletionResponse.self, from: data)
+        } catch {
+            debugInfo.providerError = "Failed to decode chat image response: \(error.localizedDescription)"
+            throw ProviderRequestDebugFailure(
+                providerID: id,
+                message: "Chat image generation response could not be decoded",
+                debugInfo: debugInfo
+            )
+        }
+        guard let choice = chatResponse.choices.first else {
+            debugInfo.providerError = "Chat image response had no choices"
+            throw ProviderRequestDebugFailure(
+                providerID: id, message: "Chat image response had no choices",
+                debugInfo: debugInfo
+            )
+        }
+
+        let (text, attachments) = Self.extractMultimodalContent(choice.message.content, prompt: prompt)
+        logger.info("[Image] Extracted multimodal content: text=\(text.prefix(100)), attachments=\(attachments.count)")
+
+        if attachments.isEmpty {
+            debugInfo.providerError = "Chat response did not contain image data"
+            throw ProviderRequestDebugFailure(
+                providerID: id,
+                message: "Chat response did not contain image data",
+                debugInfo: debugInfo
+            )
+        }
+
+        return ProviderResponse(
+            text: text.isEmpty ? "Generated image." : text,
+            attachments: attachments
+        )
+    }
+
+    // MARK: - Shared HTTP Execution
+
+    private func executeHTTPRequest(
+        _ request: HTTPRequest,
+        debugInfo: inout MessageDebugInfo
+    ) async throws -> (Data, Int) {
+        do {
+            return try await httpClient.sendJSON(request)
+        } catch let error as HTTPError {
+            debugInfo.providerError = error.errorDescription ?? error.localizedDescription
+            if case let .nonSuccessStatus(code, body, _) = error {
+                debugInfo.responseStatusCode = code
+                debugInfo.responseBodyPreview = Self.preview(body)
+            }
+            OpenAIProviderDebug.log("Failure: \(debugInfo.prettyJSONString() ?? "{}")")
+            throw ProviderRequestDebugFailure(
+                providerID: id,
+                message: error.errorDescription ?? error.localizedDescription,
+                debugInfo: debugInfo
+            )
+        } catch {
+            debugInfo.providerError = error.localizedDescription
+            OpenAIProviderDebug.log("Failure: \(debugInfo.prettyJSONString() ?? "{}")")
+            throw ProviderRequestDebugFailure(
+                providerID: id,
+                message: error.localizedDescription,
+                debugInfo: debugInfo
+            )
+        }
+    }
+
+    // MARK: - Multimodal Content Extraction
+
+    static func extractMultimodalContent(
+        _ content: ChatMessageContent,
+        prompt: String
+    ) -> (String, [ProviderResponseAttachment]) {
+        switch content {
+        case let .text(text):
+            let (cleanedText, attachments) = extractInlineDataURLImages(from: text, prompt: prompt)
+            return (cleanedText, attachments)
+        case let .parts(parts):
+            return extractFromContentParts(parts, prompt: prompt)
+        }
+    }
+
+    private static func extractFromContentParts(
+        _ parts: [ChatContentPart],
+        prompt: String
+    ) -> (String, [ProviderResponseAttachment]) {
+        var texts: [String] = []
+        var attachments: [ProviderResponseAttachment] = []
+        for part in parts {
+            switch part.type {
+            case "text":
+                if let text = part.text, !text.isEmpty {
+                    texts.append(text)
+                }
+            case "image_url":
+                if let url = part.imageURL?.url {
+                    if let (imageData, mimeType) = parseDataURL(url) {
+                        attachments.append(.image(ProviderImageAttachmentPayload(
+                            data: imageData, mimeType: mimeType, sourcePrompt: prompt
+                        )))
+                    } else {
+                        attachments.append(.image(ProviderImageAttachmentPayload(
+                            remoteURL: url, sourcePrompt: prompt
+                        )))
+                    }
+                }
+            default:
+                break
+            }
+        }
+        return (texts.joined(separator: "\n"), attachments)
+    }
+
+    /// Extracts images from markdown-style inline data URLs: `![alt](data:image/...;base64,...)`
+    private static func extractInlineDataURLImages(
+        from text: String,
+        prompt: String
+    ) -> (String, [ProviderResponseAttachment]) {
+        var attachments: [ProviderResponseAttachment] = []
+        var cleanedText = text
+
+        let dataURLPattern = #"!\[[^\]]*\]\((data:image/[^;]+;base64,[A-Za-z0-9+/=]+)\)"#
+        guard let regex = try? NSRegularExpression(pattern: dataURLPattern) else {
+            return (text, [])
+        }
+
+        let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+        for match in matches.reversed() {
+            guard let dataURLRange = Range(match.range(at: 1), in: text) else { continue }
+            let dataURL = String(text[dataURLRange])
+            if let (imageData, mimeType) = parseDataURL(dataURL) {
+                attachments.append(.image(ProviderImageAttachmentPayload(
+                    data: imageData, mimeType: mimeType, sourcePrompt: prompt
+                )))
+            }
+            if let fullMatchRange = Range(match.range, in: cleanedText) {
+                cleanedText.removeSubrange(fullMatchRange)
+            }
+        }
+
+        cleanedText = cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (cleanedText, attachments)
+    }
+
+    /// Parses `data:image/png;base64,iVBOR...` into raw Data + MIME type.
+    static func parseDataURL(_ url: String) -> (Data, String)? {
+        guard url.hasPrefix("data:") else { return nil }
+        guard let semicolonIdx = url.firstIndex(of: ";"),
+              url[semicolonIdx...].hasPrefix(";base64,")
+        else { return nil }
+        let mimeType = String(url[url.index(url.startIndex, offsetBy: 5) ..< semicolonIdx])
+        let base64Start = url.index(semicolonIdx, offsetBy: 8)
+        let base64String = String(url[base64Start...])
+        guard let data = Data(base64Encoded: base64String), !data.isEmpty else { return nil }
+        return (data, mimeType)
+    }
 
     public func sendStreaming(
         messages: [ChatMessage],
@@ -167,9 +510,10 @@ public struct OpenAIProvider: LLMProvider, Sendable {
             temperature: useDefaults ? nil : parameters.temperature,
             topP: useDefaults ? nil : parameters.topP,
             topK: useDefaults ? nil : parameters.topK,
-            maxTokens: useDefaults ? nil : parameters.maxTokens,
+            maxCompletionTokens: useDefaults || parameters.maxTokens == 0 ? nil : parameters.maxTokens,
             presencePenalty: useDefaults ? nil : parameters.presencePenalty,
-            frequencyPenalty: useDefaults ? nil : parameters.frequencyPenalty
+            frequencyPenalty: useDefaults ? nil : parameters.frequencyPenalty,
+            reasoningEffort: Self.reasoningEffort(for: modelID, parameters: parameters)
         )
 
         let bodyData = try JSONEncoder().encode(body)
@@ -249,6 +593,7 @@ public struct OpenAIProvider: LLMProvider, Sendable {
 
     private static let invalidPathSuffixes = [
         "/chat/completions",
+        "/images/generations",
         "/models",
         "/embeddings",
         "/completions"
@@ -286,6 +631,49 @@ public struct OpenAIProvider: LLMProvider, Sendable {
             )
         }
     }
+
+    private static func sanitizedHeaders(_ headers: [String: String]) -> [String: String] {
+        headers.reduce(into: [String: String]()) { result, entry in
+            let key = entry.key
+            let value = entry.value
+            if key.caseInsensitiveCompare("Authorization") == .orderedSame,
+               let token = value.split(separator: " ", maxSplits: 1).last
+            {
+                result[key] = "Bearer \(mask(token: String(token)))"
+            } else {
+                result[key] = value
+            }
+        }
+    }
+
+    private static func mask(token: String) -> String {
+        guard token.count > 10 else { return "\(token.prefix(3))***" }
+        return String(token.prefix(6)) + "***" + String(token.suffix(4))
+    }
+
+    private static func prettyPrintedJSON(from data: Data) -> String? {
+        guard !data.isEmpty else { return nil }
+        if let object = try? JSONSerialization.jsonObject(with: data),
+           JSONSerialization.isValidJSONObject(object),
+           let prettyData = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+        {
+            return preview(data: prettyData)
+        }
+        return preview(data: data)
+    }
+
+    private static func preview(data: Data, limit: Int = 4096) -> String? {
+        preview(String(data: data.prefix(limit), encoding: .utf8))
+    }
+
+    private static func preview(_ text: String?, limit: Int = 4096) -> String? {
+        guard let text, !text.isEmpty else { return nil }
+        if text.count <= limit {
+            return text
+        }
+        let trimmed = String(text.prefix(limit))
+        return "\(trimmed)... [truncated]"
+    }
 }
 
 // MARK: - OpenAI Model Normalization
@@ -300,7 +688,7 @@ extension OpenAIProvider {
         return ModelDescriptor(
             id: model.id,
             displayName: model.id,
-            capabilities: outputs.contains(.text) ? [.text] : [.text],
+            capabilities: legacyCapabilities(inputs: inputs, outputs: outputs),
             modelType: modelType,
             supportedInputs: inputs,
             supportedOutputs: outputs,
@@ -312,11 +700,49 @@ extension OpenAIProvider {
     private static func inferModelType(from model: OpenAIModel) -> ModelType {
         let lowered = model.id.lowercased()
         if lowered.contains("embedding") { return .embedding }
-        if lowered.contains("dall-e") || lowered.contains("image") { return .image }
+        if supportsOpenAIImageGenerationEndpoint(modelID: model.id) { return .image }
+        if lowered.contains("image") { return .image }
         if lowered.contains("tts") || lowered.contains("whisper") || lowered.contains("audio") { return .audio }
-        if lowered.hasPrefix("o1") || lowered.hasPrefix("o3") || lowered.hasPrefix("o4") { return .reasoning }
+        if supportsReasoningEffort(modelID: model.id) { return .reasoning }
         if lowered.contains("gpt") || lowered.contains("chat") { return .chat }
         return .unknown
+    }
+
+    private static func legacyCapabilities(
+        inputs: [Modality],
+        outputs: [Modality]
+    ) -> [ModelCapability] {
+        var capabilities: [ModelCapability] = []
+        if inputs.contains(.text) || outputs.contains(.text) {
+            capabilities.append(.text)
+        }
+        if inputs.contains(.image) || outputs.contains(.image) {
+            capabilities.append(.image)
+        }
+        return capabilities.isEmpty ? [.text] : capabilities
+    }
+
+    static func supportsOpenAIImageGenerationEndpoint(modelID: String) -> Bool {
+        let lowered = modelID.lowercased()
+        return lowered.hasPrefix("gpt-image")
+            || lowered.hasPrefix("dall-e")
+            || lowered.hasPrefix("imagen-")
+    }
+
+    private static func reasoningEffort(
+        for modelID: String,
+        parameters: ModelParameters
+    ) -> ModelReasoningEffort? {
+        guard supportsReasoningEffort(modelID: modelID) else { return nil }
+        return parameters.reasoningEffort
+    }
+
+    private static func supportsReasoningEffort(modelID: String) -> Bool {
+        let lowered = modelID.lowercased()
+        return lowered.hasPrefix("o1")
+            || lowered.hasPrefix("o3")
+            || lowered.hasPrefix("o4")
+            || lowered.hasPrefix("gpt-5")
     }
 
     /// Infer input/output modalities from model type and ID patterns.
@@ -348,194 +774,4 @@ extension OpenAIProvider {
             return ([.text], [.text])
         }
     }
-}
-
-// MARK: - OpenAI API Models
-
-struct OpenAIModelsResponse: Decodable {
-    let data: [OpenAIModel]
-}
-
-struct OpenAIModel: Decodable {
-    let id: String
-    let ownedBy: String?
-    let created: Int?
-    let rawMetadataJSON: String?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case ownedBy = "owned_by"
-        case created
-    }
-
-    init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
-        ownedBy = try container.decodeIfPresent(String.self, forKey: .ownedBy)
-        created = try container.decodeIfPresent(Int.self, forKey: .created)
-
-        let rawContainer = try decoder.container(keyedBy: AnyCodingKey.self)
-        var rawMetadata: [String: JSONValue] = [:]
-        for key in rawContainer.allKeys where key.stringValue != CodingKeys.id.rawValue {
-            rawMetadata[key.stringValue] = try rawContainer.decode(JSONValue.self, forKey: key)
-        }
-        rawMetadataJSON = Self.encodeRawMetadata(rawMetadata)
-    }
-
-    /// Test-only initializer
-    init(id: String, ownedBy: String? = nil, created: Int? = nil) {
-        self.id = id
-        self.ownedBy = ownedBy
-        self.created = created
-        var rawMetadata: [String: JSONValue] = [:]
-        if let ownedBy {
-            rawMetadata[CodingKeys.ownedBy.rawValue] = .string(ownedBy)
-        }
-        if let created {
-            rawMetadata[CodingKeys.created.rawValue] = .integer(created)
-        }
-        rawMetadataJSON = Self.encodeRawMetadata(rawMetadata)
-    }
-
-    private static func encodeRawMetadata(_ rawMetadata: [String: JSONValue]) -> String? {
-        guard !rawMetadata.isEmpty else { return nil }
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(rawMetadata) else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-}
-
-private struct AnyCodingKey: CodingKey {
-    var stringValue: String
-    var intValue: Int?
-
-    init?(stringValue: String) {
-        self.stringValue = stringValue
-        intValue = nil
-    }
-
-    init?(intValue: Int) {
-        stringValue = String(intValue)
-        self.intValue = intValue
-    }
-}
-
-private enum JSONValue: Codable, Equatable {
-    case string(String)
-    case integer(Int)
-    case number(Double)
-    case bool(Bool)
-    case object([String: JSONValue])
-    case array([JSONValue])
-    case null
-
-    init(from decoder: any Decoder) throws {
-        if var unkeyed = try? decoder.unkeyedContainer() {
-            var values: [JSONValue] = []
-            while !unkeyed.isAtEnd {
-                try values.append(unkeyed.decode(JSONValue.self))
-            }
-            self = .array(values)
-            return
-        }
-
-        if let keyed = try? decoder.container(keyedBy: AnyCodingKey.self) {
-            var dictionary: [String: JSONValue] = [:]
-            for key in keyed.allKeys {
-                dictionary[key.stringValue] = try keyed.decode(JSONValue.self, forKey: key)
-            }
-            self = .object(dictionary)
-            return
-        }
-
-        let container = try decoder.singleValueContainer()
-        if container.decodeNil() {
-            self = .null
-        } else if let value = try? container.decode(Bool.self) {
-            self = .bool(value)
-        } else if let value = try? container.decode(Int.self) {
-            self = .integer(value)
-        } else if let value = try? container.decode(Double.self) {
-            self = .number(value)
-        } else if let value = try? container.decode(String.self) {
-            self = .string(value)
-        } else {
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Unsupported JSON value"
-            )
-        }
-    }
-
-    func encode(to encoder: any Encoder) throws {
-        switch self {
-        case let .string(value):
-            var container = encoder.singleValueContainer()
-            try container.encode(value)
-        case let .integer(value):
-            var container = encoder.singleValueContainer()
-            try container.encode(value)
-        case let .number(value):
-            var container = encoder.singleValueContainer()
-            try container.encode(value)
-        case let .bool(value):
-            var container = encoder.singleValueContainer()
-            try container.encode(value)
-        case let .object(value):
-            var container = encoder.container(keyedBy: AnyCodingKey.self)
-            for (key, nestedValue) in value {
-                guard let codingKey = AnyCodingKey(stringValue: key) else { continue }
-                try container.encode(nestedValue, forKey: codingKey)
-            }
-        case let .array(value):
-            var container = encoder.unkeyedContainer()
-            for nestedValue in value {
-                try container.encode(nestedValue)
-            }
-        case .null:
-            var container = encoder.singleValueContainer()
-            try container.encodeNil()
-        }
-    }
-}
-
-struct OpenAIChatRequest: Encodable {
-    let model: String
-    let messages: [OpenAIChatMessage]
-    let stream: Bool
-    let temperature: Double?
-    let topP: Double?
-    let topK: Int?
-    let maxTokens: Int?
-    let presencePenalty: Double?
-    let frequencyPenalty: Double?
-
-    enum CodingKeys: String, CodingKey {
-        case model, messages, stream, temperature
-        case topP = "top_p"
-        case topK = "top_k"
-        case maxTokens = "max_tokens"
-        case presencePenalty = "presence_penalty"
-        case frequencyPenalty = "frequency_penalty"
-    }
-}
-
-struct OpenAIChatMessage: Encodable {
-    let role: String
-    let content: String
-}
-
-struct OpenAIChatChunk: Decodable {
-    let choices: [OpenAIChatChoice]
-}
-
-struct OpenAIChatChoice: Decodable {
-    let delta: OpenAIChatDelta
-}
-
-struct OpenAIChatDelta: Decodable {
-    let content: String?
-    let role: String?
 }

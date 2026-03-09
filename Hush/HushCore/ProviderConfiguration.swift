@@ -5,9 +5,6 @@ public enum ProviderType: String, Codable, CaseIterable, Identifiable, Sendable 
         case mock
     #endif
     case openAI
-    case anthropic
-    case ollama
-    case custom
 
     public var id: String {
         rawValue
@@ -20,13 +17,7 @@ public enum ProviderType: String, Codable, CaseIterable, Identifiable, Sendable 
                 "Mock"
         #endif
         case .openAI:
-            "OpenAI"
-        case .anthropic:
-            "Anthropic"
-        case .ollama:
-            "Ollama"
-        case .custom:
-            "Custom"
+            "OpenAI Compatible"
         }
     }
 }
@@ -39,9 +30,11 @@ public struct ProviderConfiguration: Identifiable, Codable, Equatable, Sendable 
     public var apiKeyEnvironmentVariable: String
     public var defaultModelID: String
     public var isEnabled: Bool
+    /// Persisted API key stored in the provider configuration table.
+    /// This value is intentionally excluded from generic JSON encoding.
+    public var apiKey: String
 
-    /// Non-secret credential reference key for Keychain lookup.
-    /// The actual secret is stored only in Keychain, never in settings or database.
+    /// Legacy credential reference retained for compatibility with older stored data.
     public var credentialRef: String?
 
     /// IDs of models the user has pinned/favorited for quick access.
@@ -64,6 +57,7 @@ public struct ProviderConfiguration: Identifiable, Codable, Equatable, Sendable 
         apiKeyEnvironmentVariable: String,
         defaultModelID: String,
         isEnabled: Bool,
+        apiKey: String = "",
         credentialRef: String? = nil,
         pinnedModelIDs: [String] = []
     ) {
@@ -74,6 +68,7 @@ public struct ProviderConfiguration: Identifiable, Codable, Equatable, Sendable 
         self.apiKeyEnvironmentVariable = apiKeyEnvironmentVariable
         self.defaultModelID = defaultModelID
         self.isEnabled = isEnabled
+        self.apiKey = apiKey
         self.credentialRef = credentialRef
         self.pinnedModelIDs = pinnedModelIDs
     }
@@ -82,16 +77,26 @@ public struct ProviderConfiguration: Identifiable, Codable, Equatable, Sendable 
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
-        type = try container.decode(ProviderType.self, forKey: .type)
+        type = (try? container.decode(ProviderType.self, forKey: .type)) ?? .openAI
         endpoint = try container.decode(String.self, forKey: .endpoint)
         apiKeyEnvironmentVariable = try container.decode(String.self, forKey: .apiKeyEnvironmentVariable)
         defaultModelID = try container.decode(String.self, forKey: .defaultModelID)
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        apiKey = ""
         credentialRef = try container.decodeIfPresent(String.self, forKey: .credentialRef)
         pinnedModelIDs = try container.decodeIfPresent([String].self, forKey: .pinnedModelIDs) ?? []
     }
 
     // MARK: - Public Interface
+
+    public var normalizedAPIKey: String? {
+        let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    public var hasPersistedAPIKey: Bool {
+        normalizedAPIKey != nil
+    }
 
     #if DEBUG
         public static func mockDefault() -> ProviderConfiguration {

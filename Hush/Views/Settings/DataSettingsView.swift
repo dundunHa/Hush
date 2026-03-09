@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DataSettingsView: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushThemePalette) private var palette
 
     @State private var stats: DataStats?
     @State private var isLoadingStats = true
@@ -23,10 +24,7 @@ struct DataSettingsView: View {
                 storageSection
                 dangerZoneSection
             }
-            .frame(maxWidth: 720, alignment: .leading)
-            .padding(.horizontal, HushSpacing.xl)
-            .padding(.vertical, HushSpacing.xl)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .settingsCenteredContentColumn()
         }
         .task { await loadStats() }
     }
@@ -37,7 +35,7 @@ struct DataSettingsView: View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
             Text("Storage")
                 .font(HushTypography.heading)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
 
             VStack(spacing: 0) {
                 statRow(
@@ -46,7 +44,7 @@ struct DataSettingsView: View {
                     value: formattedSize
                 )
 
-                Divider().overlay(HushColors.subtleStroke)
+                Divider().overlay(palette.subtleStroke)
 
                 statRow(
                     icon: "bubble.left.and.bubble.right",
@@ -54,7 +52,7 @@ struct DataSettingsView: View {
                     value: stats.map { "\($0.conversationCount)" }
                 )
 
-                Divider().overlay(HushColors.subtleStroke)
+                Divider().overlay(palette.subtleStroke)
 
                 statRow(
                     icon: "text.bubble",
@@ -63,8 +61,8 @@ struct DataSettingsView: View {
                 )
             }
             .cardStyle(
-                background: HushColors.cardBackground,
-                stroke: HushColors.subtleStroke
+                background: palette.cardBackground,
+                stroke: palette.subtleStroke
             )
         }
     }
@@ -73,7 +71,7 @@ struct DataSettingsView: View {
         HStack(spacing: HushSpacing.md) {
             Image(systemName: icon)
                 .font(.system(size: 16))
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
                 .frame(width: 24)
 
             Text(label)
@@ -83,12 +81,12 @@ struct DataSettingsView: View {
 
             if isLoadingStats {
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(HushColors.secondaryText.opacity(0.18))
+                    .fill(palette.secondaryText.opacity(0.18))
                     .frame(width: 56, height: 14)
             } else {
                 Text(value ?? "0")
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(HushColors.secondaryText)
+                    .font(HushTypography.monospaced(14))
+                    .foregroundStyle(palette.secondaryText)
                     .contentTransition(.numericText())
             }
         }
@@ -102,7 +100,7 @@ struct DataSettingsView: View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
             Text("Danger Zone")
                 .font(HushTypography.heading)
-                .foregroundStyle(HushColors.errorText)
+                .foregroundStyle(palette.errorText)
 
             VStack(alignment: .leading, spacing: HushSpacing.md) {
                 HStack(spacing: HushSpacing.md) {
@@ -112,7 +110,7 @@ struct DataSettingsView: View {
 
                         Text("Permanently delete all conversations and messages. This cannot be undone.")
                             .font(HushTypography.caption)
-                            .foregroundStyle(HushColors.secondaryText)
+                            .foregroundStyle(palette.secondaryText)
                     }
 
                     Spacer()
@@ -122,8 +120,8 @@ struct DataSettingsView: View {
             }
             .padding(HushSpacing.lg)
             .cardStyle(
-                background: HushColors.cardBackground,
-                stroke: Color.red.opacity(0.30)
+                background: palette.cardBackground,
+                stroke: palette.errorText.opacity(0.30)
             )
             .alert("Clear All Chat History?", isPresented: $showDeleteConfirmation) {
                 Button("Cancel", role: .cancel) {}
@@ -156,13 +154,13 @@ struct DataSettingsView: View {
                     .controlSize(.small)
                 Text("Clearing…")
                     .font(HushTypography.caption)
-                    .foregroundStyle(HushColors.secondaryText)
+                    .foregroundStyle(palette.secondaryText)
             }
 
         case .done:
             Label("Cleared", systemImage: "checkmark.circle.fill")
                 .font(HushTypography.caption)
-                .foregroundStyle(HushColors.successText)
+                .foregroundStyle(palette.successText)
                 .transition(.opacity.combined(with: .scale(scale: 0.8)))
         }
     }

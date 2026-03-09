@@ -63,11 +63,11 @@
             modelID: String,
             parameters: ModelParameters,
             context _: ProviderInvocationContext
-        ) async throws -> ChatMessage {
+        ) async throws -> ProviderResponse {
             await Task.yield()
             let latestPrompt = messages.last(where: { $0.role == .user })?.content ?? ""
             let reply = "Mock[\(modelID)] temp=\(String(format: "%.2f", parameters.temperature)): \(latestPrompt)"
-            return ChatMessage(role: .assistant, content: reply)
+            return ProviderResponse(text: reply)
         }
 
         public func sendStreaming(

@@ -5,21 +5,20 @@ struct RootView: View {
     @Binding var showSettings: Bool
     @State private var showSidebar: Bool = true
 
-    private var rightPaneCornerRadius: CGFloat {
+    private var themePalette: HushThemePalette {
+        HushColors.palette(for: container.settings.theme)
+    }
+
+    private var rightPaneTopCornerRadius: CGFloat {
+        showSidebar ? min(HushSpacing.splitPaneCornerRadius, HushSpacing.topBarHeight / 2) : 0
+    }
+
+    private var rightPaneBottomCornerRadius: CGFloat {
         showSidebar ? HushSpacing.splitPaneCornerRadius : 0
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // MARK: - Split-color top bar
-
-            SplitTopBar(
-                showSidebar: $showSidebar,
-                isSettingsMode: showSettings
-            )
-
-            // MARK: - Content
-
+        Group {
             if showSettings {
                 SettingsWorkspaceView(showSettings: $showSettings)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -35,50 +34,66 @@ struct RootView: View {
 
                     ZStack {
                         Rectangle()
-                            .fill(.ultraThinMaterial)
+                            .fill(showSidebar ? themePalette.sidebarBackground : themePalette.rootBackground)
 
                         let shape = UnevenRoundedRectangle(
-                            topLeadingRadius: 0,
-                            bottomLeadingRadius: rightPaneCornerRadius,
+                            topLeadingRadius: rightPaneTopCornerRadius,
+                            bottomLeadingRadius: rightPaneBottomCornerRadius,
                             bottomTrailingRadius: 0,
                             topTrailingRadius: 0,
                             style: .continuous
                         )
 
-                        ChatDetailPane()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(HushColors.rootBackground)
-                            .clipShape(shape)
-                            .shadow(
-                                color: HushColors.splitPaneShadow.opacity(showSidebar ? 1 : 0),
-                                radius: HushSpacing.splitPaneShadowRadius,
-                                x: HushSpacing.splitPaneShadowX,
-                                y: 0
-                            )
-                            .overlay {
-                                if showSidebar {
-                                    shape
-                                        .strokeBorder(HushColors.splitPaneEdgeStroke, lineWidth: 1)
-                                        .mask(
-                                            ZStack(alignment: .topLeading) {
-                                                Rectangle()
-                                                    .frame(width: 2)
+                        if showSidebar {
+                            shape
+                                .fill(themePalette.rootBackground)
+                        }
 
-                                                Rectangle()
-                                                    .frame(width: rightPaneCornerRadius + 2)
-                                                    .padding(.top, 1)
-                                            }
-                                        )
-                                }
+                        VStack(spacing: 0) {
+                            ChatTopBar(showSidebar: $showSidebar)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .frame(height: HushSpacing.topBarHeight)
+                                .background(WindowDragArea())
+
+                            ChatDetailPane()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                        .background(themePalette.rootBackground)
+                        .clipShape(shape)
+                        .overlay {
+                            if showSidebar {
+                                shape
+                                    .strokeBorder(themePalette.splitPaneEdgeStroke, lineWidth: 1)
+                                    .mask(alignment: .leading) {
+                                        Rectangle()
+                                            .frame(width: max(rightPaneTopCornerRadius, rightPaneBottomCornerRadius) + 2)
+                                    }
                             }
+                        }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .overlay(alignment: .topLeading) {
+                    Button {
+                        withAnimation(.snappy(duration: 0.22)) {
+                            showSidebar.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "sidebar.left")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Toggle Sidebar")
+                    .padding(.leading, HushSpacing.trafficLightInset)
+                    .frame(height: 28)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .ignoresSafeArea(edges: .top)
-        .background(HushColors.rootBackground.ignoresSafeArea())
+        .font(HushTypography.body)
+        .background(themePalette.rootBackground.ignoresSafeArea())
+        .environment(\.hushTheme, container.settings.theme)
+        .environment(\.hushThemePalette, themePalette)
         .preferredColorScheme(preferredScheme(forTheme: container.settings.theme))
     }
 
@@ -86,6 +101,8 @@ struct RootView: View {
         switch theme {
         case .dark:
             return .dark
+        case .light, .readPaper:
+            return .light
         }
     }
 }

@@ -27,6 +27,8 @@ public nonisolated struct MessageRecord: Codable, Sendable, Equatable, Identifia
     public var conversationId: String
     public var role: String // "user" | "assistant" | "system" | "tool"
     public var content: String
+    public var attachmentsJSON: String
+    public var debugInfoJSON: String?
     public var status: MessageStatus
     public var requestId: String?
     public var orderIndex: Int
@@ -41,6 +43,8 @@ public nonisolated struct MessageRecord: Codable, Sendable, Equatable, Identifia
         conversationId: String,
         role: String,
         content: String,
+        attachmentsJSON: String = "[]",
+        debugInfoJSON: String? = nil,
         status: MessageStatus = .final_,
         requestId: String? = nil,
         orderIndex: Int,
@@ -54,6 +58,8 @@ public nonisolated struct MessageRecord: Codable, Sendable, Equatable, Identifia
         self.conversationId = conversationId
         self.role = role
         self.content = content
+        self.attachmentsJSON = attachmentsJSON
+        self.debugInfoJSON = debugInfoJSON
         self.status = status
         self.requestId = requestId
         self.orderIndex = orderIndex
@@ -62,6 +68,25 @@ public nonisolated struct MessageRecord: Codable, Sendable, Equatable, Identifia
         self.deletedAt = deletedAt
         self.syncState = syncState
         self.sourceDeviceId = sourceDeviceId
+    }
+}
+
+extension MessageRecord {
+    enum CodingKeys: String, CodingKey {
+        case id
+        case conversationId
+        case role
+        case content
+        case attachmentsJSON = "attachments"
+        case debugInfoJSON = "debugInfo"
+        case status
+        case requestId
+        case orderIndex
+        case createdAt
+        case updatedAt
+        case deletedAt
+        case syncState
+        case sourceDeviceId
     }
 }
 

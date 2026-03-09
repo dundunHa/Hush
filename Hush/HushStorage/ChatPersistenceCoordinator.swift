@@ -335,6 +335,8 @@ public final class ChatPersistenceCoordinator: Sendable {
             id: UUID(uuidString: record.id) ?? UUID(),
             role: ChatRole(rawValue: record.role) ?? .assistant,
             content: record.content,
+            attachments: decodeAttachments(from: record.attachmentsJSON),
+            debugInfoJSON: record.debugInfoJSON,
             createdAt: record.createdAt
         )
     }
@@ -365,6 +367,8 @@ public final class ChatPersistenceCoordinator: Sendable {
                     id: id,
                     role: .user,
                     content: record.content,
+                    attachments: decodeAttachments(from: record.attachmentsJSON),
+                    debugInfoJSON: record.debugInfoJSON,
                     createdAt: record.createdAt
                 )
             }
@@ -384,6 +388,8 @@ public final class ChatPersistenceCoordinator: Sendable {
             conversationId: conversationId,
             role: message.role.rawValue,
             content: message.content,
+            attachmentsJSON: encodeAttachments(message.attachments),
+            debugInfoJSON: message.debugInfoJSON,
             status: .final_,
             orderIndex: orderIndex,
             createdAt: message.createdAt
@@ -408,6 +414,8 @@ public final class ChatPersistenceCoordinator: Sendable {
             conversationId: conversationId,
             role: ChatRole.assistant.rawValue,
             content: message.content,
+            attachmentsJSON: encodeAttachments(message.attachments),
+            debugInfoJSON: message.debugInfoJSON,
             status: .streaming,
             requestId: requestId,
             orderIndex: orderIndex,
@@ -448,16 +456,23 @@ public final class ChatPersistenceCoordinator: Sendable {
     public func finalizeAssistantMessage(
         messageId: String,
         content: String,
+        attachments: [MessageAttachment]? = nil,
         status: MessageStatus
     ) throws {
         try dbManager.write { db in
+            let attachmentsJSON = attachments.map(encodeAttachments)
             try db.execute(
                 sql: """
                 UPDATE messages
-                SET content = ?, status = ?, updatedAt = ?, syncState = ?
+                SET content = ?,
+                    attachments = COALESCE(?, attachments),
+                    debugInfo = COALESCE(?, debugInfo),
+                    status = ?,
+                    updatedAt = ?,
+                    syncState = ?
                 WHERE id = ?
                 """,
-                arguments: [content, status.rawValue, Date.now, SyncState.pending.rawValue, messageId]
+                arguments: [content, attachmentsJSON, nil as String?, status.rawValue, Date.now, SyncState.pending.rawValue, messageId]
             )
 
             // Outbox entry for the update
@@ -487,11 +502,29 @@ public final class ChatPersistenceCoordinator: Sendable {
             conversationId: conversationId,
             role: message.role.rawValue,
             content: message.content,
+            attachmentsJSON: encodeAttachments(message.attachments),
+            debugInfoJSON: message.debugInfoJSON,
             status: status,
             orderIndex: orderIndex,
             createdAt: message.createdAt
         )
         try messageRepo.insert(record)
+    }
+
+    private func encodeAttachments(_ attachments: [MessageAttachment]) -> String {
+        let encoder = JSONEncoder()
+        guard let data = try? encoder.encode(attachments),
+              let string = String(data: data, encoding: .utf8)
+        else {
+            return "[]"
+        }
+        return string
+    }
+
+    private nonisolated func decodeAttachments(from json: String) -> [MessageAttachment] {
+        guard !json.isEmpty, let data = json.data(using: .utf8) else { return [] }
+        let decoder = JSONDecoder()
+        return (try? decoder.decode([MessageAttachment].self, from: data)) ?? []
     }
 }
 
