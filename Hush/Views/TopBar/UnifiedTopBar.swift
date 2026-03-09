@@ -33,6 +33,21 @@ struct SplitTopBar: View {
                     style: .continuous
                 )
 
+                if showSidebar && !isSettingsMode {
+                    shape
+                        .fill(HushColors.rootBackground)
+                        .shadow(
+                            color: HushColors.splitPaneShadow,
+                            radius: HushSpacing.splitPaneShadowRadius,
+                            x: HushSpacing.splitPaneShadowX,
+                            y: 0
+                        )
+                        .mask(alignment: .leading) {
+                            Rectangle()
+                                .frame(width: rightPaneCornerRadius + (HushSpacing.splitPaneShadowRadius * 2))
+                        }
+                }
+
                 Group {
                     if !isSettingsMode {
                         ChatTopBar(showSidebar: $showSidebar)

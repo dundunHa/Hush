@@ -11,7 +11,12 @@ struct ConversationSidebarView: View {
             threadList
             settingsButton
         }
+        .padding(.top, HushSpacing.topBarHeight)
         .background(HushColors.sidebarBackground)
+        .background(alignment: .top) {
+            WindowDragArea()
+                .frame(height: HushSpacing.topBarHeight)
+        }
         .frame(maxHeight: .infinity, alignment: .top)
         .themeRefreshAware()
     }
