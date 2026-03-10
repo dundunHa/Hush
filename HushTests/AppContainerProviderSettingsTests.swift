@@ -4,10 +4,9 @@ import Testing
 
 @MainActor
 struct AppContainerProviderSettingsTests {
-    @Test("saveOpenAISettings writes credentialRef and no plaintext secret")
-    func saveOpenAISettingsWritesCredentialRefOnly() throws {
-        let credentialStore = InMemoryCredentialStore()
-        let container = AppContainer.forTesting(credentialStore: credentialStore)
+    @Test("saveOpenAISettings stores apiKey in provider config and omits it from JSON settings")
+    func saveOpenAISettingsStoresPersistedAPIKey() throws {
+        let container = AppContainer.forTesting()
 
         _ = try container.saveOpenAISettings(
             OpenAISettingsInput(
@@ -20,9 +19,8 @@ struct AppContainerProviderSettingsTests {
 
         let config = container.settings.providerConfigurations.first(where: { $0.id == "openai" })
         #expect(config != nil)
-        #expect(config?.credentialRef == "openai")
         #expect(config?.endpoint == OpenAIProvider.defaultEndpoint)
-        #expect(credentialStore.storedSecret(for: "openai") == "sk-test-plaintext")
+        #expect(config?.apiKey == "sk-test-plaintext")
 
         let encodedSettings = try JSONEncoder().encode(container.settings)
         let payload = String(bytes: encodedSettings, encoding: .utf8) ?? ""
@@ -31,7 +29,6 @@ struct AppContainerProviderSettingsTests {
 
     @Test("enabled OpenAI save preserves current provider selection")
     func enabledOpenAISavePreservesCurrentSelection() throws {
-        let credentialStore = InMemoryCredentialStore()
         let settings = AppSettings(
             providerConfigurations: [.mockDefault()],
             selectedProviderID: "mock",
@@ -39,10 +36,7 @@ struct AppContainerProviderSettingsTests {
             parameters: .standard,
             quickBar: .standard
         )
-        let container = AppContainer.forTesting(
-            settings: settings,
-            credentialStore: credentialStore
-        )
+        let container = AppContainer.forTesting(settings: settings)
 
         _ = try container.saveOpenAISettings(
             OpenAISettingsInput(
@@ -59,8 +53,7 @@ struct AppContainerProviderSettingsTests {
 
     @Test("enabled OpenAI save without any credential fails explicitly")
     func enabledOpenAISaveWithoutCredentialFails() {
-        let credentialStore = InMemoryCredentialStore()
-        let container = AppContainer.forTesting(credentialStore: credentialStore)
+        let container = AppContainer.forTesting()
 
         do {
             _ = try container.saveOpenAISettings(
@@ -81,8 +74,25 @@ struct AppContainerProviderSettingsTests {
 
     @Test("empty API key is allowed when credential already exists without auto-selecting OpenAI")
     func emptyAPIKeyAllowedWithStoredCredential() throws {
-        let credentialStore = InMemoryCredentialStore(secrets: ["openai": "sk-existing"])
-        let container = AppContainer.forTesting(credentialStore: credentialStore)
+        let settings = AppSettings(
+            providerConfigurations: [
+                ProviderConfiguration(
+                    id: "openai",
+                    name: "OpenAI",
+                    type: .openAI,
+                    endpoint: OpenAIProvider.defaultEndpoint,
+                    apiKeyEnvironmentVariable: "",
+                    defaultModelID: "gpt-4.1",
+                    isEnabled: true,
+                    apiKey: "sk-existing"
+                )
+            ],
+            selectedProviderID: "",
+            selectedModelID: "",
+            parameters: .standard,
+            quickBar: .standard
+        )
+        let container = AppContainer.forTesting(settings: settings)
 
         let snapshot = try container.saveOpenAISettings(
             OpenAISettingsInput(
@@ -94,15 +104,32 @@ struct AppContainerProviderSettingsTests {
         )
 
         #expect(snapshot.hasCredential)
-        #expect(credentialStore.storedSecret(for: "openai") == "sk-existing")
+        #expect(container.settings.providerConfigurations.first(where: { $0.id == "openai" })?.apiKey == "sk-existing")
         #expect(container.settings.selectedProviderID.isEmpty)
         #expect(container.settings.selectedModelID.isEmpty)
     }
 
     @Test("empty defaultModelID fails with defaultModelRequired")
     func emptyDefaultModelIDFailsWithValidationError() {
-        let credentialStore = InMemoryCredentialStore(secrets: ["openai": "sk-existing"])
-        let container = AppContainer.forTesting(credentialStore: credentialStore)
+        let settings = AppSettings(
+            providerConfigurations: [
+                ProviderConfiguration(
+                    id: "openai",
+                    name: "OpenAI",
+                    type: .openAI,
+                    endpoint: OpenAIProvider.defaultEndpoint,
+                    apiKeyEnvironmentVariable: "",
+                    defaultModelID: "gpt-4.1",
+                    isEnabled: true,
+                    apiKey: "sk-existing"
+                )
+            ],
+            selectedProviderID: "",
+            selectedModelID: "",
+            parameters: .standard,
+            quickBar: .standard
+        )
+        let container = AppContainer.forTesting(settings: settings)
 
         do {
             _ = try container.saveOpenAISettings(
@@ -123,8 +150,25 @@ struct AppContainerProviderSettingsTests {
 
     @Test("whitespace-only defaultModelID fails with defaultModelRequired")
     func whitespaceOnlyDefaultModelIDFailsWithValidationError() {
-        let credentialStore = InMemoryCredentialStore(secrets: ["openai": "sk-existing"])
-        let container = AppContainer.forTesting(credentialStore: credentialStore)
+        let settings = AppSettings(
+            providerConfigurations: [
+                ProviderConfiguration(
+                    id: "openai",
+                    name: "OpenAI",
+                    type: .openAI,
+                    endpoint: OpenAIProvider.defaultEndpoint,
+                    apiKeyEnvironmentVariable: "",
+                    defaultModelID: "gpt-4.1",
+                    isEnabled: true,
+                    apiKey: "sk-existing"
+                )
+            ],
+            selectedProviderID: "",
+            selectedModelID: "",
+            parameters: .standard,
+            quickBar: .standard
+        )
+        let container = AppContainer.forTesting(settings: settings)
 
         do {
             _ = try container.saveOpenAISettings(
@@ -145,8 +189,7 @@ struct AppContainerProviderSettingsTests {
 
     @Test("disabled OpenAI can save without a default model")
     func disabledOpenAICanSaveWithoutDefaultModel() throws {
-        let credentialStore = InMemoryCredentialStore()
-        let container = AppContainer.forTesting(credentialStore: credentialStore)
+        let container = AppContainer.forTesting()
 
         let snapshot = try container.saveOpenAISettings(
             OpenAISettingsInput(
@@ -163,7 +206,6 @@ struct AppContainerProviderSettingsTests {
 
     @Test("disabling selected openai falls back to mock provider")
     func disablingSelectedOpenAIFallsBackToMock() throws {
-        let credentialStore = InMemoryCredentialStore(secrets: ["openai": "sk-existing"])
         let openAIConfiguration = ProviderConfiguration(
             id: "openai",
             name: "OpenAI",
@@ -172,7 +214,7 @@ struct AppContainerProviderSettingsTests {
             apiKeyEnvironmentVariable: "",
             defaultModelID: "gpt-4o-mini",
             isEnabled: true,
-            credentialRef: "openai"
+            apiKey: "sk-existing"
         )
         let settings = AppSettings(
             providerConfigurations: [.mockDefault(), openAIConfiguration],
@@ -181,10 +223,7 @@ struct AppContainerProviderSettingsTests {
             parameters: .standard,
             quickBar: .standard
         )
-        let container = AppContainer.forTesting(
-            settings: settings,
-            credentialStore: credentialStore
-        )
+        let container = AppContainer.forTesting(settings: settings)
 
         _ = try container.saveOpenAISettings(
             OpenAISettingsInput(
@@ -201,7 +240,6 @@ struct AppContainerProviderSettingsTests {
 
     @Test("saving selected OpenAI updates selected model to its saved default")
     func savingSelectedOpenAIUpdatesSelectedModel() throws {
-        let credentialStore = InMemoryCredentialStore(secrets: ["openai": "sk-existing"])
         let openAIConfiguration = ProviderConfiguration(
             id: "openai",
             name: "OpenAI",
@@ -210,7 +248,7 @@ struct AppContainerProviderSettingsTests {
             apiKeyEnvironmentVariable: "",
             defaultModelID: "gpt-4o-mini",
             isEnabled: true,
-            credentialRef: "openai"
+            apiKey: "sk-existing"
         )
         let settings = AppSettings(
             providerConfigurations: [.mockDefault(), openAIConfiguration],
@@ -219,10 +257,7 @@ struct AppContainerProviderSettingsTests {
             parameters: .standard,
             quickBar: .standard
         )
-        let container = AppContainer.forTesting(
-            settings: settings,
-            credentialStore: credentialStore
-        )
+        let container = AppContainer.forTesting(settings: settings)
 
         _ = try container.saveOpenAISettings(
             OpenAISettingsInput(
@@ -235,32 +270,5 @@ struct AppContainerProviderSettingsTests {
 
         #expect(container.settings.selectedProviderID == "openai")
         #expect(container.settings.selectedModelID == "gpt-4.1")
-    }
-}
-
-private final class InMemoryCredentialStore: KeychainCredentialStore, @unchecked Sendable {
-    private var secrets: [String: String]
-
-    init(secrets: [String: String] = [:]) {
-        self.secrets = secrets
-    }
-
-    func setSecret(_ secret: String, forCredentialRef credentialRef: String) throws {
-        secrets[credentialRef] = secret
-    }
-
-    func secret(forCredentialRef credentialRef: String) throws -> String {
-        guard let secret = secrets[credentialRef] else {
-            throw KeychainError.itemNotFound
-        }
-        return secret
-    }
-
-    func hasSecret(forCredentialRef credentialRef: String) -> Bool {
-        secrets[credentialRef] != nil
-    }
-
-    func storedSecret(for credentialRef: String) -> String? {
-        secrets[credentialRef]
     }
 }

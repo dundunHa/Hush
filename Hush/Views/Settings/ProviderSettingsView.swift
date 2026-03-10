@@ -89,8 +89,7 @@ struct ProviderSettingsView: View {
                     endpoint: OpenAIProvider.defaultEndpoint,
                     apiKeyEnvironmentVariable: "OPENAI_API_KEY",
                     defaultModelID: "",
-                    isEnabled: false,
-                    credentialRef: openAIProviderID
+                    isEnabled: false
                 ),
                 at: 0
             )
@@ -222,8 +221,7 @@ struct ProviderSettingsView: View {
     }
 
     private func providerHasCredential(_ provider: ProviderConfiguration) -> Bool {
-        let credentialRef = container.normalizedCredentialRef(from: provider)
-        return container.hasProviderCredential(forRef: credentialRef)
+        provider.hasPersistedAPIKey
     }
 
     private func canSetProviderAsDefault(_ provider: ProviderConfiguration) -> Bool {
@@ -424,7 +422,7 @@ struct ProviderSettingsView: View {
                 }
 
                 if hasStoredCredential, apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("Saved in Keychain. Leave blank to keep the existing key.")
+                    Text("Saved locally. Leave blank to keep the existing key.")
                         .font(HushTypography.footnote)
                         .foregroundStyle(palette.secondaryText)
                 }
@@ -713,7 +711,7 @@ struct ProviderSettingsView: View {
                 type: providerType,
                 endpoint: endpoint,
                 apiKey: apiKeyToSave,
-                credentialRef: container.normalizedCredentialRef(from: persistedConfig(for: providerID))
+                persistedAPIKey: persistedConfig(for: providerID)?.apiKey
             )
             let signature = currentCatalogDraftSignature()
 
@@ -774,9 +772,7 @@ struct ProviderSettingsView: View {
             defaultModelID = config.defaultModelID
             isEnabled = config.isEnabled
             pinnedModelIDs = config.pinnedModelIDs
-
-            let credentialRef = container.normalizedCredentialRef(from: config)
-            hasStoredCredential = container.hasProviderCredential(forRef: credentialRef)
+            hasStoredCredential = config.hasPersistedAPIKey
         } else {
             providerName = ""
             providerType = .openAI
@@ -888,22 +884,13 @@ struct ProviderSettingsView: View {
             config = existing
         }
 
-        let credentialRef = container.normalizedCredentialRef(from: config)
         let keyToSave = apiKeyToSave
-
         if !keyToSave.isEmpty {
-            do {
-                try container.saveProviderCredential(keyToSave, forRef: credentialRef)
-            } catch {
-                saveMessage = "Failed to save API key to Keychain."
-                saveFailed = true
-                return
-            }
+            config.apiKey = keyToSave
         }
 
-        config.credentialRef = credentialRef
         container.saveProviderProfile(config)
-        hasStoredCredential = container.hasProviderCredential(forRef: credentialRef)
+        hasStoredCredential = config.hasPersistedAPIKey
         applyPostSave(providerID: config.id, keepOpen: isCreatingNew)
 
         if config.isEnabled, hasStoredCredential {

@@ -95,7 +95,7 @@ struct AppContainerSettingsPersistenceTests {
             apiKeyEnvironmentVariable: "",
             defaultModelID: "claude-3",
             isEnabled: true,
-            credentialRef: "anthropic"
+            apiKey: "sk-anthropic"
         )
         container.saveProviderProfile(profile)
         container.flushSettings()
@@ -103,6 +103,7 @@ struct AppContainerSettingsPersistenceTests {
         let persisted = container.settings.providerConfigurations.first(where: { $0.id == "anthropic" })
         #expect(persisted != nil)
         #expect(persisted?.defaultModelID == "claude-3")
+        #expect(persisted?.apiKey == "sk-anthropic")
     }
 
     @Test("flushSettings preserves theme value in persisted preferences")

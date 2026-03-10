@@ -329,7 +329,7 @@ extension RequestCoordinator {
             do {
                 bearerToken = try credentialResolver.resolve(
                     providerID: providerID,
-                    credentialRef: config.credentialRef
+                    apiKey: config.apiKey
                 )
                 logger.info("[Request] Credential resolved successfully")
             } catch let error as CredentialResolutionError {

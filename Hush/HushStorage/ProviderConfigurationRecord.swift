@@ -13,6 +13,7 @@ public nonisolated struct ProviderConfigurationRecord: Codable, Sendable, Equata
     public var apiKeyEnvironmentVariable: String
     public var defaultModelID: String
     public var isEnabled: Bool
+    public var apiKey: String
     public var credentialRef: String?
     public var pinnedModelIDs: String // JSON-encoded [String]
     public var createdAt: Date
@@ -26,6 +27,7 @@ public nonisolated struct ProviderConfigurationRecord: Codable, Sendable, Equata
         apiKeyEnvironmentVariable: String = "",
         defaultModelID: String = "",
         isEnabled: Bool = false,
+        apiKey: String = "",
         credentialRef: String? = nil,
         pinnedModelIDs: String = "[]",
         createdAt: Date = .now,
@@ -38,6 +40,7 @@ public nonisolated struct ProviderConfigurationRecord: Codable, Sendable, Equata
         self.apiKeyEnvironmentVariable = apiKeyEnvironmentVariable
         self.defaultModelID = defaultModelID
         self.isEnabled = isEnabled
+        self.apiKey = apiKey
         self.credentialRef = credentialRef
         self.pinnedModelIDs = pinnedModelIDs
         self.createdAt = createdAt
@@ -71,6 +74,7 @@ public extension ProviderConfigurationRecord {
             apiKeyEnvironmentVariable: apiKeyEnvironmentVariable,
             defaultModelID: defaultModelID,
             isEnabled: isEnabled,
+            apiKey: apiKey,
             credentialRef: credentialRef,
             pinnedModelIDs: parsedPinnedModelIDs
         )
@@ -95,6 +99,7 @@ public extension ProviderConfigurationRecord {
             apiKeyEnvironmentVariable: config.apiKeyEnvironmentVariable,
             defaultModelID: config.defaultModelID,
             isEnabled: config.isEnabled,
+            apiKey: config.apiKey,
             credentialRef: config.credentialRef,
             pinnedModelIDs: pinnedJSON,
             createdAt: createdAt,

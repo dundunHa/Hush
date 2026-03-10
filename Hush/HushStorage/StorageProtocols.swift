@@ -93,10 +93,9 @@ public protocol SyncOutboxRepository: Sendable {
 
 // MARK: - Credential Reference Repository
 
-/// Defines data access for non-secret credential references.
-/// Secrets themselves live in Keychain; this stores only the reference key.
+/// Legacy data access for credential references kept for compatibility with older stored data.
 public protocol CredentialReferenceRepository: Sendable {
-    /// Returns the credential reference (Keychain service/account key) for a provider.
+    /// Returns the legacy credential reference for a provider.
     func credentialRef(forProviderID providerID: String) -> String?
 
     /// Stores or updates a credential reference for a provider.

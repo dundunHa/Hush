@@ -27,13 +27,12 @@ struct ProviderCatalogDraftInput: Equatable {
     var type: ProviderType
     var endpoint: String
     var apiKey: String
-    var credentialRef: String?
+    var persistedAPIKey: String?
 }
 
 enum OpenAISettingsSaveError: Error, Equatable {
     case defaultModelRequired
     case credentialRequired
-    case keychainWriteFailed
 }
 
 extension OpenAISettingsSaveError: LocalizedError {
@@ -43,8 +42,6 @@ extension OpenAISettingsSaveError: LocalizedError {
             return "Default Model is required."
         case .credentialRequired:
             return "OpenAI is enabled but no API key is available. Enter an API key or keep it disabled."
-        case .keychainWriteFailed:
-            return "Failed to save API key to Keychain."
         }
     }
 }
@@ -198,7 +195,6 @@ final class AppContainer: ObservableObject {
     // MARK: - Internal
 
     private let preferencesRepository: GRDBAppPreferencesRepository?
-    private let credentialStore: any KeychainCredentialStore
     private(set) var registry: ProviderRegistry
     private(set) var requestCoordinator: RequestCoordinator!
     let messageRenderRuntime: MessageRenderRuntime
@@ -337,7 +333,6 @@ final class AppContainer: ObservableObject {
     private init(
         settings: AppSettings,
         preferencesRepository: GRDBAppPreferencesRepository?,
-        credentialStore: any KeychainCredentialStore,
         registry: ProviderRegistry,
         messageRenderRuntime: MessageRenderRuntime,
         persistence: ChatPersistenceCoordinator?,
@@ -355,7 +350,6 @@ final class AppContainer: ObservableObject {
     ) {
         self.settings = settings
         self.preferencesRepository = preferencesRepository
-        self.credentialStore = credentialStore
         self.registry = registry
         self.messageRenderRuntime = messageRenderRuntime
         self.persistence = persistence
@@ -539,7 +533,6 @@ final class AppContainer: ObservableObject {
         let container = AppContainer(
             settings: loadedSettings,
             preferencesRepository: preferencesRepository,
-            credentialStore: KeychainAdapter(),
             registry: registry,
             messageRenderRuntime: .shared,
             persistence: persistence,
@@ -567,7 +560,6 @@ final class AppContainer: ObservableObject {
     static func forTesting(
         settings: AppSettings? = nil,
         preferencesRepository: GRDBAppPreferencesRepository? = nil,
-        credentialStore: (any KeychainCredentialStore)? = nil,
         registry: ProviderRegistry? = nil,
         persistence: ChatPersistenceCoordinator? = nil,
         catalogRepository: (any ProviderCatalogRepository)? = nil,
@@ -592,7 +584,6 @@ final class AppContainer: ObservableObject {
         let container = AppContainer(
             settings: resolvedSettings,
             preferencesRepository: preferencesRepository,
-            credentialStore: credentialStore ?? KeychainAdapter(),
             registry: resolvedRegistry,
             messageRenderRuntime: resolvedRenderRuntime,
             persistence: persistence,
@@ -657,13 +648,12 @@ final class AppContainer: ObservableObject {
 
     func openAISettingsSnapshot() -> OpenAISettingsSnapshot {
         let providerConfiguration = settings.providerConfigurations.first(where: { $0.id == OpenAISettingsInput.providerID })
-        let credentialRef = normalizedCredentialRef(from: providerConfiguration)
 
         return OpenAISettingsSnapshot(
             endpoint: normalizeEndpoint(providerConfiguration?.endpoint ?? OpenAIProvider.defaultEndpoint),
             defaultModelID: providerConfiguration?.defaultModelID ?? "",
             isEnabled: providerConfiguration?.isEnabled ?? false,
-            hasCredential: credentialStore.hasSecret(forCredentialRef: credentialRef)
+            hasCredential: providerConfiguration?.hasPersistedAPIKey ?? false
         )
     }
 
@@ -675,18 +665,9 @@ final class AppContainer: ObservableObject {
 
         let existingIndex = settings.providerConfigurations.firstIndex(where: { $0.id == OpenAISettingsInput.providerID })
         let existingConfiguration = existingIndex.map { settings.providerConfigurations[$0] }
-        let credentialRef = normalizedCredentialRef(from: existingConfiguration)
         let trimmedAPIKey = input.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if !trimmedAPIKey.isEmpty {
-            do {
-                try credentialStore.setSecret(trimmedAPIKey, forCredentialRef: credentialRef)
-            } catch {
-                throw OpenAISettingsSaveError.keychainWriteFailed
-            }
-        }
-
-        let hasCredential = !trimmedAPIKey.isEmpty || credentialStore.hasSecret(forCredentialRef: credentialRef)
+        let persistedAPIKey = trimmedAPIKey.isEmpty ? existingConfiguration?.apiKey ?? "" : trimmedAPIKey
+        let hasCredential = !persistedAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if input.isEnabled, !hasCredential {
             throw OpenAISettingsSaveError.credentialRequired
         }
@@ -699,7 +680,8 @@ final class AppContainer: ObservableObject {
             apiKeyEnvironmentVariable: existingConfiguration?.apiKeyEnvironmentVariable ?? "",
             defaultModelID: normalizedModelID,
             isEnabled: input.isEnabled,
-            credentialRef: credentialRef,
+            apiKey: persistedAPIKey,
+            credentialRef: existingConfiguration?.credentialRef,
             pinnedModelIDs: existingConfiguration?.pinnedModelIDs ?? []
         )
 
@@ -743,7 +725,6 @@ final class AppContainer: ObservableObject {
     // MARK: - Multi-Provider Profile Management
 
     /// Saves or updates a provider profile by its stable ID.
-    /// Does NOT persist secrets - only non-secret fields and credentialRef.
     func saveProviderProfile(_ profile: ProviderConfiguration) {
         let wasSelectedProvider = settings.selectedProviderID == profile.id
 
@@ -836,14 +817,10 @@ final class AppContainer: ObservableObject {
         }
 
         let provider = resolveProvider(for: config)
-        let credentialRef = normalizedCredentialRef(from: config)
-        let bearerToken = try? CredentialResolver(
-            secretStore: credentialStore
-        ).resolve(providerID: providerID, credentialRef: credentialRef)
 
         let context = ProviderInvocationContext(
             endpoint: config.endpoint,
-            bearerToken: bearerToken
+            bearerToken: config.normalizedAPIKey
         )
 
         let (models, fromCache) = await service.resolveModels(
@@ -871,9 +848,8 @@ final class AppContainer: ObservableObject {
         let bearerToken: String?
         if !trimmedAPIKey.isEmpty {
             bearerToken = trimmedAPIKey
-        } else if let credentialRef = draft.credentialRef?.trimmingCharacters(in: .whitespacesAndNewlines), !credentialRef.isEmpty {
-            bearerToken = try? CredentialResolver(secretStore: credentialStore)
-                .resolve(providerID: draft.providerID, credentialRef: credentialRef)
+        } else if let persistedAPIKey = draft.persistedAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines), !persistedAPIKey.isEmpty {
+            bearerToken = persistedAPIKey
         } else {
             switch draft.type {
             case .openAI:
@@ -913,14 +889,9 @@ final class AppContainer: ObservableObject {
 
         let provider = resolveProvider(for: config)
 
-        let credentialRef = normalizedCredentialRef(from: config)
-        let bearerToken = try? CredentialResolver(
-            secretStore: credentialStore
-        ).resolve(providerID: providerID, credentialRef: credentialRef)
-
         let context = ProviderInvocationContext(
             endpoint: config.endpoint,
-            bearerToken: bearerToken
+            bearerToken: config.normalizedAPIKey
         )
 
         catalogRefreshingProviderIDs.insert(providerID)
@@ -2357,31 +2328,6 @@ private extension AppContainer {
             }
         }
         return trimmed
-    }
-}
-
-// MARK: - Credential Helpers
-
-extension AppContainer {
-    func normalizedCredentialRef(from configuration: ProviderConfiguration?) -> String {
-        if let ref = configuration?.credentialRef?.trimmingCharacters(in: .whitespacesAndNewlines), !ref.isEmpty {
-            return ref
-        }
-
-        let providerIDFallback = configuration?.id.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return providerIDFallback.isEmpty ? OpenAISettingsInput.providerID : providerIDFallback
-    }
-
-    func saveProviderCredential(_ secret: String, forRef credentialRef: String) throws {
-        try credentialStore.setSecret(secret, forCredentialRef: credentialRef)
-    }
-
-    func hasProviderCredential(forRef credentialRef: String) -> Bool {
-        credentialStore.hasSecret(forCredentialRef: credentialRef)
-    }
-
-    func readProviderCredential(forRef credentialRef: String) -> String? {
-        try? credentialStore.secret(forCredentialRef: credentialRef)
     }
 }
 

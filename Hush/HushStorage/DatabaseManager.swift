@@ -279,6 +279,13 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v13: persist provider API keys in SQLite ───────────────────
+        migrator.registerMigration("v13_provider_configuration_api_keys") { db in
+            try db.alter(table: "providerConfigurations") { t in
+                t.add(column: "apiKey", .text).notNull().defaults(to: "")
+            }
+        }
+
         return migrator
     }
 

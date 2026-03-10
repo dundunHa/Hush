@@ -68,7 +68,7 @@ Hush/
   HushProviders/             # LLMProvider protocol + OpenAI, Mock impls, ProviderRegistry
   HushRendering/             # Two-phase markdown render pipeline, math/table rendering
   HushSettings/              # JSONSettingsStore (file-based JSON persistence)
-  HushStorage/               # GRDB repositories, DatabaseManager, KeychainAdapter, ChatPersistenceCoordinator
+  HushStorage/               # GRDB repositories, DatabaseManager, provider config persistence, ChatPersistenceCoordinator
   HushTheme/                 # HushColors, HushSpacing, HushTypography, CardModifier
   Views/                     # SwiftUI views (Chat/, Sidebar/, TopBar/, Settings/)
 HushTests/                   # Swift Testing framework (@Suite, @Test, #expect)
@@ -82,7 +82,7 @@ openspec/                    # Spec-driven design docs (proposals, specs, tasks)
 - **RequestScheduler**: Pure-function scheduling logic. `SchedulerState` holds running sessions, active/background queues, round-robin cursor. Static methods: `selectNext`, `enqueue`, `rebalanceForActiveSwitch`, `canAcceptSubmission`.
 - **Message Buckets**: `AppContainer.messagesByConversationId` stores per-conversation message arrays; `messages` is the active conversation projection. All request deltas route by owning `conversationId`, never by `activeConversationId`.
 - **Protocol-driven storage**: `ConversationRepository`, `MessageRepository`, `SyncOutboxRepository` protocols with GRDB implementations (`GRDB*Repository`).
-- **Credential flow**: Secrets in macOS Keychain via `KeychainAdapter`. Config stores only `credentialRef` key, never the secret. `CredentialResolver` bridges the two.
+- **Credential flow**: Provider API keys are persisted with provider configuration rows in SQLite. Generic JSON settings encoding omits `apiKey`; `CredentialResolver` now validates/normalizes the stored value at request time.
 - **Two-phase init**: AppContainer creates itself, then calls `configureCoordinator()` to resolve the circular `RequestCoordinator ↔ AppContainer` dependency.
 
 ## Code Style
@@ -112,7 +112,7 @@ openspec/                    # Spec-driven design docs (proposals, specs, tasks)
 
 - Domain models: `struct` with `Sendable`, `Equatable`, `Codable` as needed. Prefer value types.
 - Mutable state holders: `final class` with `@MainActor` — e.g. `AppContainer`, `RequestCoordinator`.
-- Protocols: suffix with capability noun — `LLMProvider`, `HTTPClient`, `KeychainSecretStore`, `ConversationRepository`.
+- Protocols: suffix with capability noun — `LLMProvider`, `HTTPClient`, `ConversationRepository`.
 - Mark all public types and protocols `Sendable`. Use `nonisolated` explicitly when crossing actor boundaries.
 - Use `any Protocol` for existential types (e.g. `private let httpClient: any HTTPClient`).
 - Use Swift concurrency throughout: `async/await`, `Task`, `AsyncThrowingStream`. No Combine for new code except `@Published`.
@@ -129,7 +129,7 @@ Use `// MARK: -` sections consistently to organize files:
 
 ### Error Handling
 
-- Define domain-specific error enums — `RequestError`, `HTTPError`, `KeychainError`, `CredentialResolutionError`.
+- Define domain-specific error enums — `RequestError`, `HTTPError`, `CredentialResolutionError`.
 - Conform errors to `Error`, `Sendable`, `Equatable`. Add `LocalizedError` with `errorDescription`.
 - Use typed catch clauses: `catch let error as RequestError { ... }`.
 - Non-critical persistence failures: `try?` with no swallowed context (acceptable for streaming flushes).

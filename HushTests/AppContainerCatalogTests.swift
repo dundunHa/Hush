@@ -9,26 +9,17 @@ import Testing
 struct AppContainerCatalogTests {
     // MARK: - Helpers
 
-    private func makeCredentialStore(secrets: [String: String] = [:]) -> InMemoryCatalogCredentialStore {
-        InMemoryCatalogCredentialStore(secrets: secrets)
-    }
-
     private func makeContainerWithCatalog(
         settings: AppSettings? = nil,
-        secrets: [String: String] = [:],
         registry: ProviderRegistry? = nil
     ) throws -> (AppContainer, GRDBProviderCatalogRepository) {
         let db = try DatabaseManager.inMemory()
         let catalogRepo = GRDBProviderCatalogRepository(dbManager: db)
-        let credentialStore = makeCredentialStore(secrets: secrets)
-        let credentialResolver = CredentialResolver(secretStore: credentialStore)
 
         let container = AppContainer.forTesting(
             settings: settings,
-            credentialStore: credentialStore,
             registry: registry,
-            catalogRepository: catalogRepo,
-            credentialResolver: credentialResolver
+            catalogRepository: catalogRepo
         )
         return (container, catalogRepo)
     }
@@ -92,8 +83,7 @@ struct AppContainerCatalogTests {
             endpoint: "https://api.anthropic.com",
             apiKeyEnvironmentVariable: "",
             defaultModelID: "claude-3",
-            isEnabled: true,
-            credentialRef: "anthropic"
+            isEnabled: true
         )
         container.saveProviderProfile(newProfile)
 
@@ -328,12 +318,9 @@ struct AppContainerCatalogTests {
         var registry = ProviderRegistry()
         registry.register(provider)
 
-        let credentialStore = makeCredentialStore()
         let container = AppContainer.forTesting(
-            credentialStore: credentialStore,
             registry: registry,
-            catalogRepository: catalogRepo,
-            credentialResolver: CredentialResolver(secretStore: credentialStore)
+            catalogRepository: catalogRepo
         )
 
         let result = await container.previewModels(for: ProviderCatalogDraftInput(
@@ -341,7 +328,7 @@ struct AppContainerCatalogTests {
             type: .openAI,
             endpoint: " https://draft.example.com/v1 ",
             apiKey: "sk-draft-preview",
-            credentialRef: nil
+            persistedAPIKey: nil
         ))
 
         #expect(result.error == nil)
@@ -353,8 +340,8 @@ struct AppContainerCatalogTests {
         #expect(persistedModels.isEmpty)
     }
 
-    @Test("previewModels falls back to stored credential when draft API key is empty")
-    func previewModelsUsesStoredCredential() async {
+    @Test("previewModels falls back to persisted API key when draft API key is empty")
+    func previewModelsUsesPersistedAPIKey() async {
         let provider = PreviewCatalogProviderStub(
             id: "openai",
             models: [ModelDescriptor(id: "gpt-4.1", displayName: "GPT-4.1", capabilities: [.text])]
@@ -362,19 +349,14 @@ struct AppContainerCatalogTests {
         var registry = ProviderRegistry()
         registry.register(provider)
 
-        let credentialStore = makeCredentialStore(secrets: ["openai": "sk-stored-preview"])
-        let container = AppContainer.forTesting(
-            credentialStore: credentialStore,
-            registry: registry,
-            credentialResolver: CredentialResolver(secretStore: credentialStore)
-        )
+        let container = AppContainer.forTesting(registry: registry)
 
         let result = await container.previewModels(for: ProviderCatalogDraftInput(
             providerID: "openai",
             type: .openAI,
             endpoint: "",
             apiKey: "",
-            credentialRef: "openai"
+            persistedAPIKey: "sk-stored-preview"
         ))
 
         #expect(result.error == nil)
@@ -389,19 +371,14 @@ struct AppContainerCatalogTests {
         var registry = ProviderRegistry()
         registry.register(provider)
 
-        let credentialStore = makeCredentialStore()
-        let container = AppContainer.forTesting(
-            credentialStore: credentialStore,
-            registry: registry,
-            credentialResolver: CredentialResolver(secretStore: credentialStore)
-        )
+        let container = AppContainer.forTesting(registry: registry)
 
         let result = await container.previewModels(for: ProviderCatalogDraftInput(
             providerID: "openai",
             type: .openAI,
             endpoint: "",
             apiKey: "",
-            credentialRef: nil
+            persistedAPIKey: nil
         ))
 
         #expect(result.models.isEmpty)
@@ -436,7 +413,7 @@ struct AppContainerCatalogTests {
                 ProviderConfiguration(
                     id: "openai", name: "OpenAI", type: .openAI,
                     endpoint: "https://api.openai.com/v1", apiKeyEnvironmentVariable: "",
-                    defaultModelID: "gpt-4", isEnabled: true, credentialRef: "openai"
+                    defaultModelID: "gpt-4", isEnabled: true, apiKey: "sk-test"
                 )
             ],
             selectedProviderID: "openai",
@@ -447,7 +424,6 @@ struct AppContainerCatalogTests {
 
         let db = try DatabaseManager.inMemory()
         let catalogRepo = GRDBProviderCatalogRepository(dbManager: db)
-        let credentialStore = InMemoryCatalogCredentialStore(secrets: ["openai": "sk-test"])
 
         // Pre-populate catalog
         try catalogRepo.upsertCatalog(
@@ -457,10 +433,8 @@ struct AppContainerCatalogTests {
 
         let container = AppContainer.forTesting(
             settings: settings,
-            credentialStore: credentialStore,
             registry: registry,
-            catalogRepository: catalogRepo,
-            credentialResolver: CredentialResolver(secretStore: credentialStore)
+            catalogRepository: catalogRepo
         )
         container.preflightTimeoutOverride = .seconds(2)
 
@@ -533,28 +507,5 @@ private final class PreviewCatalogProviderStub: LLMProvider, @unchecked Sendable
         AsyncThrowingStream { continuation in
             continuation.finish()
         }
-    }
-}
-
-private final class InMemoryCatalogCredentialStore: KeychainCredentialStore, @unchecked Sendable {
-    private var secrets: [String: String]
-
-    init(secrets: [String: String] = [:]) {
-        self.secrets = secrets
-    }
-
-    func setSecret(_ secret: String, forCredentialRef credentialRef: String) throws {
-        secrets[credentialRef] = secret
-    }
-
-    func secret(forCredentialRef credentialRef: String) throws -> String {
-        guard let secret = secrets[credentialRef] else {
-            throw KeychainError.itemNotFound
-        }
-        return secret
-    }
-
-    func hasSecret(forCredentialRef credentialRef: String) -> Bool {
-        secrets[credentialRef] != nil
     }
 }

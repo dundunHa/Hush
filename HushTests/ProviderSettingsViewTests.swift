@@ -2,7 +2,6 @@ import Foundation
 @testable import Hush
 import Testing
 
-@Suite("Provider Settings View Tests")
 struct ProviderSettingsViewTests {
     @Test("Manual refresh uses draft mode when provider is not persisted")
     func manualRefreshUsesDraftModeForUnpersistedProvider() {
@@ -25,8 +24,7 @@ struct ProviderSettingsViewTests {
             endpoint: "https://api.example.com/v1",
             apiKeyEnvironmentVariable: "HUSH_API_KEY",
             defaultModelID: "gpt-4o-mini",
-            isEnabled: true,
-            credentialRef: "legacy-ref"
+            isEnabled: true
         )
 
         let usesDraftRefresh = ProviderCatalogRefreshGate.usesDraftRefresh(
@@ -48,8 +46,7 @@ struct ProviderSettingsViewTests {
             endpoint: "https://api.example.com/v1",
             apiKeyEnvironmentVariable: "HUSH_API_KEY",
             defaultModelID: "gpt-4o-mini",
-            isEnabled: true,
-            credentialRef: "legacy-ref"
+            isEnabled: true
         )
 
         let usesDraftRefresh = ProviderCatalogRefreshGate.usesDraftRefresh(
@@ -71,8 +68,7 @@ struct ProviderSettingsViewTests {
             endpoint: "https://api.example.com/v1",
             apiKeyEnvironmentVariable: "HUSH_API_KEY",
             defaultModelID: "gpt-4o-mini",
-            isEnabled: true,
-            credentialRef: "legacy-ref"
+            isEnabled: true
         )
 
         let usesDraftRefresh = ProviderCatalogRefreshGate.usesDraftRefresh(

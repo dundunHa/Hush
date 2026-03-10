@@ -236,7 +236,6 @@ struct RequestCoordinatorStrictValidationTests {
         registry.register(captureProvider)
 
         let expectedEndpoint = "https://custom.api.example.com/v1"
-        let expectedCredentialRef = "test-openai-cred-ref"
         let expectedToken = "sk-test-resolved-token-12345"
 
         let providerConfig = ProviderConfiguration(
@@ -247,7 +246,7 @@ struct RequestCoordinatorStrictValidationTests {
             apiKeyEnvironmentVariable: "",
             defaultModelID: "capture-model-1",
             isEnabled: true,
-            credentialRef: expectedCredentialRef
+            apiKey: expectedToken
         )
 
         let settings = AppSettings(
@@ -258,16 +257,10 @@ struct RequestCoordinatorStrictValidationTests {
             quickBar: .standard
         )
 
-        let stubKeychain = StubKeychainSecretStore(secrets: [
-            expectedCredentialRef: expectedToken
-        ])
-        let credentialResolver = CredentialResolver(secretStore: stubKeychain)
-
         let container = AppContainer.forTesting(
             settings: settings,
             registry: registry,
-            activeConversationId: "test-conv",
-            credentialResolver: credentialResolver
+            activeConversationId: "test-conv"
         )
         container.resetConversation()
 
@@ -411,17 +404,6 @@ private actor ContextCapturingProvider: LLMProvider {
             continuation.yield(.completed(requestID: requestID))
             continuation.finish()
         }
-    }
-}
-
-private struct StubKeychainSecretStore: KeychainSecretStore {
-    let secrets: [String: String]
-
-    func secret(forCredentialRef credentialRef: String) throws -> String {
-        guard let value = secrets[credentialRef] else {
-            throw KeychainError.itemNotFound
-        }
-        return value
     }
 }
 

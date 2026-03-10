@@ -2,31 +2,6 @@
 
     import Foundation
 
-    // MARK: - In-Memory Credential Store
-
-    final class InMemoryCredentialStore: KeychainCredentialStore, @unchecked Sendable {
-        private var secrets: [String: String]
-
-        init(secrets: [String: String] = [:]) {
-            self.secrets = secrets
-        }
-
-        func setSecret(_ secret: String, forCredentialRef credentialRef: String) throws {
-            secrets[credentialRef] = secret
-        }
-
-        func secret(forCredentialRef credentialRef: String) throws -> String {
-            guard let secret = secrets[credentialRef] else {
-                throw KeychainError.itemNotFound
-            }
-            return secret
-        }
-
-        func hasSecret(forCredentialRef credentialRef: String) -> Bool {
-            secrets[credentialRef] != nil
-        }
-    }
-
     // MARK: - Preview Fixtures
 
     enum PreviewFixtures {
@@ -125,8 +100,7 @@
                 endpoint: endpoint,
                 apiKeyEnvironmentVariable: "",
                 defaultModelID: defaultModelID,
-                isEnabled: isEnabled,
-                credentialRef: "preview-\(id)"
+                isEnabled: isEnabled
             )
         }
 
@@ -236,7 +210,6 @@
         @MainActor
         static func makePreviewContainer(
             settings: AppSettings? = nil,
-            credentialStore: (any KeychainCredentialStore)? = nil,
             activeConversationId: String? = nil,
             messages: [ChatMessage] = [],
             sidebarThreads: [ConversationSidebarThread] = [],
@@ -245,7 +218,6 @@
         ) -> AppContainer {
             forTesting(
                 settings: settings,
-                credentialStore: credentialStore ?? InMemoryCredentialStore(),
                 activeConversationId: activeConversationId,
                 messages: messages,
                 sidebarThreads: sidebarThreads,
