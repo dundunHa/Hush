@@ -2,10 +2,12 @@ import SwiftUI
 
 struct GeneralSettingsView: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushThemePalette) private var themePalette
 
     private let themeColumns = [
         GridItem(.adaptive(minimum: 180, maximum: 240), spacing: HushSpacing.md)
     ]
+    private let fontFamilies = HushFontResolver.availableFamilies()
 
     var body: some View {
         ScrollView {
@@ -14,20 +16,20 @@ struct GeneralSettingsView: View {
                     .font(HushTypography.heading)
 
                 appearanceSection
+                typographySection
                 concurrencySection
             }
             .padding(HushSpacing.xl)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .themeRefreshAware()
     }
 
     private var appearanceSection: some View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
             Text("Appearance")
                 .font(HushTypography.captionBold)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(themePalette.secondaryText)
 
             LazyVGrid(columns: themeColumns, alignment: .leading, spacing: HushSpacing.md) {
                 ForEach(AppTheme.allCases, id: \.self) { theme in
@@ -45,13 +47,95 @@ struct GeneralSettingsView: View {
                     "and ReadPaper uses a warmer canvas inspired by Claude's reading surface."
             )
             .font(HushTypography.caption)
-            .foregroundStyle(HushColors.secondaryText)
+            .foregroundStyle(themePalette.secondaryText)
             .fixedSize(horizontal: false, vertical: true)
         }
         .padding(HushSpacing.lg)
         .cardStyle(
-            background: HushColors.cardBackground,
-            stroke: HushColors.subtleStroke
+            background: themePalette.cardBackground,
+            stroke: themePalette.subtleStroke
+        )
+    }
+
+    private var typographySection: some View {
+        VStack(alignment: .leading, spacing: HushSpacing.md) {
+            Text("Typography")
+                .font(HushTypography.captionBold)
+                .foregroundStyle(themePalette.secondaryText)
+
+            HStack(alignment: .top, spacing: HushSpacing.xl) {
+                VStack(alignment: .leading, spacing: HushSpacing.sm) {
+                    Text("Font family")
+                        .font(HushTypography.scaled(14, weight: .semibold))
+
+                    Picker("", selection: fontFamilySelection) {
+                        Text("System").tag(String?.none)
+                        ForEach(fontFamilies, id: \.self) { family in
+                            Text(family).tag(Optional(family))
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 280, alignment: .leading)
+
+                    Text("Applies to app copy and markdown rich text. Code stays monospaced.")
+                        .font(HushTypography.caption)
+                        .foregroundStyle(themePalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                VStack(alignment: .leading, spacing: HushSpacing.sm) {
+                    Text("Font size")
+                        .font(HushTypography.scaled(14, weight: .semibold))
+
+                    HStack(spacing: HushSpacing.md) {
+                        Slider(
+                            value: fontSizeBinding,
+                            in: AppFontSettings.minimumSize ... AppFontSettings.maximumSize,
+                            step: 1
+                        )
+                        .frame(width: 180)
+
+                        Text("\(Int(container.settings.fontSettings.normalizedSize)) pt")
+                            .font(HushTypography.scaled(14, weight: .semibold))
+                            .frame(width: 48, alignment: .trailing)
+                    }
+
+                    Button("Reset to 14pt / System") {
+                        container.settings.fontSettings = .default
+                    }
+                    .buttonStyle(.link)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: HushSpacing.xs) {
+                Text("Preview")
+                    .font(HushTypography.captionBold)
+                    .foregroundStyle(themePalette.secondaryText)
+
+                Text("Aa Preview text 123")
+                    .font(HushTypography.scaled(16, weight: .medium))
+                    .foregroundStyle(themePalette.primaryText)
+
+                Text(selectedFontSummary)
+                    .font(HushTypography.caption)
+                    .foregroundStyle(themePalette.secondaryText)
+            }
+            .padding(HushSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
+                    .fill(themePalette.softFillStrong)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
+                            .stroke(themePalette.subtleStroke, lineWidth: 1)
+                    )
+            )
+        }
+        .padding(HushSpacing.lg)
+        .cardStyle(
+            background: themePalette.cardBackground,
+            stroke: themePalette.subtleStroke
         )
     }
 
@@ -59,7 +143,7 @@ struct GeneralSettingsView: View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
             Text("Concurrency")
                 .font(HushTypography.captionBold)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(themePalette.secondaryText)
 
             HStack(spacing: HushSpacing.md) {
                 Text("Max concurrent requests")
@@ -78,22 +162,42 @@ struct GeneralSettingsView: View {
 
             Text("Maximum number of conversations that can stream responses simultaneously.")
                 .font(HushTypography.caption)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(themePalette.secondaryText)
         }
         .padding(HushSpacing.lg)
         .cardStyle(
-            background: HushColors.cardBackground,
-            stroke: HushColors.subtleStroke
+            background: themePalette.cardBackground,
+            stroke: themePalette.subtleStroke
         )
+    }
+
+    private var fontFamilySelection: Binding<String?> {
+        Binding(
+            get: { container.settings.fontSettings.normalizedFamilyName },
+            set: { container.settings.fontSettings.familyName = $0 }
+        )
+    }
+
+    private var fontSizeBinding: Binding<Double> {
+        Binding(
+            get: { container.settings.fontSettings.normalizedSize },
+            set: { container.settings.fontSettings.size = $0 }
+        )
+    }
+
+    private var selectedFontSummary: String {
+        let family = container.settings.fontSettings.normalizedFamilyName ?? "System"
+        return "\(family) / \(Int(container.settings.fontSettings.normalizedSize))pt"
     }
 }
 
 private struct ThemeOptionCard: View {
+    @Environment(\.hushThemePalette) private var themePalette
     let theme: AppTheme
     let isSelected: Bool
     let onTap: () -> Void
 
-    private var palette: HushThemePalette {
+    private var previewPalette: HushThemePalette {
         HushColors.palette(for: theme)
     }
 
@@ -102,48 +206,51 @@ private struct ThemeOptionCard: View {
             VStack(alignment: .leading, spacing: HushSpacing.md) {
                 ZStack(alignment: .topTrailing) {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(palette.rootBackground)
+                        .fill(previewPalette.rootBackground)
                         .overlay {
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(isSelected ? palette.accentMutedStroke : palette.subtleStroke, lineWidth: 1)
+                                .stroke(
+                                    isSelected ? previewPalette.accentMutedStroke : previewPalette.subtleStroke,
+                                    lineWidth: 1
+                                )
                         }
                         .frame(height: 120)
                         .overlay(alignment: .topLeading) {
                             HStack(spacing: 0) {
                                 Rectangle()
-                                    .fill(palette.sidebarBackground)
+                                    .fill(previewPalette.sidebarBackground)
                                     .frame(width: 52)
 
                                 VStack(alignment: .leading, spacing: 8) {
                                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .fill(palette.cardBackground)
+                                        .fill(previewPalette.cardBackground)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                .stroke(palette.subtleStroke, lineWidth: 1)
+                                                .stroke(previewPalette.subtleStroke, lineWidth: 1)
                                         )
                                         .frame(height: 36)
 
                                     HStack(spacing: 6) {
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(palette.accentMutedBackground)
+                                            .fill(previewPalette.accentMutedBackground)
                                             .frame(width: 58, height: 18)
 
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(palette.softFillStrong)
+                                            .fill(previewPalette.softFillStrong)
                                             .frame(width: 40, height: 18)
                                     }
 
                                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                                         .fill(
                                             LinearGradient(
-                                                colors: [palette.composerShellTop, palette.composerShellBottom],
+                                                colors: [previewPalette.composerShellTop, previewPalette.composerShellBottom],
                                                 startPoint: .topLeading,
                                                 endPoint: .bottomTrailing
                                             )
                                         )
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                                .stroke(palette.composerShellStroke, lineWidth: 1)
+                                                .stroke(previewPalette.composerShellStroke, lineWidth: 1)
                                         )
                                         .frame(height: 22)
                                 }
@@ -155,7 +262,7 @@ private struct ThemeOptionCard: View {
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(palette.accent)
+                            .foregroundStyle(previewPalette.accent)
                             .padding(10)
                     }
                 }
@@ -163,11 +270,11 @@ private struct ThemeOptionCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(theme.displayName)
                         .font(HushTypography.body.weight(.semibold))
-                        .foregroundStyle(HushColors.primaryText)
+                        .foregroundStyle(themePalette.primaryText)
 
                     Text(theme.subtitle)
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(themePalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -175,14 +282,16 @@ private struct ThemeOptionCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
-                    .fill(isSelected ? HushColors.selectionFill : HushColors.cardBackground)
+                    .fill(isSelected ? themePalette.selectionFill : themePalette.cardBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
-                            .stroke(isSelected ? HushColors.selectionStroke : HushColors.subtleStroke, lineWidth: 1)
+                            .stroke(
+                                isSelected ? themePalette.selectionStroke : themePalette.subtleStroke,
+                                lineWidth: 1
+                            )
                     )
             )
         }
         .buttonStyle(.plain)
-        .themeRefreshAware()
     }
 }

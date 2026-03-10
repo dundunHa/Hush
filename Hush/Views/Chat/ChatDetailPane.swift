@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ChatDetailPane: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushThemePalette) private var palette
 
     private enum SwitchOverlayDebug {
         static var isEnabled: Bool {
@@ -48,11 +49,11 @@ struct ChatDetailPane: View {
                 "messages=\(container.messages.count) " +
                 "loading=\(container.isActiveConversationLoading)"
         )
-        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-        .foregroundStyle(HushColors.debugOverlayForeground)
+        .font(HushTypography.monospaced(11, weight: .semibold))
+        .foregroundStyle(palette.debugOverlayForeground)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(HushColors.debugOverlayBackground, in: Capsule())
+        .background(palette.debugOverlayBackground, in: Capsule())
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .padding(.top, 10)
         .padding(.trailing, 12)
@@ -66,14 +67,14 @@ struct ChatDetailPane: View {
 
             Text("Loading thread...")
                 .font(HushTypography.caption)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
         }
         .padding(.horizontal, HushSpacing.xl)
         .padding(.vertical, HushSpacing.lg)
-        .background(HushColors.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(palette.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(HushColors.subtleStroke, lineWidth: 1)
+                .stroke(palette.subtleStroke, lineWidth: 1)
         )
     }
 
@@ -81,11 +82,11 @@ struct ChatDetailPane: View {
         VStack(spacing: HushSpacing.sm) {
             Text("Failed to load thread")
                 .font(HushTypography.captionBold)
-                .foregroundStyle(HushColors.errorText)
+                .foregroundStyle(palette.errorText)
 
             Text(message)
                 .font(HushTypography.caption)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
                 .multilineTextAlignment(.center)
                 .lineLimit(6)
 
@@ -94,23 +95,23 @@ struct ChatDetailPane: View {
             } label: {
                 Text("Retry")
                     .font(HushTypography.captionBold)
-                    .foregroundStyle(HushColors.primaryActionForeground)
+                    .foregroundStyle(palette.primaryActionForeground)
                     .padding(.horizontal, HushSpacing.lg)
                     .padding(.vertical, HushSpacing.sm)
-                    .background(HushColors.primaryActionBackground, in: Capsule())
+                    .background(palette.primaryActionBackground, in: Capsule())
                     .overlay(
                         Capsule()
-                            .stroke(HushColors.accentMutedStroke, lineWidth: 1)
+                            .stroke(palette.accentMutedStroke, lineWidth: 1)
                     )
             }
             .buttonStyle(.plain)
         }
         .padding(.horizontal, HushSpacing.xl)
         .padding(.vertical, HushSpacing.lg)
-        .background(HushColors.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(palette.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(HushColors.subtleStroke, lineWidth: 1)
+                .stroke(palette.subtleStroke, lineWidth: 1)
         )
     }
 }

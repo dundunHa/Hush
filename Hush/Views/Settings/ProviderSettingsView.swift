@@ -46,6 +46,7 @@ private struct ProviderCatalogDraftSignature: Equatable {
 
 struct ProviderSettingsView: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushThemePalette) private var palette
 
     @State private var editingProviderID: String?
     @State private var providerName: String = ""
@@ -108,7 +109,6 @@ struct ProviderSettingsView: View {
                     providerDetailSheet(providerID: providerID)
                 }
             }
-            .themeRefreshAware()
     }
 
     // MARK: - Helpers
@@ -288,7 +288,7 @@ struct ProviderSettingsView: View {
 
                 Text("Set the app default here after a provider has an API key and a default model.")
                     .font(HushTypography.footnote)
-                    .foregroundStyle(HushColors.secondaryText)
+                    .foregroundStyle(palette.secondaryText)
 
                 VStack(spacing: HushSpacing.sm) {
                     ForEach(providers) { provider in
@@ -354,7 +354,7 @@ struct ProviderSettingsView: View {
                 if !saveMessage.isEmpty {
                     Text(saveMessage)
                         .font(HushTypography.footnote)
-                        .foregroundStyle(saveFailed ? HushColors.errorText : HushColors.successText)
+                        .foregroundStyle(saveFailed ? palette.errorText : palette.successText)
                 }
 
                 actionBar(config)
@@ -364,7 +364,7 @@ struct ProviderSettingsView: View {
         .contentMargins(.vertical, 40)
         .scrollBounceBehavior(.basedOnSize)
         .frame(width: 580, height: 600)
-        .background(HushColors.rootBackground)
+        .background(palette.rootBackground)
     }
 
     private func providerHeader(_ config: ProviderConfiguration) -> some View {
@@ -388,14 +388,14 @@ struct ProviderSettingsView: View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
             Text("Connection")
                 .font(HushTypography.heading)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
 
             Toggle("Enabled", isOn: $isEnabled)
 
             VStack(alignment: .leading, spacing: HushSpacing.xs) {
                 Text("Endpoint")
                     .font(HushTypography.captionBold)
-                    .foregroundStyle(HushColors.secondaryText)
+                    .foregroundStyle(palette.secondaryText)
                 TextField(defaultEndpointPlaceholder(for: config.type), text: $endpoint)
                     .textFieldStyle(.roundedBorder)
             }
@@ -403,7 +403,7 @@ struct ProviderSettingsView: View {
             VStack(alignment: .leading, spacing: HushSpacing.xs) {
                 Text("API Key")
                     .font(HushTypography.captionBold)
-                    .foregroundStyle(HushColors.secondaryText)
+                    .foregroundStyle(palette.secondaryText)
                 HStack(spacing: HushSpacing.xs) {
                     if isAPIKeyRevealed {
                         TextField("sk-...", text: $apiKey)
@@ -417,7 +417,7 @@ struct ProviderSettingsView: View {
                         isAPIKeyRevealed.toggle()
                     } label: {
                         Image(systemName: isAPIKeyRevealed ? "eye.slash" : "eye")
-                            .foregroundStyle(HushColors.secondaryText)
+                            .foregroundStyle(palette.secondaryText)
                     }
                     .buttonStyle(.plain)
                     .help(isAPIKeyRevealed ? "Hide" : "Reveal")
@@ -426,27 +426,27 @@ struct ProviderSettingsView: View {
                 if hasStoredCredential, apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("Saved in Keychain. Leave blank to keep the existing key.")
                         .font(HushTypography.footnote)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                 }
             }
 
             HStack(alignment: .top, spacing: HushSpacing.sm) {
                 Image(systemName: "rectangle.stack.badge.person.crop")
-                    .foregroundStyle(HushColors.secondaryText)
+                    .foregroundStyle(palette.secondaryText)
                 Text(
                     container.settings.selectedProviderID == config.id
                         ? "This provider is currently the default. Change the default provider from the list on the left."
                         : "Choose the default provider from the list after this provider has an API key and a default model."
                 )
                 .font(HushTypography.footnote)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(HushSpacing.lg)
         .cardStyle(
-            background: HushColors.cardBackground,
-            stroke: HushColors.subtleStroke
+            background: palette.cardBackground,
+            stroke: palette.subtleStroke
         )
     }
 
@@ -463,7 +463,7 @@ struct ProviderSettingsView: View {
             HStack {
                 Text("Model Catalog")
                     .font(HushTypography.heading)
-                    .foregroundStyle(HushColors.secondaryText)
+                    .foregroundStyle(palette.secondaryText)
 
                 Spacer()
 
@@ -483,7 +483,7 @@ struct ProviderSettingsView: View {
 
             HStack(spacing: HushSpacing.sm) {
                 Image(systemName: defaultModelID.isEmpty ? "target" : "checkmark.circle.fill")
-                    .foregroundStyle(defaultModelID.isEmpty ? HushColors.secondaryText : HushColors.successText)
+                    .foregroundStyle(defaultModelID.isEmpty ? palette.secondaryText : palette.successText)
 
                 Text(
                     defaultModelID.isEmpty
@@ -491,7 +491,7 @@ struct ProviderSettingsView: View {
                         : "Default model: \(defaultModelID)"
                 )
                 .font(HushTypography.body)
-                .foregroundStyle(defaultModelID.isEmpty ? HushColors.secondaryText : .white)
+                .foregroundStyle(defaultModelID.isEmpty ? palette.secondaryText : .white)
                 .lineLimit(1)
 
                 Spacer()
@@ -506,15 +506,15 @@ struct ProviderSettingsView: View {
             }
             .padding(.horizontal, HushSpacing.md)
             .padding(.vertical, HushSpacing.sm)
-            .background(HushColors.rootBackground.opacity(0.65), in: RoundedRectangle(cornerRadius: 10))
+            .background(palette.rootBackground.opacity(0.65), in: RoundedRectangle(cornerRadius: 10))
 
             if let refreshError {
                 HStack(spacing: HushSpacing.sm) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(HushColors.errorText)
+                        .foregroundStyle(palette.errorText)
                     Text(refreshError)
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.errorText)
+                        .foregroundStyle(palette.errorText)
                 }
                 .padding(.vertical, HushSpacing.xs)
             }
@@ -524,7 +524,7 @@ struct ProviderSettingsView: View {
                     HStack {
                         Text("Default Model ID")
                             .font(HushTypography.captionBold)
-                            .foregroundStyle(HushColors.secondaryText)
+                            .foregroundStyle(palette.secondaryText)
                         Spacer()
                         Button("Use Catalog") {
                             prefersManualDefaultModelEntry = false
@@ -538,13 +538,13 @@ struct ProviderSettingsView: View {
 
                     Text("Use manual entry only when the provider does not expose the model in the catalog.")
                         .font(HushTypography.footnote)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                 }
             } else {
                 HStack {
                     Text("Select the default model directly in the catalog list.")
                         .font(HushTypography.footnote)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                     Spacer()
                     Button("Model Missing? Enter ID") {
                         prefersManualDefaultModelEntry = true
@@ -557,7 +557,7 @@ struct ProviderSettingsView: View {
             if allModels.isEmpty {
                 HStack(spacing: HushSpacing.sm) {
                     Image(systemName: "info.circle")
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                     Text(
                         isRefreshing
                             ? "Fetching models…"
@@ -568,7 +568,7 @@ struct ProviderSettingsView: View {
                                     : "Refresh to fetch models for this draft before saving."))
                     )
                     .font(HushTypography.caption)
-                    .foregroundStyle(HushColors.secondaryText)
+                    .foregroundStyle(palette.secondaryText)
                 }
                 .padding(.vertical, HushSpacing.sm)
             } else {
@@ -592,12 +592,12 @@ struct ProviderSettingsView: View {
                                     } label: {
                                         HStack(spacing: HushSpacing.md) {
                                             Image(systemName: isDefault ? "largecircle.fill.circle" : "circle")
-                                                .foregroundStyle(isDefault ? HushColors.successText : HushColors.secondaryText)
+                                                .foregroundStyle(isDefault ? palette.successText : palette.secondaryText)
                                                 .frame(width: 20)
 
                                             Text(model.id)
                                                 .font(HushTypography.body)
-                                                .foregroundStyle(HushColors.primaryText)
+                                                .foregroundStyle(palette.primaryText)
                                                 .lineLimit(1)
 
                                             Spacer()
@@ -605,10 +605,10 @@ struct ProviderSettingsView: View {
                                             if model.modelType != .unknown {
                                                 Text(model.modelType.rawValue)
                                                     .font(HushTypography.caption)
-                                                    .foregroundStyle(HushColors.secondaryText)
+                                                    .foregroundStyle(palette.secondaryText)
                                                     .padding(.horizontal, HushSpacing.sm)
                                                     .padding(.vertical, 2)
-                                                    .background(HushColors.softFillStrong, in: Capsule())
+                                                    .background(palette.softFillStrong, in: Capsule())
                                             }
                                         }
                                     }
@@ -619,7 +619,7 @@ struct ProviderSettingsView: View {
                                         togglePinnedModel(model.id)
                                     } label: {
                                         Image(systemName: isPinned ? "pin.fill" : "pin")
-                                            .foregroundStyle(isPinned ? HushColors.successText : HushColors.secondaryText)
+                                            .foregroundStyle(isPinned ? palette.successText : palette.secondaryText)
                                     }
                                     .buttonStyle(.plain)
                                     .help(isPinned ? "Unpin" : "Pin")
@@ -628,12 +628,12 @@ struct ProviderSettingsView: View {
                                 .padding(.vertical, HushSpacing.xs)
                                 .background(
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(isDefault ? HushColors.selectionFill : .clear)
+                                        .fill(isDefault ? palette.selectionFill : .clear)
                                 )
 
                                 if model.id != filtered.last?.id {
                                     Divider()
-                                        .foregroundStyle(HushColors.subtleStroke)
+                                        .foregroundStyle(palette.subtleStroke)
                                 }
                             }
                         }
@@ -642,14 +642,14 @@ struct ProviderSettingsView: View {
 
                     Text("\(allModels.count) models · \(pinnedModelIDs.count) pinned · tap a row to set the default")
                         .font(HushTypography.footnote)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                 }
             }
         }
         .padding(HushSpacing.lg)
         .cardStyle(
-            background: HushColors.cardBackground,
-            stroke: HushColors.subtleStroke
+            background: palette.cardBackground,
+            stroke: palette.subtleStroke
         )
     }
 
@@ -945,6 +945,7 @@ struct ProviderSettingsView: View {
 // MARK: - ProviderListRowView
 
 private struct ProviderListRowView: View {
+    @Environment(\.hushThemePalette) private var palette
     let provider: ProviderConfiguration
     let isDefault: Bool
     let subtitle: String
@@ -974,12 +975,12 @@ private struct ProviderListRowView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(provider.name)
                             .font(HushTypography.body)
-                            .foregroundStyle(HushColors.primaryText)
+                            .foregroundStyle(palette.primaryText)
                             .lineLimit(1)
 
                         Text(subtitle)
                             .font(HushTypography.caption)
-                            .foregroundStyle(HushColors.secondaryText)
+                            .foregroundStyle(palette.secondaryText)
                             .lineLimit(1)
                     }
 
@@ -988,7 +989,7 @@ private struct ProviderListRowView: View {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(
-                            HushColors.secondaryText.opacity(isHovered ? 1.0 : 0.6)
+                            palette.secondaryText.opacity(isHovered ? 1.0 : 0.6)
                         )
                 }
             }
@@ -997,10 +998,10 @@ private struct ProviderListRowView: View {
             if isDefault {
                 Text("Default")
                     .font(HushTypography.caption)
-                    .foregroundStyle(HushColors.accent)
+                    .foregroundStyle(palette.accent)
                     .padding(.horizontal, HushSpacing.sm)
                     .padding(.vertical, 3)
-                    .background(HushColors.accentMutedBackground, in: Capsule())
+                    .background(palette.accentMutedBackground, in: Capsule())
             } else if canSetDefault {
                 Button("Make Default") {
                     onSetDefault()
@@ -1010,10 +1011,10 @@ private struct ProviderListRowView: View {
             } else if let badgeText {
                 Text(badgeText)
                     .font(HushTypography.caption)
-                    .foregroundStyle(HushColors.secondaryText)
+                    .foregroundStyle(palette.secondaryText)
                     .padding(.horizontal, HushSpacing.sm)
                     .padding(.vertical, 3)
-                    .background(HushColors.softFill, in: Capsule())
+                    .background(palette.softFill, in: Capsule())
             }
         }
         .padding(.horizontal, HushSpacing.lg)
@@ -1021,11 +1022,11 @@ private struct ProviderListRowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
-                .fill(isHovered ? HushColors.hoverFill : HushColors.cardBackground)
+                .fill(isHovered ? palette.hoverFill : palette.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
                         .stroke(
-                            isHovered ? HushColors.hoverStroke : HushColors.subtleStroke,
+                            isHovered ? palette.hoverStroke : palette.subtleStroke,
                             lineWidth: 1
                         )
                 )
@@ -1034,7 +1035,6 @@ private struct ProviderListRowView: View {
         .onHover { hovering in
             isHovered = hovering
         }
-        .themeRefreshAware()
     }
 }
 

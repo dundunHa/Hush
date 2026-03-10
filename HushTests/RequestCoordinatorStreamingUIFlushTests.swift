@@ -44,7 +44,7 @@ struct RequestCoordinatorStreamingUIFlushTests {
         let conversationID = try #require(container.activeConversationId)
         let pool = HotScenePool(capacity: 2)
         container.registerHotScenePool(pool)
-        let scene = ConversationViewController(container: container)
+        let scene = ConversationViewController(container: container, theme: container.settings.theme)
         _ = pool.switchTo(conversationID: conversationID, messageCount: 0, generation: 1) {
             scene
         }

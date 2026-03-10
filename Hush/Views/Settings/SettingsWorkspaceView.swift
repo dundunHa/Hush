@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsWorkspaceView: View {
     @Binding var showSettings: Bool
+    @Environment(\.hushThemePalette) private var themePalette
 
     @State private var selectedTab: SettingsTab = .general
 
@@ -28,7 +29,7 @@ struct SettingsWorkspaceView: View {
 
             ZStack {
                 Rectangle()
-                    .fill(HushColors.sidebarBackground)
+                    .fill(themePalette.sidebarBackground)
 
                 let shape = UnevenRoundedRectangle(
                     topLeadingRadius: detailPaneTopCornerRadius,
@@ -39,11 +40,11 @@ struct SettingsWorkspaceView: View {
                 )
 
                 settingsDetailPane
-                    .background(HushColors.rootBackground)
+                    .background(themePalette.rootBackground)
                     .clipShape(shape)
                     .overlay {
                         shape
-                            .strokeBorder(HushColors.splitPaneEdgeStroke, lineWidth: 1)
+                            .strokeBorder(themePalette.splitPaneEdgeStroke, lineWidth: 1)
                             .mask(alignment: .leading) {
                                 Rectangle()
                                     .frame(width: max(detailPaneTopCornerRadius, detailPaneBottomCornerRadius) + 2)
@@ -52,8 +53,7 @@ struct SettingsWorkspaceView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(HushColors.sidebarBackground)
-        .themeRefreshAware()
+        .background(themePalette.sidebarBackground)
     }
 
     // MARK: - Sidebar
@@ -72,11 +72,11 @@ struct SettingsWorkspaceView: View {
                     .padding(.vertical, HushSpacing.sm)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(isBackHovered ? HushColors.hoverFill : .clear)
+                            .fill(isBackHovered ? themePalette.hoverFill : .clear)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .stroke(
-                                        isBackHovered ? HushColors.hoverStroke : .clear,
+                                        isBackHovered ? themePalette.hoverStroke : .clear,
                                         lineWidth: 1
                                     )
                             )
@@ -144,7 +144,7 @@ struct SettingsWorkspaceView: View {
         .padding(.bottom, HushSpacing.lg)
         .frame(width: HushSpacing.sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(HushColors.sidebarBackground)
+        .background(themePalette.sidebarBackground)
         .background(alignment: .top) {
             WindowDragArea()
                 .frame(height: HushSpacing.topBarHeight)
@@ -175,6 +175,7 @@ struct SettingsWorkspaceView: View {
 // MARK: - SettingsSidebarItem
 
 private struct SettingsSidebarItem: View {
+    @Environment(\.hushThemePalette) private var themePalette
     let icon: String
     let label: String
     let isSelected: Bool
@@ -187,7 +188,7 @@ private struct SettingsSidebarItem: View {
             HStack(spacing: HushSpacing.sm) {
                 Image(systemName: icon)
                     .font(.system(size: 14))
-                    .foregroundStyle(HushColors.controlForegroundMuted)
+                    .foregroundStyle(themePalette.controlForegroundMuted)
                     .frame(width: 20)
 
                 Text(label)
@@ -201,11 +202,11 @@ private struct SettingsSidebarItem: View {
             .padding(.vertical, HushSpacing.sm)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? HushColors.selectionFill : (isHovered ? HushColors.hoverFill : .clear))
+                    .fill(isSelected ? themePalette.selectionFill : (isHovered ? themePalette.hoverFill : .clear))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(
-                                isSelected ? HushColors.selectionStroke : (isHovered ? HushColors.hoverStroke : .clear),
+                                isSelected ? themePalette.selectionStroke : (isHovered ? themePalette.hoverStroke : .clear),
                                 lineWidth: 1
                             )
                     )
@@ -217,7 +218,6 @@ private struct SettingsSidebarItem: View {
         .onHover { hovering in
             isHovered = hovering
         }
-        .themeRefreshAware()
     }
 }
 
@@ -255,7 +255,7 @@ private struct SettingsSidebarItem: View {
         }
         .padding()
         .frame(width: 200)
-        .background(HushColors.sidebarBackground)
+        .background(HushColors.palette(for: .dark).sidebarBackground)
     }
 
 #endif

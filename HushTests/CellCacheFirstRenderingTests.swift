@@ -87,6 +87,7 @@ struct CellCacheFirstRenderingTests {
             activeConversationID: "conv-height",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -110,6 +111,7 @@ struct CellCacheFirstRenderingTests {
             activeConversationID: "conv-height",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )

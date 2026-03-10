@@ -28,22 +28,22 @@ struct HotScenePoolTests {
         let container = AppContainer.forTesting(settings: .testDefault)
 
         _ = pool.switchTo(conversationID: "A", messageCount: 0, generation: 1) {
-            ConversationViewController(container: container)
+            ConversationViewController(container: container, theme: container.settings.theme)
         }
         _ = pool.switchTo(conversationID: "B", messageCount: 0, generation: 1) {
-            ConversationViewController(container: container)
+            ConversationViewController(container: container, theme: container.settings.theme)
         }
         _ = pool.switchTo(conversationID: "C", messageCount: 5, generation: 1) {
-            ConversationViewController(container: container)
+            ConversationViewController(container: container, theme: container.settings.theme)
         }
 
         // Touch B so A becomes the LRU empty scene.
         _ = pool.switchTo(conversationID: "B", messageCount: 0, generation: 1) {
-            ConversationViewController(container: container)
+            ConversationViewController(container: container, theme: container.settings.theme)
         }
 
         let result = pool.switchTo(conversationID: "D", messageCount: 5, generation: 1) {
-            ConversationViewController(container: container)
+            ConversationViewController(container: container, theme: container.settings.theme)
         }
 
         #expect(result.evicted?.conversationID == "A")
@@ -56,22 +56,22 @@ struct HotScenePoolTests {
         let container = AppContainer.forTesting(settings: .testDefault)
 
         _ = pool.switchTo(conversationID: "A", messageCount: 1, generation: 1) {
-            ConversationViewController(container: container)
+            ConversationViewController(container: container, theme: container.settings.theme)
         }
         _ = pool.switchTo(conversationID: "B", messageCount: 1, generation: 1) {
-            ConversationViewController(container: container)
+            ConversationViewController(container: container, theme: container.settings.theme)
         }
         _ = pool.switchTo(conversationID: "C", messageCount: 1, generation: 1) {
-            ConversationViewController(container: container)
+            ConversationViewController(container: container, theme: container.settings.theme)
         }
 
         // Touch B so A becomes LRU.
         _ = pool.switchTo(conversationID: "B", messageCount: 1, generation: 1) {
-            ConversationViewController(container: container)
+            ConversationViewController(container: container, theme: container.settings.theme)
         }
 
         let result = pool.switchTo(conversationID: "D", messageCount: 1, generation: 1) {
-            ConversationViewController(container: container)
+            ConversationViewController(container: container, theme: container.settings.theme)
         }
 
         #expect(result.evicted?.conversationID == "A")
@@ -84,13 +84,13 @@ struct HotScenePoolTests {
         let container = AppContainer.forTesting(settings: .testDefault)
 
         _ = pool.switchTo(conversationID: "A", messageCount: 1, generation: 1) {
-            ConversationViewController(container: container)
+            ConversationViewController(container: container, theme: container.settings.theme)
         }
         _ = pool.switchTo(conversationID: "B", messageCount: 1, generation: 1) {
-            ConversationViewController(container: container)
+            ConversationViewController(container: container, theme: container.settings.theme)
         }
         _ = pool.switchTo(conversationID: "C", messageCount: 1, generation: 1) {
-            ConversationViewController(container: container)
+            ConversationViewController(container: container, theme: container.settings.theme)
         }
 
         #expect(pool.hotConversationIDs == ["A", "B"])
@@ -194,6 +194,63 @@ struct HotScenePoolTests {
         let activeApplyCount = activeScene.applyCountForTesting
 
         container.settings.theme = .light
+        controller.update(container: container, theme: container.settings.theme)
+
+        #expect(hotScene.applyCountForTesting == hotApplyCount + 1)
+        #expect(activeScene.applyCountForTesting == activeApplyCount + 1)
+        #expect(hotScene.messageTableViewForTesting.lastUpdateModeForTesting == .fullReload)
+        #expect(activeScene.messageTableViewForTesting.lastUpdateModeForTesting == .fullReload)
+    }
+
+    @Test("Font settings change forces full reload for active and hot scenes")
+    func fontSettingsChangeForcesFullReloadForActiveAndHotScenes() async throws {
+        let db = try DatabaseManager.inMemory()
+        let coordinator = ChatPersistenceCoordinator(dbManager: db)
+
+        let conversationA = try coordinator.createNewConversation()
+        let conversationB = try coordinator.createNewConversation()
+
+        try coordinator.persistSystemMessage(
+            ChatMessage(role: .assistant, content: "A1"),
+            conversationId: conversationA,
+            status: .completed
+        )
+        try coordinator.persistSystemMessage(
+            ChatMessage(role: .assistant, content: "B1"),
+            conversationId: conversationB,
+            status: .completed
+        )
+
+        var registry = ProviderRegistry()
+        registry.register(MockProvider(id: "mock"))
+
+        let pool = HotScenePool(capacity: 3)
+        let controller = HotScenePoolController(pool: pool)
+        controller.loadViewIfNeeded()
+
+        let container = AppContainer.forTesting(
+            settings: .testDefault,
+            registry: registry,
+            persistence: coordinator,
+            activeConversationId: conversationA,
+            sidebarThreads: []
+        )
+
+        controller.update(container: container, theme: container.settings.theme)
+
+        container.activateConversation(conversationId: conversationB)
+        try await waitForConversationReady(container, conversationId: conversationB)
+        controller.update(container: container, theme: container.settings.theme)
+
+        let hotScene = try #require(pool.sceneFor(conversationID: conversationA))
+        let activeScene = try #require(pool.sceneFor(conversationID: conversationB))
+        let hotApplyCount = hotScene.applyCountForTesting
+        let activeApplyCount = activeScene.applyCountForTesting
+
+        container.settings.fontSettings = AppFontSettings(
+            familyName: "Helvetica Neue",
+            size: 17
+        )
         controller.update(container: container, theme: container.settings.theme)
 
         #expect(hotScene.applyCountForTesting == hotApplyCount + 1)

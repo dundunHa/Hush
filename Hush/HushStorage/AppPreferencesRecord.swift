@@ -17,9 +17,12 @@ public nonisolated struct AppPreferencesRecord: Codable, Sendable, Equatable {
     public var frequencyPenalty: Double
     public var contextMessageLimit: Int?
     public var useModelDefaults: Bool
+    public var reasoningEffort: String?
     public var quickBarKey: String
     public var quickBarModifiers: String // JSON-encoded [String]
     public var theme: String
+    public var fontFamilyName: String?
+    public var fontSize: Double?
     public var maxConcurrentRequests: Int?
     public var updatedAt: Date
 
@@ -35,9 +38,12 @@ public nonisolated struct AppPreferencesRecord: Codable, Sendable, Equatable {
         frequencyPenalty: Double,
         contextMessageLimit: Int? = nil,
         useModelDefaults: Bool = false,
+        reasoningEffort: String? = nil,
         quickBarKey: String,
         quickBarModifiers: String = "[]",
         theme: String = AppTheme.dark.rawValue,
+        fontFamilyName: String? = nil,
+        fontSize: Double? = nil,
         maxConcurrentRequests: Int? = nil,
         updatedAt: Date = .now
     ) {
@@ -52,9 +58,12 @@ public nonisolated struct AppPreferencesRecord: Codable, Sendable, Equatable {
         self.frequencyPenalty = frequencyPenalty
         self.contextMessageLimit = contextMessageLimit
         self.useModelDefaults = useModelDefaults
+        self.reasoningEffort = reasoningEffort
         self.quickBarKey = quickBarKey
         self.quickBarModifiers = quickBarModifiers
         self.theme = theme
+        self.fontFamilyName = fontFamilyName
+        self.fontSize = fontSize
         self.maxConcurrentRequests = maxConcurrentRequests
         self.updatedAt = updatedAt
     }
@@ -72,6 +81,7 @@ public struct AppPreferencesSnapshot: Sendable, Equatable {
     public let parameters: ModelParameters
     public let quickBar: QuickBarConfiguration
     public let theme: AppTheme
+    public let fontSettings: AppFontSettings
     public let maxConcurrentRequests: Int
 
     public init(
@@ -80,6 +90,7 @@ public struct AppPreferencesSnapshot: Sendable, Equatable {
         parameters: ModelParameters,
         quickBar: QuickBarConfiguration,
         theme: AppTheme,
+        fontSettings: AppFontSettings = .default,
         maxConcurrentRequests: Int = RuntimeConstants.defaultMaxConcurrentRequests
     ) {
         self.selectedProviderID = selectedProviderID
@@ -87,6 +98,7 @@ public struct AppPreferencesSnapshot: Sendable, Equatable {
         self.parameters = parameters
         self.quickBar = quickBar
         self.theme = theme
+        self.fontSettings = fontSettings
         self.maxConcurrentRequests = maxConcurrentRequests
     }
 }
@@ -114,13 +126,18 @@ public extension AppPreferencesRecord {
                 presencePenalty: presencePenalty,
                 frequencyPenalty: frequencyPenalty,
                 contextMessageLimit: contextMessageLimit,
-                useModelDefaults: useModelDefaults
+                useModelDefaults: useModelDefaults,
+                reasoningEffort: reasoningEffort.flatMap(ModelReasoningEffort.init(rawValue:))
             ),
             quickBar: QuickBarConfiguration(
                 key: quickBarKey,
                 modifiers: parsedModifiers
             ),
             theme: parsedTheme,
+            fontSettings: AppFontSettings(
+                familyName: fontFamilyName,
+                size: fontSize ?? AppFontSettings.defaultSize
+            ),
             maxConcurrentRequests: maxConcurrentRequests ?? RuntimeConstants.defaultMaxConcurrentRequests
         )
     }
@@ -149,9 +166,12 @@ public extension AppPreferencesRecord {
             frequencyPenalty: settings.parameters.frequencyPenalty,
             contextMessageLimit: settings.parameters.contextMessageLimit,
             useModelDefaults: settings.parameters.useModelDefaults,
+            reasoningEffort: settings.parameters.reasoningEffort?.rawValue,
             quickBarKey: settings.quickBar.key,
             quickBarModifiers: modifiersJSON,
             theme: settings.theme.rawValue,
+            fontFamilyName: settings.fontSettings.normalizedFamilyName,
+            fontSize: settings.fontSettings.normalizedSize,
             maxConcurrentRequests: settings.maxConcurrentRequests,
             updatedAt: updatedAt
         )

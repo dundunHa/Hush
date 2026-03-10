@@ -3,6 +3,7 @@ import AppKit
 @MainActor
 final class ConversationViewController: NSViewController {
     private var container: AppContainer
+    private var theme: AppTheme
     private let messageTableView = MessageTableView()
     private var lastLayoutReadyGeneration: UInt64?
     var needsReload: Bool = false
@@ -13,8 +14,9 @@ final class ConversationViewController: NSViewController {
         private(set) var lastStreamingPushContentForTesting: String?
     #endif
 
-    init(container: AppContainer) {
+    init(container: AppContainer, theme: AppTheme) {
         self.container = container
+        self.theme = theme
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -41,8 +43,9 @@ final class ConversationViewController: NSViewController {
         renderConversationState()
     }
 
-    func update(container: AppContainer) {
+    func update(container: AppContainer, theme: AppTheme) {
         self.container = container
+        self.theme = theme
         renderConversationState()
     }
 
@@ -63,6 +66,7 @@ final class ConversationViewController: NSViewController {
             activeConversationID: conversationId,
             isActiveConversationSending: isSending,
             switchGeneration: generation,
+            theme: theme,
             runtime: container.messageRenderRuntime,
             container: container,
             forceFullReload: forceFullReload

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SplitTopBar: View {
+    @Environment(\.hushThemePalette) private var palette
     @Binding var showSidebar: Bool
     let isSettingsMode: Bool
 
@@ -22,7 +23,7 @@ struct SplitTopBar: View {
                 Rectangle()
                     .fill(
                         (showSidebar && !isSettingsMode)
-                            ? HushColors.sidebarBackground : HushColors.rootBackground
+                            ? palette.sidebarBackground : palette.rootBackground
                     )
 
                 let shape = UnevenRoundedRectangle(
@@ -35,9 +36,9 @@ struct SplitTopBar: View {
 
                 if showSidebar && !isSettingsMode {
                     shape
-                        .fill(HushColors.rootBackground)
+                        .fill(palette.rootBackground)
                         .shadow(
-                            color: HushColors.splitPaneShadow,
+                            color: palette.splitPaneShadow,
                             radius: HushSpacing.splitPaneShadowRadius,
                             x: HushSpacing.splitPaneShadowX,
                             y: 0
@@ -57,12 +58,12 @@ struct SplitTopBar: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(height: barHeight)
-                .background(HushColors.rootBackground)
+                .background(palette.rootBackground)
                 .clipShape(shape)
                 .overlay {
                     if showSidebar && !isSettingsMode {
                         shape
-                            .strokeBorder(HushColors.splitPaneEdgeStroke, lineWidth: 1)
+                            .strokeBorder(palette.splitPaneEdgeStroke, lineWidth: 1)
                             .mask(
                                 ZStack(alignment: .topLeading) {
                                     Rectangle()
@@ -96,17 +97,17 @@ struct SplitTopBar: View {
             }
         }
         .background(WindowDragArea())
-        .themeRefreshAware()
     }
 
     private var splitBackground: some View {
         Rectangle()
-            .fill(HushColors.sidebarBackground)
+            .fill(palette.sidebarBackground)
     }
 }
 
 struct ChatTopBar: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushThemePalette) private var palette
     @Binding var showSidebar: Bool
 
     var body: some View {
@@ -137,12 +138,12 @@ struct ChatTopBar: View {
 
     private var titleColor: Color {
         if container.activeConversationLoadError != nil {
-            return HushColors.errorText
+            return palette.errorText
         }
         if let activeConversationID, container.runningConversationIds.contains(activeConversationID) {
-            return HushColors.primaryText
+            return palette.primaryText
         }
-        return HushColors.secondaryText
+        return palette.secondaryText
     }
 }
 

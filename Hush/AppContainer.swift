@@ -133,9 +133,7 @@ final class AppContainer: ObservableObject {
 
     @Published var settings: AppSettings {
         didSet {
-            if oldValue.theme != settings.theme {
-                HushColors.apply(theme: settings.theme)
-            }
+            HushTypography.apply(settings.fontSettings)
             persistSettingsIfNeeded(previous: oldValue)
             if oldValue.maxConcurrentRequests != settings.maxConcurrentRequests {
                 requestCoordinator?.updateMaxConcurrent(settings.maxConcurrentRequests)
@@ -356,7 +354,6 @@ final class AppContainer: ObservableObject {
         sidebarThreadsCursor: SidebarThreadsCursor? = nil
     ) {
         self.settings = settings
-        HushColors.apply(theme: settings.theme)
         self.preferencesRepository = preferencesRepository
         self.credentialStore = credentialStore
         self.registry = registry
@@ -375,6 +372,7 @@ final class AppContainer: ObservableObject {
         self.hasMoreSidebarThreads = hasMoreSidebarThreads
         self.oldestLoadedOrderIndex = oldestLoadedOrderIndex
         self.sidebarThreadsCursor = sidebarThreadsCursor
+        HushTypography.apply(settings.fontSettings)
 
         if let activeConversationId {
             let snapshot = ConversationPageSnapshot(
@@ -512,6 +510,7 @@ final class AppContainer: ObservableObject {
                 loadedSettings.parameters = prefs.parameters
                 loadedSettings.quickBar = prefs.quickBar
                 loadedSettings.theme = prefs.theme
+                loadedSettings.fontSettings = prefs.fontSettings
                 loadedSettings.maxConcurrentRequests = prefs.maxConcurrentRequests
             }
 
@@ -2059,7 +2058,7 @@ final class AppContainer: ObservableObject {
         let targetMessages = assistants.suffix(RenderConstants.startupRenderPrewarmAssistantMessageCap)
         guard !targetMessages.isEmpty else { return 0 }
 
-        let style = RenderStyle.fromTheme()
+        let style = RenderStyle.fromTheme(settings.theme, fontSettings: settings.fontSettings)
         let inputs = targetMessages.map {
             MessageRenderInput(
                 content: $0.content,
@@ -2090,7 +2089,7 @@ final class AppContainer: ObservableObject {
                 return
             }
 
-            let style = RenderStyle.fromTheme()
+            let style = RenderStyle.fromTheme(self.settings.theme, fontSettings: self.settings.fontSettings)
             let input = MessageRenderInput(
                 content: finalAssistantContent,
                 availableWidth: HushSpacing.chatContentMaxWidth,

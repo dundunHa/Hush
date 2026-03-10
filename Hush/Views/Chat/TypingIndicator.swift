@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TypingIndicator: View {
+    @Environment(\.hushThemePalette) private var palette
     @State private var dotIndex = 0
     @State private var animationTask: Task<Void, Never>?
 
@@ -8,7 +9,7 @@ struct TypingIndicator: View {
         HStack(spacing: 4) {
             ForEach(0 ..< 3, id: \.self) { index in
                 Circle()
-                    .fill(HushColors.secondaryText)
+                    .fill(palette.secondaryText)
                     .frame(width: 6, height: 6)
                     .scaleEffect(dotIndex == index ? 1.2 : 0.8)
                     .opacity(dotIndex == index ? 1 : 0.5)
@@ -20,7 +21,6 @@ struct TypingIndicator: View {
         .onDisappear {
             stopAnimation()
         }
-        .themeRefreshAware()
     }
 
     private func startAnimation() {

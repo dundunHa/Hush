@@ -14,7 +14,7 @@ struct AppContainerStreamingFastTrackTests {
         let pool = HotScenePool(capacity: 2)
         container.registerHotScenePool(pool)
 
-        let sceneA = ConversationViewController(container: container)
+        let sceneA = ConversationViewController(container: container, theme: container.settings.theme)
         _ = pool.switchTo(conversationID: "conv-a", messageCount: 0, generation: 1) {
             sceneA
         }
@@ -71,7 +71,7 @@ struct AppContainerStreamingFastTrackTests {
 
         let pool = HotScenePool(capacity: 2)
         container.registerHotScenePool(pool)
-        let sceneA = ConversationViewController(container: container)
+        let sceneA = ConversationViewController(container: container, theme: container.settings.theme)
         _ = pool.switchTo(conversationID: conversationA, messageCount: 0, generation: 1) {
             sceneA
         }
@@ -119,7 +119,7 @@ struct AppContainerStreamingFastTrackTests {
 
         let pool = HotScenePool(capacity: 2)
         container.registerHotScenePool(pool)
-        let sceneA = ConversationViewController(container: container)
+        let sceneA = ConversationViewController(container: container, theme: container.settings.theme)
         _ = pool.switchTo(conversationID: conversationA, messageCount: 0, generation: 1) {
             sceneA
         }

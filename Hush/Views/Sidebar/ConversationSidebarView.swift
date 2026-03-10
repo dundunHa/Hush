@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ConversationSidebarView: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushThemePalette) private var palette
     @Binding var showSettings: Bool
 
     var body: some View {
@@ -12,13 +13,12 @@ struct ConversationSidebarView: View {
             settingsButton
         }
         .padding(.top, HushSpacing.topBarHeight)
-        .background(HushColors.sidebarBackground)
+        .background(palette.sidebarBackground)
         .background(alignment: .top) {
             WindowDragArea()
                 .frame(height: HushSpacing.topBarHeight)
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .themeRefreshAware()
     }
 
     private var header: some View {
@@ -54,7 +54,7 @@ struct ConversationSidebarView: View {
         VStack(alignment: .leading, spacing: HushSpacing.sm) {
             Text("Threads")
                 .font(HushTypography.captionBold)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
                 .padding(.horizontal, 14)
                 .padding(.top, HushSpacing.sm)
 
@@ -115,7 +115,7 @@ struct ConversationSidebarView: View {
         } else if !container.sidebarThreads.isEmpty {
             Text("No more threads")
                 .font(HushTypography.caption)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, HushSpacing.sm)
         }
@@ -146,11 +146,11 @@ struct ConversationSidebarView: View {
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isSettingsHovered ? HushColors.hoverFill : .clear)
+                        .fill(isSettingsHovered ? palette.hoverFill : .clear)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .stroke(
-                                    isSettingsHovered ? HushColors.hoverStroke : .clear,
+                                    isSettingsHovered ? palette.hoverStroke : .clear,
                                     lineWidth: 1
                                 )
                         )
@@ -175,6 +175,7 @@ enum SidebarActivityState: Equatable {
 }
 
 private struct SidebarThreadRow: View {
+    @Environment(\.hushThemePalette) private var palette
     let thread: ConversationSidebarThread
     let isActive: Bool
     let isDisabled: Bool
@@ -202,7 +203,7 @@ private struct SidebarThreadRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(thread.lastActivityAt, style: .time)
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.secondaryText)
+                        .foregroundStyle(palette.secondaryText)
                 }
 
                 trailingAccessory
@@ -252,7 +253,6 @@ private struct SidebarThreadRow: View {
             archiveResetTask = nil
         }
         .disabled(isDisabled)
-        .themeRefreshAware()
     }
 
     private var trailingAccessory: some View {
@@ -290,7 +290,7 @@ private struct SidebarThreadRow: View {
         } label: {
             Image(systemName: archiveConfirmPending ? "archivebox.fill" : "archivebox")
                 .font(.system(size: 13))
-                .foregroundStyle(archiveConfirmPending ? HushColors.badgeQueued : HushColors.tertiaryText)
+                .foregroundStyle(archiveConfirmPending ? palette.badgeQueued : palette.tertiaryText)
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
                 .contentTransition(.symbolEffect(.replace))
@@ -318,17 +318,17 @@ private struct SidebarThreadRow: View {
         switch activityState {
         case .running:
             Circle()
-                .fill(HushColors.badgeRunning)
+                .fill(palette.badgeRunning)
                 .frame(width: 8, height: 8)
                 .accessibilityLabel("Generating")
         case .queued:
             Circle()
-                .fill(HushColors.badgeQueued)
+                .fill(palette.badgeQueued)
                 .frame(width: 8, height: 8)
                 .accessibilityLabel("Queued")
         case .unreadCompletion:
             Circle()
-                .fill(HushColors.badgeUnread)
+                .fill(palette.badgeUnread)
                 .frame(width: 8, height: 8)
                 .accessibilityLabel("New response")
         case .idle:
@@ -338,11 +338,11 @@ private struct SidebarThreadRow: View {
 
     private var rowBackground: some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(isActive ? HushColors.selectionFill : (isHovered ? HushColors.hoverFill : .clear))
+            .fill(isActive ? palette.selectionFill : (isHovered ? palette.hoverFill : .clear))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(
-                        isActive ? HushColors.selectionStroke : (isHovered ? HushColors.hoverStroke : .clear),
+                        isActive ? palette.selectionStroke : (isHovered ? palette.hoverStroke : .clear),
                         lineWidth: 1
                     )
             )

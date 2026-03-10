@@ -5,6 +5,10 @@ struct RootView: View {
     @Binding var showSettings: Bool
     @State private var showSidebar: Bool = true
 
+    private var themePalette: HushThemePalette {
+        HushColors.palette(for: container.settings.theme)
+    }
+
     private var rightPaneTopCornerRadius: CGFloat {
         showSidebar ? min(HushSpacing.splitPaneCornerRadius, HushSpacing.topBarHeight / 2) : 0
     }
@@ -30,7 +34,7 @@ struct RootView: View {
 
                     ZStack {
                         Rectangle()
-                            .fill(showSidebar ? HushColors.sidebarBackground : HushColors.rootBackground)
+                            .fill(showSidebar ? themePalette.sidebarBackground : themePalette.rootBackground)
 
                         let shape = UnevenRoundedRectangle(
                             topLeadingRadius: rightPaneTopCornerRadius,
@@ -42,9 +46,9 @@ struct RootView: View {
 
                         if showSidebar {
                             shape
-                                .fill(HushColors.rootBackground)
+                                .fill(themePalette.rootBackground)
                                 .shadow(
-                                    color: HushColors.splitPaneShadow,
+                                    color: themePalette.splitPaneShadow,
                                     radius: HushSpacing.splitPaneShadowRadius,
                                     x: HushSpacing.splitPaneShadowX,
                                     y: 0
@@ -67,12 +71,12 @@ struct RootView: View {
                             ChatDetailPane()
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
-                        .background(HushColors.rootBackground)
+                        .background(themePalette.rootBackground)
                         .clipShape(shape)
                         .overlay {
                             if showSidebar {
                                 shape
-                                    .strokeBorder(HushColors.splitPaneEdgeStroke, lineWidth: 1)
+                                    .strokeBorder(themePalette.splitPaneEdgeStroke, lineWidth: 1)
                                     .mask(alignment: .leading) {
                                         Rectangle()
                                             .frame(width: max(rightPaneTopCornerRadius, rightPaneBottomCornerRadius) + 2)
@@ -99,8 +103,10 @@ struct RootView: View {
             }
         }
         .ignoresSafeArea(edges: .top)
-        .background(HushColors.rootBackground.ignoresSafeArea())
+        .font(HushTypography.body)
+        .background(themePalette.rootBackground.ignoresSafeArea())
         .environment(\.hushTheme, container.settings.theme)
+        .environment(\.hushThemePalette, themePalette)
         .preferredColorScheme(preferredScheme(forTheme: container.settings.theme))
     }
 

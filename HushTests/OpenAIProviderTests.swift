@@ -23,6 +23,18 @@ private final class FakeHTTPClient: HTTPClient, @unchecked Sendable {
     }
 }
 
+private actor RequestBodyCapture {
+    private var bodyData: Data?
+
+    func store(_ bodyData: Data) {
+        self.bodyData = bodyData
+    }
+
+    func snapshot() -> Data? {
+        bodyData
+    }
+}
+
 struct OpenAIProviderTests {
     private let endpoint = "https://api.openai.com/v1"
 
@@ -412,6 +424,114 @@ struct OpenAIProviderTests {
         #expect(models[0].rawMetadataJSON?.contains("\"modalities\"") == true)
         #expect(models[0].rawMetadataJSON?.contains("\"limits\"") == true)
         #expect(models[0].rawMetadataJSON?.contains("\"deprecated\"") == true)
+    }
+}
+
+struct OpenAIProviderRequestEncodingTests {
+    private let endpoint = "https://api.openai.com/v1"
+
+    @Test("sendStreaming encodes max_completion_tokens for manual parameters")
+    func streamingUsesMaxCompletionTokensField() async throws {
+        let client = FakeHTTPClient()
+        let capture = RequestBodyCapture()
+        client.streamSSEHandler = { request in
+            let bodyData = try #require(request.body)
+            await capture.store(bodyData)
+            return AsyncThrowingStream { continuation in
+                continuation.yield(SSEEvent(data: "[DONE]"))
+                continuation.finish()
+            }
+        }
+
+        let provider = OpenAIProvider(httpClient: client)
+        let context = ProviderInvocationContext(endpoint: endpoint, bearerToken: "sk-test")
+        var parameters = ModelParameters.standard
+        parameters.maxTokens = 1536
+
+        let stream = provider.sendStreaming(
+            messages: [ChatMessage(role: .user, content: "Hi")],
+            modelID: "gpt-4o-mini",
+            parameters: parameters,
+            requestID: RequestID(),
+            context: context
+        )
+
+        for try await _ in stream {}
+
+        let bodyData = try #require(await capture.snapshot())
+        let json = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        #expect(json["max_completion_tokens"] as? Int == 1536)
+        #expect(json["max_tokens"] == nil)
+    }
+
+    @Test("reasoning_effort stays independent when model defaults are enabled")
+    func reasoningEffortIndependentFromModelDefaults() async throws {
+        let client = FakeHTTPClient()
+        let capture = RequestBodyCapture()
+        client.streamSSEHandler = { request in
+            let bodyData = try #require(request.body)
+            await capture.store(bodyData)
+            return AsyncThrowingStream { continuation in
+                continuation.yield(SSEEvent(data: "[DONE]"))
+                continuation.finish()
+            }
+        }
+
+        let provider = OpenAIProvider(httpClient: client)
+        let context = ProviderInvocationContext(endpoint: endpoint, bearerToken: "sk-test")
+        var parameters = ModelParameters.standard
+        parameters.useModelDefaults = true
+        parameters.reasoningEffort = .high
+
+        let stream = provider.sendStreaming(
+            messages: [ChatMessage(role: .user, content: "Hi")],
+            modelID: "o3-mini",
+            parameters: parameters,
+            requestID: RequestID(),
+            context: context
+        )
+
+        for try await _ in stream {}
+
+        let bodyData = try #require(await capture.snapshot())
+        let json = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        #expect(json["reasoning_effort"] as? String == "high")
+        #expect(json["temperature"] == nil)
+        #expect(json["top_p"] == nil)
+        #expect(json["max_completion_tokens"] == nil)
+    }
+
+    @Test("reasoning_effort is omitted for models without reasoning controls")
+    func reasoningEffortOmittedForNonReasoningModels() async throws {
+        let client = FakeHTTPClient()
+        let capture = RequestBodyCapture()
+        client.streamSSEHandler = { request in
+            let bodyData = try #require(request.body)
+            await capture.store(bodyData)
+            return AsyncThrowingStream { continuation in
+                continuation.yield(SSEEvent(data: "[DONE]"))
+                continuation.finish()
+            }
+        }
+
+        let provider = OpenAIProvider(httpClient: client)
+        let context = ProviderInvocationContext(endpoint: endpoint, bearerToken: "sk-test")
+        var parameters = ModelParameters.standard
+        parameters.reasoningEffort = .high
+
+        let stream = provider.sendStreaming(
+            messages: [ChatMessage(role: .user, content: "Hi")],
+            modelID: "gpt-4o-mini",
+            parameters: parameters,
+            requestID: RequestID(),
+            context: context
+        )
+
+        for try await _ in stream {}
+
+        let bodyData = try #require(await capture.snapshot())
+        let json = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        #expect(json["reasoning_effort"] == nil)
     }
 }
 

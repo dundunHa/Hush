@@ -1,5 +1,14 @@
 import Foundation
 
+public enum ModelReasoningEffort: String, Codable, CaseIterable, Sendable {
+    case none
+    case minimal
+    case low
+    case medium
+    case high
+    case xhigh
+}
+
 public struct ModelParameters: Codable, Equatable, Sendable {
     public var temperature: Double
     public var topP: Double
@@ -8,9 +17,11 @@ public struct ModelParameters: Codable, Equatable, Sendable {
     public var presencePenalty: Double
     public var frequencyPenalty: Double
     public var contextMessageLimit: Int?
-    /// When `true`, omit temperature / topP / maxTokens / penalties from the
+    /// When `true`, omit temperature / topP / max token / penalties from the
     /// API request so the remote model uses its own defaults.
     public var useModelDefaults: Bool
+    /// OpenAI reasoning effort is independent from temperature / topP / max token.
+    public var reasoningEffort: ModelReasoningEffort?
 
     public init(
         temperature: Double,
@@ -20,7 +31,8 @@ public struct ModelParameters: Codable, Equatable, Sendable {
         presencePenalty: Double,
         frequencyPenalty: Double,
         contextMessageLimit: Int? = nil,
-        useModelDefaults: Bool = false
+        useModelDefaults: Bool = false,
+        reasoningEffort: ModelReasoningEffort? = nil
     ) {
         self.temperature = temperature
         self.topP = topP
@@ -30,6 +42,7 @@ public struct ModelParameters: Codable, Equatable, Sendable {
         self.frequencyPenalty = frequencyPenalty
         self.contextMessageLimit = contextMessageLimit
         self.useModelDefaults = useModelDefaults
+        self.reasoningEffort = reasoningEffort
     }
 
     // MARK: - Codable (backward-compatible decoding)
@@ -44,6 +57,7 @@ public struct ModelParameters: Codable, Equatable, Sendable {
         frequencyPenalty = try keyedContainer.decode(Double.self, forKey: .frequencyPenalty)
         contextMessageLimit = try keyedContainer.decodeIfPresent(Int.self, forKey: .contextMessageLimit)
         useModelDefaults = try keyedContainer.decodeIfPresent(Bool.self, forKey: .useModelDefaults) ?? false
+        reasoningEffort = try keyedContainer.decodeIfPresent(ModelReasoningEffort.self, forKey: .reasoningEffort)
     }
 
     public static let standard = ModelParameters(

@@ -51,7 +51,7 @@ struct SinglePathRoutingTests {
             activeConversationId: conversationA
         )
 
-        let controller = ConversationViewController(container: container)
+        let controller = ConversationViewController(container: container, theme: container.settings.theme)
         controller.loadViewIfNeeded()
 
         let initialApplyCount = controller.applyCountForTesting
@@ -59,7 +59,7 @@ struct SinglePathRoutingTests {
 
         container.activateConversation(conversationId: conversationB)
         try await waitForConversationReady(container, conversationId: conversationB)
-        controller.update(container: container)
+        controller.update(container: container, theme: container.settings.theme)
 
         #expect(controller.applyCountForTesting == initialApplyCount + 1)
     }

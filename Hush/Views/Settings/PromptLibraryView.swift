@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PromptLibraryView: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushThemePalette) private var palette
 
     @State private var templates: [PromptTemplate] = []
     @State private var editingTemplateID: String?
@@ -23,7 +24,6 @@ struct PromptLibraryView: View {
                     templateDetailSheet(templateID: templateID)
                 }
             }
-            .themeRefreshAware()
     }
 
     // MARK: - Template List
@@ -68,14 +68,14 @@ struct PromptLibraryView: View {
         VStack(spacing: HushSpacing.md) {
             Image(systemName: "text.quote")
                 .font(.system(size: 40))
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
 
             Text("No Prompt Templates")
                 .font(HushTypography.heading)
 
             Text("Create reusable prompt templates for quick access.")
                 .font(HushTypography.body)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -99,7 +99,7 @@ struct PromptLibraryView: View {
                 .padding(.bottom, HushSpacing.lg)
 
             Divider()
-                .foregroundStyle(HushColors.separator)
+                .foregroundStyle(palette.separator)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: HushSpacing.lg) {
@@ -113,14 +113,14 @@ struct PromptLibraryView: View {
             Spacer(minLength: 0)
 
             Divider()
-                .foregroundStyle(HushColors.separator)
+                .foregroundStyle(palette.separator)
 
             actionBar(templateID: templateID)
                 .padding(.horizontal, HushSpacing.xl)
                 .padding(.vertical, HushSpacing.lg)
         }
         .frame(width: 600, height: 560)
-        .background(HushColors.rootBackground)
+        .background(palette.rootBackground)
     }
 
     private var templateHeader: some View {
@@ -145,15 +145,15 @@ struct PromptLibraryView: View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
             Label("Category", systemImage: "folder")
                 .font(HushTypography.captionBold)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
 
             TextField("Optional category", text: $templateCategory)
                 .textFieldStyle(.roundedBorder)
         }
         .padding(HushSpacing.lg)
         .cardStyle(
-            background: HushColors.cardBackground,
-            stroke: HushColors.subtleStroke
+            background: palette.cardBackground,
+            stroke: palette.subtleStroke
         )
     }
 
@@ -161,23 +161,23 @@ struct PromptLibraryView: View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
             Label("Prompt Content", systemImage: "text.alignleft")
                 .font(HushTypography.captionBold)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
 
             TextEditor(text: $templateContent)
                 .font(HushTypography.body)
                 .scrollContentBackground(.hidden)
                 .padding(HushSpacing.sm)
                 .frame(minHeight: 240, maxHeight: 360)
-                .background(HushColors.softFill, in: RoundedRectangle(cornerRadius: 8))
+                .background(palette.softFill, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(HushColors.subtleStroke, lineWidth: 1)
+                        .stroke(palette.subtleStroke, lineWidth: 1)
                 )
         }
         .padding(HushSpacing.lg)
         .cardStyle(
-            background: HushColors.cardBackground,
-            stroke: HushColors.subtleStroke
+            background: palette.cardBackground,
+            stroke: palette.subtleStroke
         )
     }
 
@@ -272,6 +272,7 @@ struct PromptLibraryView: View {
 // MARK: - PromptTemplateRow
 
 private struct PromptTemplateRow: View {
+    @Environment(\.hushThemePalette) private var palette
     let template: PromptTemplate
     let onTap: () -> Void
 
@@ -293,13 +294,13 @@ private struct PromptTemplateRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(template.name)
                         .font(HushTypography.body)
-                        .foregroundStyle(HushColors.primaryText)
+                        .foregroundStyle(palette.primaryText)
                         .lineLimit(1)
 
 //                    if !template.category.isEmpty {
 //                        Text(template.category)
 //                            .font(HushTypography.caption)
-//                            .foregroundStyle(HushColors.secondaryText)
+//                            .foregroundStyle(palette.secondaryText)
 //                            .lineLimit(1)
 //                    }
                 }
@@ -309,7 +310,7 @@ private struct PromptTemplateRow: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(
-                        HushColors.secondaryText.opacity(isHovered ? 1.0 : 0.6)
+                        palette.secondaryText.opacity(isHovered ? 1.0 : 0.6)
                     )
             }
             .padding(.horizontal, HushSpacing.lg)
@@ -317,11 +318,11 @@ private struct PromptTemplateRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
-                    .fill(isHovered ? HushColors.hoverFill : HushColors.cardBackground)
+                    .fill(isHovered ? palette.hoverFill : palette.cardBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
                             .stroke(
-                                isHovered ? HushColors.hoverStroke : HushColors.subtleStroke,
+                                isHovered ? palette.hoverStroke : palette.subtleStroke,
                                 lineWidth: 1
                             )
                     )
@@ -333,7 +334,6 @@ private struct PromptTemplateRow: View {
         .onHover { hovering in
             isHovered = hovering
         }
-        .themeRefreshAware()
     }
 }
 

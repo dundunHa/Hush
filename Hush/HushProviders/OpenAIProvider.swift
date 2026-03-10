@@ -167,9 +167,10 @@ public struct OpenAIProvider: LLMProvider, Sendable {
             temperature: useDefaults ? nil : parameters.temperature,
             topP: useDefaults ? nil : parameters.topP,
             topK: useDefaults ? nil : parameters.topK,
-            maxTokens: useDefaults ? nil : parameters.maxTokens,
+            maxCompletionTokens: useDefaults ? nil : parameters.maxTokens,
             presencePenalty: useDefaults ? nil : parameters.presencePenalty,
-            frequencyPenalty: useDefaults ? nil : parameters.frequencyPenalty
+            frequencyPenalty: useDefaults ? nil : parameters.frequencyPenalty,
+            reasoningEffort: Self.reasoningEffort(for: modelID, parameters: parameters)
         )
 
         let bodyData = try JSONEncoder().encode(body)
@@ -314,9 +315,25 @@ extension OpenAIProvider {
         if lowered.contains("embedding") { return .embedding }
         if lowered.contains("dall-e") || lowered.contains("image") { return .image }
         if lowered.contains("tts") || lowered.contains("whisper") || lowered.contains("audio") { return .audio }
-        if lowered.hasPrefix("o1") || lowered.hasPrefix("o3") || lowered.hasPrefix("o4") { return .reasoning }
+        if supportsReasoningEffort(modelID: model.id) { return .reasoning }
         if lowered.contains("gpt") || lowered.contains("chat") { return .chat }
         return .unknown
+    }
+
+    private static func reasoningEffort(
+        for modelID: String,
+        parameters: ModelParameters
+    ) -> ModelReasoningEffort? {
+        guard supportsReasoningEffort(modelID: modelID) else { return nil }
+        return parameters.reasoningEffort
+    }
+
+    private static func supportsReasoningEffort(modelID: String) -> Bool {
+        let lowered = modelID.lowercased()
+        return lowered.hasPrefix("o1")
+            || lowered.hasPrefix("o3")
+            || lowered.hasPrefix("o4")
+            || lowered.hasPrefix("gpt-5")
     }
 
     /// Infer input/output modalities from model type and ID patterns.
@@ -508,17 +525,19 @@ struct OpenAIChatRequest: Encodable {
     let temperature: Double?
     let topP: Double?
     let topK: Int?
-    let maxTokens: Int?
+    let maxCompletionTokens: Int?
     let presencePenalty: Double?
     let frequencyPenalty: Double?
+    let reasoningEffort: ModelReasoningEffort?
 
     enum CodingKeys: String, CodingKey {
         case model, messages, stream, temperature
         case topP = "top_p"
         case topK = "top_k"
-        case maxTokens = "max_tokens"
+        case maxCompletionTokens = "max_completion_tokens"
         case presencePenalty = "presence_penalty"
         case frequencyPenalty = "frequency_penalty"
+        case reasoningEffort = "reasoning_effort"
     }
 }
 

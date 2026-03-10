@@ -105,4 +105,14 @@ struct DatabaseMigrationTests {
         let columnNames = columns.map { $0["name"] as String }
         #expect(columnNames.contains("maxConcurrentRequests"))
     }
+
+    @Test("appPreferences table includes reasoningEffort column after v11 migration")
+    func appPreferencesReasoningEffortColumn() throws {
+        let db = try DatabaseManager.inMemory()
+        let columns = try db.read { db in
+            try Row.fetchAll(db, sql: "PRAGMA table_info(appPreferences)")
+        }
+        let columnNames = columns.map { $0["name"] as String }
+        #expect(columnNames.contains("reasoningEffort"))
+    }
 }

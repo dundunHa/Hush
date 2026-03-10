@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ComposerDock: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushThemePalette) private var palette
     @State private var draft: String = ""
     @State private var availableModels: [ModelDescriptor] = []
     @State private var catalogStateMessage: String?
@@ -20,7 +21,7 @@ struct ComposerDock: View {
                     Button {} label: {
                         Image(systemName: "plus")
                             .font(.system(size: 22, weight: .light))
-                            .foregroundStyle(HushColors.controlForegroundMuted)
+                            .foregroundStyle(palette.controlForegroundMuted)
                             .frame(width: 34, height: 34)
                     }
                     .buttonStyle(.plain)
@@ -35,7 +36,7 @@ struct ComposerDock: View {
                     Button {} label: {
                         Image(systemName: "mic")
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(HushColors.controlForegroundMuted)
+                            .foregroundStyle(palette.controlForegroundMuted)
                             .frame(width: 25, height: 25)
                     }
                     .buttonStyle(.plain)
@@ -47,7 +48,7 @@ struct ComposerDock: View {
                 if let catalogStateMessage, !catalogStateMessage.isEmpty {
                     Text(catalogStateMessage)
                         .font(HushTypography.caption)
-                        .foregroundStyle(HushColors.errorText)
+                        .foregroundStyle(palette.errorText)
                 }
             } else {
                 noProviderConfiguredView
@@ -60,8 +61,8 @@ struct ComposerDock: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            HushColors.composerShellTop,
-                            HushColors.composerShellBottom
+                            palette.composerShellTop,
+                            palette.composerShellBottom
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -69,7 +70,7 @@ struct ComposerDock: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 30, style: .continuous)
-                        .stroke(HushColors.composerShellStroke, lineWidth: 1)
+                        .stroke(palette.composerShellStroke, lineWidth: 1)
                 )
         }
         .frame(maxWidth: HushSpacing.chatContentMaxWidth)
@@ -86,7 +87,7 @@ struct ComposerDock: View {
     private var composerEditor: some View {
         TextEditor(text: $draft)
             .font(HushTypography.body)
-            .foregroundStyle(HushColors.primaryText)
+            .foregroundStyle(palette.primaryText)
             .frame(minHeight: 28, maxHeight: 44)
             .scrollContentBackground(.hidden)
             .background(Color.clear)
@@ -126,7 +127,7 @@ struct ComposerDock: View {
         Menu {
             ForEach(ThinkingStrength.allCases) { strength in
                 Button {
-                    container.settings.parameters = strength.parameters(preserving: container.settings.parameters)
+                    container.settings.parameters.reasoningEffort = strength.reasoningEffort
                 } label: {
                     HStack(spacing: HushSpacing.sm) {
                         if strength == selectedThinkingStrength {
@@ -147,15 +148,49 @@ struct ComposerDock: View {
         Button {
             showConfigPopover.toggle()
         } label: {
-            Image(systemName: "slider.horizontal.3")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(isConfigHovered ? HushColors.controlForeground : HushColors.controlForegroundMuted)
-                .frame(width: 28, height: 28)
-                .background(
-                    Circle()
-                        .fill(isConfigHovered ? HushColors.hoverFill : .clear)
-                        .overlay(Circle().stroke(isConfigHovered ? HushColors.hoverStroke : .clear, lineWidth: 1))
-                )
+            HStack(spacing: HushSpacing.sm) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(configButtonIconForeground)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle()
+                            .fill(configButtonIconFill)
+                            .overlay(
+                                Circle()
+                                    .stroke(configButtonIconStroke, lineWidth: 1)
+                            )
+                    )
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Chat Options")
+                        .font(HushTypography.captionBold)
+                        .foregroundStyle(palette.controlForeground)
+                        .lineLimit(1)
+
+                    Text(chatOptionsSummary)
+                        .font(HushTypography.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(palette.controlForegroundMuted)
+                        .lineLimit(1)
+                }
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(palette.controlForegroundMuted)
+            }
+            .padding(.leading, HushSpacing.xs)
+            .padding(.trailing, HushSpacing.sm)
+            .padding(.vertical, HushSpacing.xs + 2)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(configButtonFill)
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(configButtonStroke, lineWidth: 1)
+                    )
+            )
+            .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { isConfigHovered = $0 }
@@ -163,6 +198,7 @@ struct ComposerDock: View {
             ChatConfigPopover(parameters: $container.settings.parameters)
         }
         .accessibilityLabel("Chat configuration")
+        .accessibilityValue(chatOptionsSummary)
     }
 
     private var sendOrStopButton: some View {
@@ -191,14 +227,14 @@ struct ComposerDock: View {
             Image(systemName: "chevron.down")
                 .font(.system(size: 11, weight: .semibold))
         }
-        .font(Font.body.weight(.medium))
-        .foregroundStyle(HushColors.controlForeground)
+        .font(HushTypography.scaled(14, weight: .medium))
+        .foregroundStyle(palette.controlForeground)
         .padding(.horizontal, HushSpacing.sm)
         .padding(.vertical, HushSpacing.xs + 2)
         .background(
             Capsule()
-                .fill(isHovered ? HushColors.hoverFill : .clear)
-                .overlay(Capsule().stroke(isHovered ? HushColors.hoverStroke : .clear, lineWidth: 1))
+                .fill(isHovered ? palette.hoverFill : .clear)
+                .overlay(Capsule().stroke(isHovered ? palette.hoverStroke : .clear, lineWidth: 1))
         )
         .animation(.easeInOut(duration: 0.15), value: isHovered)
     }
@@ -235,27 +271,98 @@ struct ComposerDock: View {
     }
 
     private var selectedThinkingStrength: ThinkingStrength {
-        ThinkingStrength.from(parameters: container.settings.parameters)
+        ThinkingStrength.from(reasoningEffort: container.settings.parameters.reasoningEffort)
+    }
+
+    private var chatOptionsSummary: String {
+        "\(contextLimitSummary) ctx · T \(temperatureSummary) · \(compactTokenCount(maxTokensSummary)) tok"
+    }
+
+    private var contextLimitSummary: Int {
+        container.settings.parameters.contextMessageLimit ?? ModelParameters.standard.contextMessageLimit ?? 10
+    }
+
+    private var temperatureSummary: String {
+        String(format: "%.2f", container.settings.parameters.temperature)
+    }
+
+    private var maxTokensSummary: Int {
+        container.settings.parameters.maxTokens
+    }
+
+    private var configButtonFill: Color {
+        if showConfigPopover {
+            return palette.selectionFill
+        }
+        if isConfigHovered {
+            return palette.hoverFill
+        }
+        return palette.softFill
+    }
+
+    private var configButtonStroke: Color {
+        if showConfigPopover {
+            return palette.selectionStroke
+        }
+        if isConfigHovered {
+            return palette.hoverStroke
+        }
+        return palette.subtleStroke
+    }
+
+    private var configButtonIconFill: Color {
+        if showConfigPopover {
+            return palette.accentMutedBackground
+        }
+        if isConfigHovered {
+            return palette.hoverFill
+        }
+        return palette.softFillStrong
+    }
+
+    private var configButtonIconStroke: Color {
+        if showConfigPopover {
+            return palette.accentMutedStroke
+        }
+        if isConfigHovered {
+            return palette.hoverStroke
+        }
+        return palette.subtleStroke
+    }
+
+    private var configButtonIconForeground: Color {
+        if showConfigPopover {
+            return palette.controlForeground
+        }
+        if isConfigHovered {
+            return palette.controlForeground
+        }
+        return palette.controlForegroundMuted
+    }
+
+    private func compactTokenCount(_ value: Int) -> String {
+        guard value >= 1000 else { return "\(value)" }
+        return String(format: "%.1fK", Double(value) / 1000)
     }
 
     private var sendButtonBackground: Color {
         if container.isActiveConversationSending {
-            return HushColors.destructiveActionBackground
+            return palette.destructiveActionBackground
         }
         if canSendDraft {
-            return HushColors.primaryActionBackground
+            return palette.primaryActionBackground
         }
-        return HushColors.disabledActionBackground
+        return palette.disabledActionBackground
     }
 
     private var sendButtonForeground: Color {
         if container.isActiveConversationSending {
-            return HushColors.destructiveActionForeground
+            return palette.destructiveActionForeground
         }
         if canSendDraft {
-            return HushColors.primaryActionForeground
+            return palette.primaryActionForeground
         }
-        return HushColors.disabledActionForeground
+        return palette.disabledActionForeground
     }
 
     // MARK: - No Provider Empty State
@@ -264,11 +371,11 @@ struct ComposerDock: View {
         HStack(alignment: .center, spacing: HushSpacing.sm) {
             Image(systemName: "bolt.horizontal")
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(HushColors.tertiaryText)
+                .foregroundStyle(palette.tertiaryText)
 
             Text("Add a provider to start chatting")
                 .font(HushTypography.body)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
 
             Spacer(minLength: 0)
 
@@ -277,15 +384,18 @@ struct ComposerDock: View {
             } label: {
                 Label("Open Settings", systemImage: "gearshape")
                     .font(HushTypography.body)
-                    .foregroundStyle(isOpenSettingsHovered ? HushColors.controlForeground : HushColors.controlForegroundMuted)
+                    .foregroundStyle(isOpenSettingsHovered ? palette.controlForeground : palette.controlForegroundMuted)
                     .padding(.horizontal, HushSpacing.md)
                     .padding(.vertical, HushSpacing.xs + 2)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(isOpenSettingsHovered ? HushColors.softFillStrong : HushColors.softFill)
+                            .fill(isOpenSettingsHovered ? palette.softFillStrong : palette.softFill)
                             .overlay(
                                 Capsule(style: .continuous)
-                                    .stroke(isOpenSettingsHovered ? HushColors.hoverStroke : HushColors.subtleStroke, lineWidth: 1)
+                                    .stroke(
+                                        isOpenSettingsHovered ? palette.hoverStroke : palette.subtleStroke,
+                                        lineWidth: 1
+                                    )
                             )
                     )
             }
@@ -351,48 +461,34 @@ private enum ThinkingStrength: String, CaseIterable, Identifiable {
     case low = "Low"
     case medium = "Medium"
     case high = "High"
-    case extraHigh = "Extra High"
 
     var id: String {
         rawValue
     }
 
-    func parameters(preserving existing: ModelParameters) -> ModelParameters {
+    var reasoningEffort: ModelReasoningEffort? {
         switch self {
         case .default:
-            var params = existing
-            params.useModelDefaults = true
-            return params
-        case .low, .medium, .high, .extraHigh:
-            let (temp, topP, maxTokens) = switch self {
-            case .low: (0.30, 0.80, 512)
-            case .medium: (0.50, 0.90, 768)
-            case .high: (0.70, 1.00, 1024)
-            case .extraHigh: (0.90, 1.00, 1536)
-            case .default: (0.0, 0.0, 0) // unreachable
-            }
-            return ModelParameters(
-                temperature: temp,
-                topP: topP,
-                topK: existing.topK,
-                maxTokens: maxTokens,
-                presencePenalty: 0,
-                frequencyPenalty: 0,
-                contextMessageLimit: existing.contextMessageLimit
-            )
+            return nil
+        case .low:
+            return .low
+        case .medium:
+            return .medium
+        case .high:
+            return .high
         }
     }
 
-    var parameters: ModelParameters {
-        parameters(preserving: .standard)
-    }
-
-    static func from(parameters: ModelParameters) -> ThinkingStrength {
-        if parameters.useModelDefaults { return .default }
-        let presets: [ThinkingStrength] = [.low, .medium, .high, .extraHigh]
-        return presets.min {
-            abs($0.parameters.temperature - parameters.temperature)
-                < abs($1.parameters.temperature - parameters.temperature)
-        } ?? .high
+    static func from(reasoningEffort: ModelReasoningEffort?) -> ThinkingStrength {
+        switch reasoningEffort {
+        case nil:
+            return .default
+        case .some(.none), .some(.minimal), .some(.low):
+            return .low
+        case .some(.medium):
+            return .medium
+        case .some(.high), .some(.xhigh):
+            return .high
+        }
     }
 }

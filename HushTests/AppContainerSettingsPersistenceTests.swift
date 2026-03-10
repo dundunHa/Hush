@@ -134,4 +134,20 @@ struct AppContainerSettingsPersistenceTests {
 
         #expect(container.sidebarThreads == [thread])
     }
+
+    @Test("flushSettings preserves shared font settings in persisted preferences")
+    func flushSettingsPreservesFontSettings() throws {
+        let (repo, container) = try makeRepoAndContainer()
+
+        container.settings.fontSettings = AppFontSettings(
+            familyName: "Helvetica Neue",
+            size: 17
+        )
+        container.flushSettings()
+
+        let loaded = try repo.fetch()
+        let prefs = try #require(loaded?.toAppPreferences())
+        #expect(prefs.fontSettings.normalizedFamilyName == "Helvetica Neue")
+        #expect(prefs.fontSettings.normalizedSize == 17)
+    }
 }

@@ -264,6 +264,21 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v11: add reasoningEffort to appPreferences ───────────────
+        migrator.registerMigration("v11_app_preferences_reasoning_effort") { db in
+            try db.alter(table: "appPreferences") { t in
+                t.add(column: "reasoningEffort", .text)
+            }
+        }
+
+        // ── v12: add shared typography settings to appPreferences ────
+        migrator.registerMigration("v12_app_preferences_typography") { db in
+            try db.alter(table: "appPreferences") { t in
+                t.add(column: "fontFamilyName", .text)
+                t.add(column: "fontSize", .double)
+            }
+        }
+
         return migrator
     }
 

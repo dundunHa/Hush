@@ -6,6 +6,7 @@ final class HotScenePoolController: NSViewController {
     private let pool: HotScenePool
     private var lastActiveConversationID: String?
     private var lastAppliedTheme: AppTheme?
+    private var lastAppliedFontSettings: AppFontSettings?
 
     // MARK: - Diff State (avoids redundant apply when only unrelated @Published fields change)
 
@@ -68,22 +69,25 @@ final class HotScenePoolController: NSViewController {
 
         let themeChanged = lastAppliedTheme != theme
         lastAppliedTheme = theme
+        let fontSettingsChanged = lastAppliedFontSettings != container.settings.fontSettings
+        lastAppliedFontSettings = container.settings.fontSettings
+        let appearanceChanged = themeChanged || fontSettingsChanged
 
         guard let activeConversationID = container.activeConversationId else { return }
 
         if lastActiveConversationID != activeConversationID {
-            switchToActiveConversation(container: container, forceFullReload: themeChanged)
+            switchToActiveConversation(container: container, theme: theme, forceFullReload: appearanceChanged)
             lastActiveConversationID = activeConversationID
         } else {
-            forwardUpdateToActiveScene(container: container, forceFullReload: themeChanged)
+            forwardUpdateToActiveScene(container: container, theme: theme, forceFullReload: appearanceChanged)
         }
 
-        if themeChanged {
-            refreshInactiveScenes(container: container, activeConversationID: activeConversationID)
+        if appearanceChanged {
+            refreshInactiveScenes(container: container, theme: theme, activeConversationID: activeConversationID)
         }
     }
 
-    func switchToActiveConversation(container: AppContainer, forceFullReload: Bool = false) {
+    func switchToActiveConversation(container: AppContainer, theme: AppTheme, forceFullReload: Bool = false) {
         guard let activeConversationID = container.activeConversationId else { return }
         let messages = container.messages
         let generation = container.activeConversationRenderGeneration
@@ -101,7 +105,7 @@ final class HotScenePoolController: NSViewController {
             conversationID: activeConversationID,
             messageCount: messages.count,
             generation: generation,
-            makeScene: { ConversationViewController(container: container) }
+            makeScene: { ConversationViewController(container: container, theme: theme) }
         )
         let requiresReload = result.scene.needsReload || forceFullReload
         let isHotHitWithoutReload = !result.didCreate && !requiresReload
@@ -156,10 +160,10 @@ final class HotScenePoolController: NSViewController {
 
     // MARK: - Private
 
-    private func forwardUpdateToActiveScene(container: AppContainer, forceFullReload: Bool = false) {
+    private func forwardUpdateToActiveScene(container: AppContainer, theme: AppTheme, forceFullReload: Bool = false) {
         guard let activeConversationID = container.activeConversationId else { return }
         guard let scene = pool.sceneFor(conversationID: activeConversationID) else {
-            switchToActiveConversation(container: container, forceFullReload: forceFullReload)
+            switchToActiveConversation(container: container, theme: theme, forceFullReload: forceFullReload)
             return
         }
 
@@ -233,7 +237,7 @@ final class HotScenePoolController: NSViewController {
         )
     }
 
-    private func refreshInactiveScenes(container: AppContainer, activeConversationID: String) {
+    private func refreshInactiveScenes(container: AppContainer, theme _: AppTheme, activeConversationID: String) {
         for conversationID in pool.hotConversationIDs where conversationID != activeConversationID {
             guard let scene = pool.sceneFor(conversationID: conversationID) else { continue }
             guard let generation = pool.generationForConversation(conversationID: conversationID) else { continue }

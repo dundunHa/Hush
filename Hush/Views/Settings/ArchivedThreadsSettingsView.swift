@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ArchivedThreadsSettingsView: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushThemePalette) private var palette
 
     @State private var archivedThreads: [ConversationSidebarThread] = []
     @State private var isLoading = true
@@ -57,7 +58,6 @@ struct ArchivedThreadsSettingsView: View {
                 "Permanently delete all \(archivedThreads.count) archived thread(s). This cannot be undone."
             )
         }
-        .themeRefreshAware()
     }
 
     // MARK: - Header
@@ -70,10 +70,10 @@ struct ArchivedThreadsSettingsView: View {
             if !archivedThreads.isEmpty {
                 Text("\(archivedThreads.count)")
                     .font(HushTypography.caption)
-                    .foregroundStyle(HushColors.secondaryText)
+                    .foregroundStyle(palette.secondaryText)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(HushColors.subtleStroke, in: Capsule())
+                    .background(palette.subtleStroke, in: Capsule())
             }
 
             Spacer()
@@ -130,11 +130,11 @@ struct ArchivedThreadsSettingsView: View {
         VStack(spacing: HushSpacing.md) {
             Image(systemName: "archivebox")
                 .font(.system(size: 32))
-                .foregroundStyle(HushColors.secondaryText.opacity(0.5))
+                .foregroundStyle(palette.secondaryText.opacity(0.5))
 
             Text("No archived threads")
                 .font(HushTypography.body)
-                .foregroundStyle(HushColors.secondaryText)
+                .foregroundStyle(palette.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, HushSpacing.xl)
@@ -146,7 +146,7 @@ struct ArchivedThreadsSettingsView: View {
         VStack(spacing: 0) {
             if isSelectionMode {
                 selectAllRow
-                Divider().overlay(HushColors.subtleStroke)
+                Divider().overlay(palette.subtleStroke)
             }
 
             ForEach(Array(archivedThreads.enumerated()), id: \.element.id) { index, thread in
@@ -160,13 +160,13 @@ struct ArchivedThreadsSettingsView: View {
                 )
 
                 if index < archivedThreads.count - 1 {
-                    Divider().overlay(HushColors.subtleStroke)
+                    Divider().overlay(palette.subtleStroke)
                 }
             }
         }
         .cardStyle(
-            background: HushColors.cardBackground,
-            stroke: HushColors.subtleStroke
+            background: palette.cardBackground,
+            stroke: palette.subtleStroke
         )
     }
 
@@ -183,12 +183,12 @@ struct ArchivedThreadsSettingsView: View {
             HStack(spacing: HushSpacing.md) {
                 Image(systemName: allSelected ? "checkmark.square.fill" : "square")
                     .font(.system(size: 16))
-                    .foregroundStyle(allSelected ? HushColors.accent : HushColors.secondaryText)
+                    .foregroundStyle(allSelected ? palette.accent : palette.secondaryText)
                     .contentTransition(.symbolEffect(.replace))
 
                 Text(allSelected ? "Deselect All" : "Select All")
                     .font(HushTypography.body)
-                    .foregroundStyle(HushColors.primaryText)
+                    .foregroundStyle(palette.primaryText)
 
                 Spacer()
             }
@@ -205,7 +205,7 @@ struct ArchivedThreadsSettingsView: View {
         HStack(spacing: HushSpacing.md) {
             Text("\(selectedIds.count) selected")
                 .font(HushTypography.body)
-                .foregroundStyle(HushColors.primaryText)
+                .foregroundStyle(palette.primaryText)
 
             Spacer()
 
@@ -233,7 +233,7 @@ struct ArchivedThreadsSettingsView: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius)
-                .stroke(HushColors.subtleStroke, lineWidth: 1)
+                .stroke(palette.subtleStroke, lineWidth: 1)
         )
         .padding(.horizontal, HushSpacing.xl)
         .padding(.bottom, HushSpacing.lg)
@@ -312,6 +312,7 @@ struct ArchivedThreadsSettingsView: View {
 // MARK: - ArchivedThreadRow
 
 private struct ArchivedThreadRow: View {
+    @Environment(\.hushThemePalette) private var palette
     let thread: ConversationSidebarThread
     let isSelectionMode: Bool
     let isSelected: Bool
@@ -328,7 +329,7 @@ private struct ArchivedThreadRow: View {
                 Button { onToggleSelection() } label: {
                     Image(systemName: isSelected ? "checkmark.square.fill" : "square")
                         .font(.system(size: 16))
-                        .foregroundStyle(isSelected ? HushColors.accent : HushColors.secondaryText)
+                        .foregroundStyle(isSelected ? palette.accent : palette.secondaryText)
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(.plain)
@@ -341,7 +342,7 @@ private struct ArchivedThreadRow: View {
 
                 Text(thread.lastActivityAt, style: .date)
                     .font(HushTypography.caption)
-                    .foregroundStyle(HushColors.secondaryText)
+                    .foregroundStyle(palette.secondaryText)
             }
 
             Spacer(minLength: 0)
@@ -374,7 +375,7 @@ private struct ArchivedThreadRow: View {
         .padding(.vertical, HushSpacing.md)
         .background(
             isSelectionMode && isSelected
-                ? HushColors.selectionFill
+                ? palette.selectionFill
                 : Color.clear
         )
         .contentShape(Rectangle())
@@ -390,7 +391,6 @@ private struct ArchivedThreadRow: View {
         } message: {
             Text("This will permanently delete this thread and all its messages.")
         }
-        .themeRefreshAware()
     }
 }
 

@@ -72,6 +72,7 @@ struct MessageTableViewHeightInvalidationScrollTests {
             activeConversationID: "conv-height-invalidation",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -163,6 +164,7 @@ struct MessageTableViewHeightInvalidationScrollTests {
             activeConversationID: "conv-height-invalidation-live-scroll",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -259,6 +261,7 @@ struct MessageTableViewHeightInvalidationScrollTests {
             activeConversationID: "conv-height-invalidation-defer",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )

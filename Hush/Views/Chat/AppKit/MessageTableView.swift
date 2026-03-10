@@ -38,6 +38,10 @@ private final class VerticalOnlyScrollView: NSScrollView {
 
 @MainActor
 private final class MessageCopyOverlayButton: NSButton {
+    var themePalette: HushThemePalette = HushColors.palette(for: .dark) {
+        didSet { updateVisualState() }
+    }
+
     private var resetTask: Task<Void, Never>?
     private var isHovered = false
     private var isCopied = false
@@ -133,10 +137,10 @@ private final class MessageCopyOverlayButton: NSButton {
     private func updateVisualState() {
         image = isCopied ? Self.copiedImage : Self.copyImage
         contentTintColor = isCopied
-            ? NSColor(HushColors.successText)
-            : (isHovered ? NSColor(HushColors.controlForeground) : NSColor(HushColors.controlForegroundMuted))
-        layer?.backgroundColor = NSColor(isHovered ? HushColors.hoverFill : HushColors.softFillStrong).cgColor
-        layer?.borderColor = NSColor(isHovered ? HushColors.hoverStroke : HushColors.subtleStroke).cgColor
+            ? NSColor(themePalette.successText)
+            : (isHovered ? NSColor(themePalette.controlForeground) : NSColor(themePalette.controlForegroundMuted))
+        layer?.backgroundColor = NSColor(isHovered ? themePalette.hoverFill : themePalette.softFillStrong).cgColor
+        layer?.borderColor = NSColor(isHovered ? themePalette.hoverStroke : themePalette.subtleStroke).cgColor
     }
 }
 
@@ -170,6 +174,8 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     var rows: [RowModel] = []
     private var runtime: MessageRenderRuntime?
     private weak var container: AppContainer?
+    private var theme: AppTheme = .dark
+    private var fontSettings: AppFontSettings = .default
     private var lastGeneration: UInt64?
     private var tailFollowState = TailFollowState()
     private let tailFollowConfig = TailFollowConfig()
@@ -218,6 +224,14 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         var scrollAnchorRestoreCountForTesting = 0
         // swiftlint:enable identifier_name
     #endif
+
+    private var palette: HushThemePalette {
+        HushColors.palette(for: theme)
+    }
+
+    private var renderStyle: RenderStyle {
+        RenderStyle.fromPalette(palette, fontSettings: fontSettings)
+    }
 
     var userHasScrolledUp: Bool {
         get { !tailFollowState.isFollowingTail }
@@ -367,12 +381,15 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         activeConversationID: String?,
         isActiveConversationSending: Bool,
         switchGeneration: UInt64,
+        theme: AppTheme,
         runtime: MessageRenderRuntime,
         container: AppContainer,
         forceFullReload: Bool = false
     ) {
         self.runtime = runtime
         self.container = container
+        self.theme = theme
+        fontSettings = container.settings.fontSettings
 
         let previousRows = rows
         let oldCount = previousRows.count
@@ -455,7 +472,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         if !assistantMessages.isEmpty {
             let targetAssistants = assistantMessages.suffix(RenderConstants.switchPriorityRenderCount)
             if !targetAssistants.isEmpty {
-                let style = RenderStyle.fromTheme()
+                let style = renderStyle
                 let availableWidth = effectiveAvailableWidth()
                 let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
                 var hits = 0
@@ -542,6 +559,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
                 row: rows[row],
                 runtime: runtime,
                 availableWidth: availableWidth,
+                theme: theme,
                 container: container,
                 owningTableView: tableView,
                 rowIndex: row,
@@ -1135,7 +1153,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         let indices = lookaheadIndices(visibleRows: visibleRows)
         guard !indices.isEmpty else { return [] }
 
-        let style = RenderStyle.fromTheme()
+        let style = renderStyle
         let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
         var candidates: [PrewarmCandidate] = []
         candidates.reserveCapacity(min(indices.count, lookaheadPrewarmMaxBatch))
@@ -1219,6 +1237,13 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
 }
 
 final class MessageBodyTextView: NSTextView {
+    var themePalette: HushThemePalette = HushColors.palette(for: .dark) {
+        didSet {
+            codeBlockCopyButtons.forEach { $0.themePalette = themePalette }
+            needsDisplay = true
+        }
+    }
+
     private struct CodeBlockDescriptor {
         let containerRange: NSRange
         let contentRange: NSRange
@@ -1248,6 +1273,10 @@ final class MessageBodyTextView: NSTextView {
     }
 
     private final class CodeBlockCopyButton: NSButton {
+        var themePalette: HushThemePalette = HushColors.palette(for: .dark) {
+            didSet { updateVisualState() }
+        }
+
         private weak var sourceTextView: NSTextView?
         private var contentRange: NSRange = .init(location: 0, length: 0)
         private var resetTask: Task<Void, Never>?
@@ -1352,10 +1381,10 @@ final class MessageBodyTextView: NSTextView {
         private func updateVisualState() {
             image = isCopied ? Self.copiedImage : Self.copyImage
             contentTintColor = isCopied
-                ? NSColor(HushColors.successText)
-                : (isHovered ? NSColor(HushColors.controlForeground) : NSColor(HushColors.controlForegroundMuted))
-            layer?.backgroundColor = NSColor(isHovered ? HushColors.hoverFill : HushColors.softFillStrong).cgColor
-            layer?.borderColor = NSColor(isHovered ? HushColors.hoverStroke : HushColors.subtleStroke).cgColor
+                ? NSColor(themePalette.successText)
+                : (isHovered ? NSColor(themePalette.controlForeground) : NSColor(themePalette.controlForegroundMuted))
+            layer?.backgroundColor = NSColor(isHovered ? themePalette.hoverFill : themePalette.softFillStrong).cgColor
+            layer?.borderColor = NSColor(isHovered ? themePalette.hoverStroke : themePalette.subtleStroke).cgColor
         }
     }
 
@@ -1522,6 +1551,7 @@ final class MessageBodyTextView: NSTextView {
         }
         while codeBlockCopyButtons.count < codeBlockDescriptors.count {
             let button = CodeBlockCopyButton(frame: .zero)
+            button.themePalette = themePalette
             codeBlockCopyButtons.append(button)
             addSubview(button)
         }
@@ -1649,9 +1679,9 @@ final class MessageBodyTextView: NSTextView {
     private func drawCodeBlockBackgrounds(in dirtyRect: NSRect) {
         guard !codeBlockLayouts.isEmpty else { return }
 
-        let fillColor = NSColor(HushColors.codeBlockBackground)
-        let borderColor = NSColor(HushColors.codeBlockBorder)
-        let separatorColor = NSColor(HushColors.codeBlockSeparator)
+        let fillColor = NSColor(themePalette.codeBlockBackground)
+        let borderColor = NSColor(themePalette.codeBlockBorder)
+        let separatorColor = NSColor(themePalette.codeBlockSeparator)
 
         for layout in codeBlockLayouts where layout.backgroundFrame.intersects(dirtyRect) {
             let fillPath = NSBezierPath(
@@ -1708,10 +1738,6 @@ final class MessageTableCellView: NSTableCellView {
         let styleKey: Int
     }
 
-    private static var sharedRenderStyle: RenderStyle {
-        RenderStyle.fromTheme()
-    }
-
     private let metaLabel = NSTextField(labelWithString: "")
     private let bodyTextView = MessageBodyTextView()
     private let copyButton = MessageCopyOverlayButton(frame: .zero)
@@ -1740,10 +1766,36 @@ final class MessageTableCellView: NSTableCellView {
     private var streamingDisplayedLength: Int = 0
     private var currentContentWidth: CGFloat = 0
     private var isShowingStreamingRichOutput = false
-    private static var plainTextAttributes: [NSAttributedString.Key: Any] {
+    private var theme: AppTheme = .dark {
+        didSet {
+            metaLabel.textColor = NSColor(palette.secondaryText)
+            bodyTextView.themePalette = palette
+            copyButton.themePalette = palette
+        }
+    }
+
+    private var fontSettings: AppFontSettings = .default {
+        didSet {
+            metaLabel.font = HushFontResolver.contentFont(
+                settings: fontSettings,
+                referenceSize: 11,
+                weight: .semibold
+            )
+        }
+    }
+
+    private var palette: HushThemePalette {
+        HushColors.palette(for: theme)
+    }
+
+    private var renderStyle: RenderStyle {
+        RenderStyle.fromPalette(palette, fontSettings: fontSettings)
+    }
+
+    private var plainTextAttributes: [NSAttributedString.Key: Any] {
         [
-            .font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
-            .foregroundColor: NSColor(HushColors.primaryText)
+            .font: HushFontResolver.contentFont(settings: fontSettings, referenceSize: 14),
+            .foregroundColor: NSColor(palette.primaryText)
         ]
     }
 
@@ -1759,9 +1811,12 @@ final class MessageTableCellView: NSTableCellView {
         super.init(frame: .zero)
         self.identifier = identifier
         translatesAutoresizingMaskIntoConstraints = false
-
-        metaLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        metaLabel.textColor = NSColor(HushColors.secondaryText)
+        metaLabel.font = HushFontResolver.contentFont(
+            settings: fontSettings,
+            referenceSize: 11,
+            weight: .semibold
+        )
+        metaLabel.textColor = NSColor(palette.secondaryText)
         metaLabel.translatesAutoresizingMaskIntoConstraints = false
 
         bodyTextView.translatesAutoresizingMaskIntoConstraints = false
@@ -1966,7 +2021,7 @@ final class MessageTableCellView: NSTableCellView {
                 let heightInput = MessageRenderInput(
                     content: activeRow.message.content,
                     availableWidth: contentWidth,
-                    style: Self.sharedRenderStyle,
+                    style: renderStyle,
                     isStreaming: false
                 )
                 cachedHeight = runtime.cachedRowHeight(for: heightInput)
@@ -2007,7 +2062,7 @@ final class MessageTableCellView: NSTableCellView {
         renderController.requestRender(
             content: content,
             availableWidth: currentContentWidth,
-            style: Self.sharedRenderStyle,
+            style: renderStyle,
             isStreaming: true,
             hint: currentRow.renderHint
         )
@@ -2024,7 +2079,7 @@ final class MessageTableCellView: NSTableCellView {
             let delta = String(content.dropFirst(existing.count))
             if !delta.isEmpty {
                 textStorage.beginEditing()
-                textStorage.append(NSAttributedString(string: delta, attributes: Self.plainTextAttributes))
+                textStorage.append(NSAttributedString(string: delta, attributes: plainTextAttributes))
                 textStorage.endEditing()
                 bodyTextView.cachedIntrinsicHeight = nil
                 bodyTextView.finalizeTextMutation()
@@ -2034,7 +2089,7 @@ final class MessageTableCellView: NSTableCellView {
             }
         } else {
             bodyTextView.setAttributedText(
-                NSAttributedString(string: content, attributes: Self.plainTextAttributes),
+                NSAttributedString(string: content, attributes: plainTextAttributes),
                 cachedHeight: nil
             )
             #if DEBUG
@@ -2047,7 +2102,7 @@ final class MessageTableCellView: NSTableCellView {
 
     private func applyPlainText(_ content: String, cachedHeight: CGFloat?) {
         bodyTextView.setAttributedText(
-            NSAttributedString(string: content, attributes: Self.plainTextAttributes),
+            NSAttributedString(string: content, attributes: plainTextAttributes),
             cachedHeight: cachedHeight
         )
     }
@@ -2116,6 +2171,7 @@ final class MessageTableCellView: NSTableCellView {
         row: MessageTableView.RowModel,
         runtime: MessageRenderRuntime,
         availableWidth: CGFloat,
+        theme: AppTheme = .dark,
         container: AppContainer?,
         owningTableView: NSTableView? = nil,
         rowIndex: Int? = nil,
@@ -2125,6 +2181,8 @@ final class MessageTableCellView: NSTableCellView {
         self.messageTableView = messageTableView
         currentRowIndex = rowIndex
         renderRuntime = runtime
+        self.theme = theme
+        fontSettings = container?.settings.fontSettings ?? .default
 
         let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
         currentContentWidth = contentWidth
@@ -2134,7 +2192,7 @@ final class MessageTableCellView: NSTableCellView {
             generation: row.renderHint.switchGeneration,
             isStreaming: row.isStreaming,
             contentWidth: Int(contentWidth.rounded(.down)),
-            styleKey: Self.sharedRenderStyle.cacheKey
+            styleKey: renderStyle.cacheKey
         )
         if fingerprint == lastFingerprint {
             return
@@ -2195,7 +2253,7 @@ final class MessageTableCellView: NSTableCellView {
             let input = MessageRenderInput(
                 content: row.message.content,
                 availableWidth: contentWidth,
-                style: Self.sharedRenderStyle,
+                style: renderStyle,
                 isStreaming: false
             )
             if let cached = runtime.cachedOutput(for: input) {
@@ -2241,7 +2299,7 @@ final class MessageTableCellView: NSTableCellView {
         renderController.requestRender(
             content: row.message.content,
             availableWidth: contentWidth,
-            style: Self.sharedRenderStyle,
+            style: renderStyle,
             isStreaming: false,
             hint: row.renderHint
         )
@@ -2389,6 +2447,7 @@ final class MessageTableCellView: NSTableCellView {
                 row: rows[row],
                 runtime: runtime,
                 availableWidth: effectiveAvailableWidth(),
+                theme: theme,
                 container: container,
                 owningTableView: tableView,
                 rowIndex: row,

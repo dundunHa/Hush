@@ -32,6 +32,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -41,6 +42,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -63,6 +65,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -72,6 +75,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -94,6 +98,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -103,6 +108,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -125,6 +131,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -134,6 +141,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -156,6 +164,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: true,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -165,6 +174,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -187,6 +197,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -196,6 +207,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -218,6 +230,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -227,6 +240,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -247,6 +261,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -256,6 +271,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 2,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -276,6 +292,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 1,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
@@ -288,6 +305,7 @@ struct MessageTableViewApplyStrategyTests {
             activeConversationID: "conv-1",
             isActiveConversationSending: false,
             switchGeneration: 2,
+            theme: container.settings.theme,
             runtime: runtime,
             container: container
         )
