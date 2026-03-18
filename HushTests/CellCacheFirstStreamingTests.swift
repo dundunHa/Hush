@@ -39,7 +39,7 @@ struct CellCacheFirstStreamingTests {
 
         let availableWidth: CGFloat = 600
         let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
-        let content = "Hello **world**"
+        let content = "Hello world"
         let style = RenderStyle.fromTheme()
 
         let key = RenderCache.makeKey(content: content, width: contentWidth, style: style)
@@ -168,6 +168,46 @@ struct CellCacheFirstStreamingTests {
         let appendedRichString = cell.attributedStringForTesting.string
         #expect(!appendedRichString.contains("$"))
         #expect(appendedRichString.contains("继续解释"))
+    }
+
+    @Test("Closed markdown emphasis upgrades streaming output to rich render before completion")
+    func streamingClosedMarkdownRendersBeforeCompletion() async throws {
+        let renderer = MessageContentRenderer(
+            renderCache: RenderCache(capacity: 10),
+            mathCache: MathRenderCache(capacity: 10)
+        )
+        let runtime = MessageRenderRuntime(
+            renderer: renderer,
+            scheduler: ConversationRenderScheduler()
+        )
+        let cell = MessageTableCellView(identifier: NSUserInterfaceItemIdentifier("test-streaming-markdown"))
+        let availableWidth: CGFloat = 600
+        let messageID = try #require(UUID(uuidString: "BDBDBDBD-7777-7777-7777-777777777777"))
+        let partial = "Hello **wor"
+
+        cell.configure(
+            row: makeRow(content: partial, isStreaming: true, id: messageID),
+            runtime: runtime,
+            availableWidth: availableWidth,
+            container: nil
+        )
+        #expect(cell.renderRequestCountForTesting == 0)
+        #expect(cell.attributedStringForTesting.string == partial)
+
+        let renderedMarkdown = "Hello **world**"
+        cell.updateStreamingText(renderedMarkdown)
+        #expect(cell.renderRequestCountForTesting > 0)
+
+        let renderDeadline = ContinuousClock.now + .seconds(2)
+        while cell.attributedStringForTesting.string.contains("**"),
+              ContinuousClock.now < renderDeadline
+        {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        let richString = cell.attributedStringForTesting.string
+        #expect(!richString.contains("**"))
+        #expect(richString == "Hello world")
     }
 
     @Test("Streaming rich render accepts intermediate growth after formula is already visible")

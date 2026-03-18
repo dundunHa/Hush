@@ -2125,8 +2125,88 @@ final class MessageTableCellView: NSTableCellView {
         }
     }
 
+    private static func containsStableMarkdownCue(_ content: String) -> Bool {
+        if containsPairedDelimiter("**", in: content)
+            || containsPairedDelimiter("__", in: content)
+            || containsPairedDelimiter("~~", in: content)
+            || containsPairedDelimiter("`", in: content)
+        {
+            return true
+        }
+
+        if content.contains("["),
+           content.contains("](")
+        {
+            return true
+        }
+
+        return content
+            .components(separatedBy: .newlines)
+            .contains(where: containsRenderableMarkdownLine)
+    }
+
+    private static func containsPairedDelimiter(_ delimiter: String, in content: String) -> Bool {
+        var searchRange = content.startIndex ..< content.endIndex
+        var matchCount = 0
+
+        while let range = content.range(of: delimiter, range: searchRange) {
+            matchCount += 1
+            if matchCount >= 2 {
+                return true
+            }
+            searchRange = range.upperBound ..< content.endIndex
+        }
+
+        return false
+    }
+
+    private static func containsRenderableMarkdownLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return false }
+
+        if trimmed.hasPrefix("```")
+            || trimmed.hasPrefix("~~~")
+            || trimmed.hasPrefix("> ")
+            || trimmed.hasPrefix("- ")
+            || trimmed.hasPrefix("* ")
+            || trimmed.hasPrefix("+ ")
+        {
+            return true
+        }
+
+        if isMarkdownHeadingLine(trimmed) || isOrderedListLine(trimmed) {
+            return true
+        }
+
+        return false
+    }
+
+    private static func isMarkdownHeadingLine(_ line: String) -> Bool {
+        let headingMarks = line.prefix { $0 == "#" }
+        guard !headingMarks.isEmpty, headingMarks.count <= 6 else { return false }
+        guard headingMarks.endIndex < line.endIndex else { return false }
+        return line[headingMarks.endIndex] == " "
+    }
+
+    private static func isOrderedListLine(_ line: String) -> Bool {
+        var index = line.startIndex
+        while index < line.endIndex, line[index].isNumber {
+            index = line.index(after: index)
+        }
+
+        guard index > line.startIndex, index < line.endIndex, line[index] == "." else {
+            return false
+        }
+
+        let separatorIndex = line.index(after: index)
+        guard separatorIndex < line.endIndex else { return false }
+        return line[separatorIndex] == " "
+    }
+
     private func shouldUseStreamingRichRender(for content: String) -> Bool {
-        isShowingStreamingRichOutput || Self.containsClosedMathSegment(content)
+        isShowingStreamingRichOutput
+            || Self.containsClosedMathSegment(content)
+            || Self.containsStableMarkdownCue(content)
     }
 
     // swiftlint:disable:next function_parameter_count
