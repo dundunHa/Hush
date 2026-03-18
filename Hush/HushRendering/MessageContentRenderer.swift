@@ -243,13 +243,7 @@ final class MessageContentRenderer {
             isStreaming: input.isStreaming
         )
 
-        let attributedString: NSAttributedString
-        do {
-            attributedString = try safeRender(converter: converter, document: document)
-        } catch {
-            return .plainFallback(content, style: input.style)
-        }
-
+        let attributedString = converter.convert(document)
         let diagnostics = extraDiagnostics + converter.diagnostics
 
         return MessageRenderOutput(
@@ -257,16 +251,6 @@ final class MessageContentRenderer {
             plainText: content,
             diagnostics: diagnostics
         )
-    }
-
-    /// Wrapper to catch any unexpected errors during rendering.
-    private func safeRender(
-        converter: MarkdownToAttributed,
-        document: Document
-    ) throws -> NSAttributedString {
-        // In production, this should never throw. But if the AST walk
-        // encounters something unexpected, we catch and fall back.
-        converter.convert(document)
     }
 
     private func cacheRowHeight(

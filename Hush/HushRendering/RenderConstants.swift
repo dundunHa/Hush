@@ -106,12 +106,6 @@ nonisolated enum RenderConstants {
     /// Slow-track interval between streaming model updates in RequestCoordinator.
     static let streamingSlowFlushInterval: Duration = .milliseconds(200)
 
-    /// Legacy interval between streaming UI array updates in RequestCoordinator.
-    static let streamingUIFlushInterval: Duration = .milliseconds(100)
-
-    /// Debounce interval for recomputing visible messages from PreferenceKey changes.
-    static let visibleMessageRecomputeDebounce: Duration = .milliseconds(150)
-
     /// Minimum interval between streaming scroll-to-bottom requests (seconds).
     static let streamingScrollCoalesceInterval: TimeInterval = 0.1
 
@@ -120,23 +114,6 @@ nonisolated enum RenderConstants {
 
     /// Debounce delay before issuing lookahead prewarm after scroll end.
     static let scrollEndPrewarmDebounce: TimeInterval = 0.2
-
-    // MARK: - Table Attachment Guardrails
-
-    /// Maximum number of tables rendered as attachments per message.
-    static let maxTableAttachmentsPerMessage = 3
-
-    /// Maximum row count for a single table to qualify for attachment rendering.
-    static let maxTableRows = 80
-
-    /// Maximum column count for a single table to qualify for attachment rendering.
-    static let maxTableColumns = 20
-
-    /// Maximum total cell count for a single table to qualify for attachment rendering.
-    static let maxTableCells = 1200
-
-    /// Maximum rendered character count (Phase 1 string) for attachment rendering.
-    static let maxTableRenderedChars = 20000
 
     // MARK: - Idle Prewarm
 
