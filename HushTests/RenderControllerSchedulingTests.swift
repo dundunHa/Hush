@@ -3,7 +3,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("Render Controller Scheduling")
 struct RenderControllerSchedulingTests {
     private func makeHint(
         messageID: UUID = UUID(),

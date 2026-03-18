@@ -2,7 +2,6 @@ import Foundation
 @testable import Hush
 import Testing
 
-@Suite("Chat Rendering Perf Harness")
 struct ChatRenderingPerfHarnessTests {
     // MARK: - Helpers
 

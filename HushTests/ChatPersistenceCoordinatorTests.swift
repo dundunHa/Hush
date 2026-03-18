@@ -5,7 +5,6 @@ import Testing
 
 // MARK: - 6.2 Lifecycle Tests: Queue-Full, Streaming Persistence
 
-@Suite("Chat Persistence Coordinator Tests")
 struct ChatPersistenceCoordinatorTests {
     private func makeCoordinator() throws -> ChatPersistenceCoordinator {
         let db = try DatabaseManager.inMemory()

@@ -5,7 +5,6 @@ import Testing
 
 // MARK: - 6.1 Repository Tests: Messages, Ordering, Terminal States
 
-@Suite("Message Repository Tests")
 struct MessageRepositoryTests {
     private func makeSetup() throws -> (GRDBMessageRepository, GRDBConversationRepository, DatabaseManager, String) {
         let db = try DatabaseManager.inMemory()

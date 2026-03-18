@@ -1,7 +1,6 @@
 @testable import Hush
 import Testing
 
-@Suite("SSEParser Tests")
 struct SSEParserTests {
     @Test("Multiline data payload joins with newline")
     func multilineDataPayload() {

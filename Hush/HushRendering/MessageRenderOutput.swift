@@ -21,8 +21,8 @@ struct MessageRenderOutput {
 }
 
 /// A non-fatal diagnostic emitted during rendering.
-struct RenderDiagnostic: Sendable, Equatable {
-    enum Kind: String, Sendable, Equatable {
+struct RenderDiagnostic: Equatable {
+    enum Kind: String, Equatable {
         case mathFailed
         case tableFallback
         case tableAttachment

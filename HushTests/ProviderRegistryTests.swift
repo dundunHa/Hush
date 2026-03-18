@@ -2,7 +2,6 @@ import Foundation
 @testable import Hush
 import Testing
 
-@Suite("ProviderRegistry Tests")
 struct ProviderRegistryTests {
     // MARK: - Helpers
 

@@ -3,7 +3,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("LaTeX Segmentation")
 struct LatexSegmentationTests {
     // MARK: - Task 8.2: Inline vs Block Detection
 

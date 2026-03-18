@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated struct ConversationSidebarThread: Identifiable, Equatable, Sendable {
+nonisolated struct ConversationSidebarThread: Identifiable, Equatable {
     let id: String
     let title: String
     let lastActivityAt: Date

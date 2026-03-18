@@ -4,7 +4,6 @@ import GRDB
 import Testing
 
 @MainActor
-@Suite("Conversation Switch Scroll — generation-driven latch, no sleep dependency")
 struct ConversationSwitchScrollTests {
     // MARK: - Helpers
 

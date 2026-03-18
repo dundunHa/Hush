@@ -3,7 +3,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("Multi-Scene Render Scheduler")
 struct MultiSceneSchedulerTests {
     private func makeInput(_ content: String) -> MessageRenderInput {
         MessageRenderInput(

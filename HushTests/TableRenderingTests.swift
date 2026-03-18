@@ -3,7 +3,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("Table Rendering")
 struct TableRenderingTests {
     // MARK: - Helpers
 

@@ -3,7 +3,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("Conversation Render Scheduler")
 struct ConversationRenderSchedulerTests {
     private func makeInput(_ content: String) -> MessageRenderInput {
         MessageRenderInput(

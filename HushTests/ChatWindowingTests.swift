@@ -1,7 +1,6 @@
 @testable import Hush
 import Testing
 
-@Suite("Chat Windowing")
 struct ChatWindowingTests {
     @Test("messages < windowSize 时返回全量范围")
     func renderAllWhenMessagesBelowWindowSize() {

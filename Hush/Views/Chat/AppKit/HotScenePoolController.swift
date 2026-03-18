@@ -262,7 +262,9 @@ final class HotScenePoolController: NSViewController {
             try? await Task.sleep(for: .milliseconds(300))
             if Task.isCancelled { return }
 
-            let current = Int(max(1, min(self.view.bounds.width, HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2) - HushSpacing.xl * 2))
+            let maxWidth = HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+            let currentWidth = min(self.view.bounds.width, maxWidth) - HushSpacing.xl * 2
+            let current = Int(max(1, currentWidth))
             guard current == expectedContentWidth else { return }
             guard let container = self.container else { return }
 

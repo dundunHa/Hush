@@ -2,7 +2,6 @@ import Foundation
 @testable import Hush
 import Testing
 
-@Suite("HTTPClient Data Type Tests")
 struct HTTPClientTests {
     @Test("HTTPRequest stores method, url, headers, and body")
     func requestConstruction() {
@@ -131,7 +130,7 @@ private final class StubURLProtocol: URLProtocol {
 
 // MARK: - URLSessionHTTPClient Behavior Tests
 
-@Suite("URLSessionHTTPClient Behavior Tests", .serialized)
+@Suite(.serialized)
 struct URLSessionHTTPClientBehaviorTests {
     private func makeClient() -> URLSessionHTTPClient {
         let config = URLSessionConfiguration.ephemeral

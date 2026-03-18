@@ -5,7 +5,6 @@ import GRDB
 import Testing
 
 @MainActor
-@Suite("Hot Scene Pool Tests")
 struct HotScenePoolTests {
     private func waitForConversationReady(
         _ container: AppContainer,

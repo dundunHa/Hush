@@ -28,6 +28,8 @@
 - `RenderController` 是否发生冗余 request
 - `MessageTableView.apply` 是否落入不必要全量刷新
 - scheduler 队列深度与 priority 是否符合预期
+- `RenderConstants.streamingPresentationPolicy` 是否被改动；当前生产默认按 backlog 连续调速，范围约 `20...40 chars/s`
+- 是否存在测试 override（`StreamingPresentationPolicy.testingFast`）与生产默认混用，导致体感与测试不一致
 
 ### C. 滚动贴底异常
 

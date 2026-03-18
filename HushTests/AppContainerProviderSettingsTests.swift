@@ -3,7 +3,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("AppContainer Provider Settings Tests")
 struct AppContainerProviderSettingsTests {
     @Test("saveOpenAISettings writes credentialRef and no plaintext secret")
     func saveOpenAISettingsWritesCredentialRefOnly() throws {

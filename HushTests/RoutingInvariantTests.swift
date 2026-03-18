@@ -3,7 +3,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("Routing Invariants — message deltas route to owning conversation")
 struct RoutingInvariantTests {
     // MARK: - Helpers
 
@@ -130,11 +129,20 @@ struct RoutingInvariantTests {
         let convA = container.messagesForConversation("conv-A")
         let assistantInA = convA.last(where: { $0.role == .assistant })
         #expect(assistantInA != nil)
-        #expect(assistantInA?.content.contains("bg") == true)
+        let assistantContent = try #require(assistantInA?.content)
+        #expect(!assistantContent.isEmpty)
+        #expect("bg".hasPrefix(assistantContent))
 
         let convB = container.messagesForConversation("conv-B")
         let assistantInB = convB.last(where: { $0.role == .assistant })
         #expect(assistantInB == nil)
+
+        try await waitForCompletion(container)
+
+        let completedAssistantContent = container.messagesForConversation("conv-A")
+            .last(where: { $0.role == .assistant })?
+            .content
+        #expect(completedAssistantContent?.contains("bg") == true)
 
         container.stopActiveRequest()
     }

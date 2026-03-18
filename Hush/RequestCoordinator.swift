@@ -8,7 +8,7 @@ private let logger = Logger(subsystem: "com.hush.app", category: "RequestCoordin
 final class RequestCoordinator {
     // MARK: - Dependencies
 
-    unowned let container: AppContainer
+    private weak var container: AppContainer?
     private let persistence: ChatPersistenceCoordinator?
     private let credentialResolver: CredentialResolver
 
@@ -24,6 +24,7 @@ final class RequestCoordinator {
 
     var preflightTimeoutOverride: Duration?
     var generationTimeoutOverride: Duration?
+    var streamingPresentationPolicyOverride: StreamingPresentationPolicy?
 
     // MARK: - Init
 
@@ -37,9 +38,14 @@ final class RequestCoordinator {
         self.credentialResolver = credentialResolver
     }
 
+    private var streamingPresentationPolicy: StreamingPresentationPolicy {
+        streamingPresentationPolicyOverride ?? RenderConstants.streamingPresentationPolicy
+    }
+
     // MARK: - Public Interface
 
     func submitRequest(_ snapshot: QueueItemSnapshot) {
+        guard let container else { return }
         let canStartImmediately =
             schedulerState.runningSessions.count < schedulerState.maxConcurrent
                 && !RequestScheduler.isConversationRunning(snapshot.conversationId, state: schedulerState)
@@ -60,6 +66,7 @@ final class RequestCoordinator {
     }
 
     func stopConversation(_ conversationId: String) {
+        guard let container else { return }
         guard let (requestID, _) = schedulerState.runningSessions.first(where: {
             $0.value.conversationId == conversationId
         }) else {
@@ -70,6 +77,11 @@ final class RequestCoordinator {
     }
 
     func cancelAll() {
+        shutdown()
+        container?.syncPublishedSchedulerState()
+    }
+
+    func shutdown() {
         for (_, session) in schedulerState.runningSessions {
             session.streamTask?.cancel()
         }
@@ -80,9 +92,9 @@ final class RequestCoordinator {
             flushState.pendingFastFlush?.cancel()
             flushState.pendingUIFlush?.cancel()
             flushState.pendingStreamingFlush?.cancel()
+            flushState.pendingRevealTask?.cancel()
         }
         sessionFlushState.removeAll()
-        container.syncPublishedSchedulerState()
     }
 
     func updateMaxConcurrent(_ limit: Int) {
@@ -122,6 +134,7 @@ final class RequestCoordinator {
     }
 
     func runningRequest(forConversation conversationId: String) -> ActiveRequestState? {
+        guard let container else { return nil }
         guard let (requestID, _) = schedulerState.runningSessions.first(where: {
             $0.value.conversationId == conversationId
         }) else { return nil }
@@ -133,14 +146,15 @@ final class RequestCoordinator {
 
 extension RequestCoordinator {
     private func startSession(_ snapshot: QueueItemSnapshot) {
+        guard let container else { return }
         let requestState = ActiveRequestState(
             requestID: snapshot.id,
             conversationId: snapshot.conversationId
         )
         container.requestStates[snapshot.id] = requestState
 
-        let task = Task { [container] in
-            defer { _ = container }
+        let task = Task { [weak self] in
+            guard let self else { return }
             await self.executeRequest(snapshot)
         }
 
@@ -156,13 +170,15 @@ extension RequestCoordinator {
     }
 
     private func stopSession(requestID: RequestID) {
+        guard let container else { return }
         guard let state = container.requestStates[requestID],
               !state.isTerminal else { return }
         let hadContent = !state.accumulatedText.isEmpty
         let owningConversationId = state.conversationId
 
         container.requestStates[requestID]?.status = .stopped
-        flushPendingUIUpdate(requestID: requestID)
+        container.requestStates[requestID]?.revealAll()
+        flushPendingUIUpdate(requestID: requestID, contentSource: .accumulated)
         cleanupFlushState(requestID: requestID)
 
         if let msgID = container.requestStates[requestID]?.assistantMessageID {
@@ -194,12 +210,14 @@ extension RequestCoordinator {
     }
 
     private func completeSession(requestID: RequestID) {
+        guard let container else { return }
         guard let state = container.requestStates[requestID],
               !state.isTerminal else { return }
         let owningConversationId = state.conversationId
 
         container.requestStates[requestID]?.status = .completed
-        flushPendingUIUpdate(requestID: requestID)
+        container.requestStates[requestID]?.revealAll()
+        flushPendingUIUpdate(requestID: requestID, contentSource: .accumulated)
         cleanupFlushState(requestID: requestID)
 
         if let msgID = container.requestStates[requestID]?.assistantMessageID {
@@ -228,6 +246,7 @@ extension RequestCoordinator {
     }
 
     private func failSession(requestID: RequestID, error: RequestError) {
+        guard let container else { return }
         guard let state = container.requestStates[requestID],
               !state.isTerminal else { return }
         let owningConversationId = state.conversationId
@@ -235,7 +254,8 @@ extension RequestCoordinator {
 
         container.requestStates[requestID]?.status = .failed(error)
         logger.error("[Request] Request failed: \(errorDescription)")
-        flushPendingUIUpdate(requestID: requestID)
+        container.requestStates[requestID]?.revealAll()
+        flushPendingUIUpdate(requestID: requestID, contentSource: .accumulated)
         cleanupFlushState(requestID: requestID)
 
         if let msgID = container.requestStates[requestID]?.assistantMessageID {
@@ -274,6 +294,7 @@ extension RequestCoordinator {
     private func resolveProvider(
         _ snapshot: QueueItemSnapshot
     ) -> (config: ProviderConfiguration, provider: any LLMProvider)? {
+        guard let container else { return nil }
         let requestID = snapshot.id
         logger.info("[Request] Resolving provider: \(snapshot.providerID)")
         guard let config = container.settings.providerConfigurations.first(where: { $0.id == snapshot.providerID }) else {
@@ -340,6 +361,7 @@ extension RequestCoordinator {
     }
 
     private func executeRequest(_ snapshot: QueueItemSnapshot) async {
+        guard let container else { return }
         let requestID = snapshot.id
         guard let (config, provider) = resolveProvider(snapshot) else { return }
         guard let invocationContext = resolveInvocationContext(
@@ -443,11 +465,12 @@ extension RequestCoordinator {
     }
 
     private func isNonTerminalSession(requestID: RequestID) -> Bool {
+        guard let container else { return false }
         guard let state = container.requestStates[requestID] else { return false }
         return !state.isTerminal
     }
 
-    private struct PreflightValidationSettings: Sendable {
+    private struct PreflightValidationSettings {
         let timeout: Duration
         let invocationContext: ProviderInvocationContext
         let catalogRepository: (any ProviderCatalogRepository)?
@@ -462,8 +485,8 @@ extension RequestCoordinator {
         requestID: RequestID,
         timeout: Duration
     ) -> Task<Void, Never> {
-        Task { [container, timeout] in
-            defer { _ = container }
+        Task { [weak self, timeout] in
+            guard let self else { return }
             do {
                 try await Task.sleep(for: timeout)
                 guard self.isNonTerminalSession(requestID: requestID) else { return }
@@ -489,7 +512,7 @@ extension RequestCoordinator {
             handleDelta(requestID: requestID, text: text)
             return false
         case let .completed(rid) where rid == requestID:
-            completeSession(requestID: requestID)
+            beginTerminalCompletion(requestID: requestID)
             return true
         case let .failed(rid, error) where rid == requestID:
             failSession(requestID: requestID, error: error)
@@ -515,7 +538,7 @@ extension RequestCoordinator {
                 }
             }
             if isNonTerminalSession(requestID: requestID) {
-                completeSession(requestID: requestID)
+                beginTerminalCompletion(requestID: requestID)
             }
         } catch is CancellationError {
             // Stop or timeout already handled
@@ -528,12 +551,40 @@ extension RequestCoordinator {
             }
         }
     }
+
+    private func beginTerminalCompletion(requestID: RequestID) {
+        guard let container else { return }
+        guard let state = container.requestStates[requestID],
+              !state.isTerminal
+        else { return }
+
+        guard !state.accumulatedText.isEmpty else {
+            completeSession(requestID: requestID)
+            return
+        }
+
+        guard state.pendingPresentedCharacterCount > 0 else {
+            completeSession(requestID: requestID)
+            return
+        }
+
+        guard let flushState = sessionFlushState[requestID] else {
+            completeSession(requestID: requestID)
+            return
+        }
+
+        flushState.terminalCatchUpStartedAt = ContinuousClock.now
+        flushState.pendingRevealTask?.cancel()
+        flushState.pendingRevealTask = nil
+        ensureRevealLoopRunning(requestID: requestID)
+    }
 }
 
 // MARK: - Delta Handling
 
 extension RequestCoordinator {
     private func handleDelta(requestID: RequestID, text: String) {
+        guard let container else { return }
         guard container.requestStates[requestID] != nil else { return }
         let owningConversationId = container.requestStates[requestID]!.conversationId
         let isActiveConversation = owningConversationId == container.activeConversationId
@@ -545,36 +596,48 @@ extension RequestCoordinator {
         container.requestStates[requestID]?.appendDelta(text)
         let accumulated = container.requestStates[requestID]?.flushText() ?? ""
 
-        if let msgID = container.requestStates[requestID]?.assistantMessageID,
-           let index = container.messagesForConversation(owningConversationId).lastIndex(where: { $0.id == msgID })
-        {
-            if isActiveConversation {
-                throttledFastFlush(
-                    requestID: requestID,
-                    conversationId: owningConversationId,
-                    messageID: msgID,
-                    content: accumulated
-                )
-            }
-            throttledUIFlush(requestID: requestID, conversationId: owningConversationId, index: index, content: accumulated)
+        if let msgID = container.requestStates[requestID]?.assistantMessageID {
+            ensureRevealLoopRunning(requestID: requestID)
             throttledStreamingFlush(requestID: requestID, messageId: msgID.uuidString, content: accumulated)
-        } else {
-            let newMessage = ChatMessage(role: .assistant, content: accumulated)
-            container.requestStates[requestID]?.assistantMessageID = newMessage.id
-            container.appendMessage(newMessage, toConversation: owningConversationId)
-            sessionFlushState[requestID]?.lastUIFlush = ContinuousClock.now
-            if !owningConversationId.isEmpty {
-                try? persistence?.persistAssistantDraft(
-                    newMessage,
-                    conversationId: owningConversationId,
-                    requestId: requestID.value.uuidString
-                )
-            }
+            return
         }
+
+        let initialPresented = primePresentedContent(requestID: requestID)
+        let newMessage = ChatMessage(role: .assistant, content: initialPresented)
+        container.requestStates[requestID]?.assistantMessageID = newMessage.id
+        container.appendMessage(newMessage, toConversation: owningConversationId)
+
+        if let flushState = sessionFlushState[requestID] {
+            flushState.lastRevealAt = ContinuousClock.now
+            flushState.lastUIFlush = ContinuousClock.now
+            flushState.latestPresentedLength = initialPresented.count
+        }
+
+        if !owningConversationId.isEmpty {
+            let persistedDraft = ChatMessage(
+                id: newMessage.id,
+                role: .assistant,
+                content: accumulated,
+                createdAt: newMessage.createdAt
+            )
+            try? persistence?.persistAssistantDraft(
+                persistedDraft,
+                conversationId: owningConversationId,
+                requestId: requestID.value.uuidString
+            )
+        }
+
+        ensureRevealLoopRunning(requestID: requestID)
+        throttledStreamingFlush(requestID: requestID, messageId: newMessage.id.uuidString, content: accumulated)
     }
 }
 
 // MARK: - Streaming Throttle (Per-Session)
+
+private enum StreamingContentSource {
+    case presented
+    case accumulated
+}
 
 private final class SessionFlushState {
     static let streamingFlushInterval: Duration = .milliseconds(500)
@@ -584,44 +647,31 @@ private final class SessionFlushState {
     var pendingUIFlush: Task<Void, Never>?
     var lastStreamingFlush: ContinuousClock.Instant?
     var pendingStreamingFlush: Task<Void, Never>?
+    var pendingRevealTask: Task<Void, Never>?
+    var lastRevealAt: ContinuousClock.Instant?
+    var revealBudget: Double = 0
+    var terminalCatchUpStartedAt: ContinuousClock.Instant?
+    var latestPresentedLength: Int = 0
 }
 
 extension RequestCoordinator {
-    private func throttledFastFlush(
-        requestID: RequestID,
-        conversationId: String,
-        messageID: UUID,
-        content: String
-    ) {
-        guard let flushState = sessionFlushState[requestID] else { return }
-        let now = ContinuousClock.now
-        let interval = RenderConstants.streamingFastFlushInterval
+    private func primePresentedContent(requestID: RequestID) -> String {
+        guard let container else { return "" }
+        guard var state = container.requestStates[requestID] else { return "" }
 
-        if let lastFlush = flushState.lastFastFlush, now - lastFlush < interval {
-            if flushState.pendingFastFlush == nil {
-                flushState.pendingFastFlush = Task { @MainActor in
-                    try? await Task.sleep(for: interval)
-                    guard !Task.isCancelled else { return }
-                    let latestContent = self.container.requestStates[requestID]?.accumulatedText ?? content
-                    self.applyFastFlush(
-                        requestID: requestID,
-                        conversationId: conversationId,
-                        messageID: messageID,
-                        content: latestContent
-                    )
-                    self.sessionFlushState[requestID]?.pendingFastFlush = nil
-                }
-            }
+        let revealCharacters = min(
+            streamingPresentationPolicy.initialRevealCharacters,
+            state.pendingPresentedCharacterCount
+        )
+        let presented: String
+        if revealCharacters > 0 {
+            presented = state.revealBy(characters: revealCharacters)
         } else {
-            flushState.pendingFastFlush?.cancel()
-            flushState.pendingFastFlush = nil
-            applyFastFlush(
-                requestID: requestID,
-                conversationId: conversationId,
-                messageID: messageID,
-                content: content
-            )
+            presented = state.presentedText
         }
+
+        container.requestStates[requestID] = state
+        return presented
     }
 
     private func applyFastFlush(
@@ -630,7 +680,7 @@ extension RequestCoordinator {
         messageID: UUID,
         content: String
     ) {
-        guard container.activeConversationId == conversationId else { return }
+        guard let container, container.activeConversationId == conversationId else { return }
         container.pushStreamingContent(
             conversationId: conversationId,
             messageID: messageID,
@@ -639,69 +689,234 @@ extension RequestCoordinator {
         sessionFlushState[requestID]?.lastFastFlush = ContinuousClock.now
     }
 
-    private func throttledUIFlush(requestID: RequestID, conversationId: String, index: Int, content: String) {
+    private func currentContent(
+        for requestID: RequestID,
+        source: StreamingContentSource
+    ) -> String {
+        guard let container else { return "" }
+        guard let reqState = container.requestStates[requestID] else { return "" }
+        switch source {
+        case .presented:
+            return reqState.presentedText
+        case .accumulated:
+            return reqState.accumulatedText
+        }
+    }
+
+    private func revealCharactersPerSecond(for requestID: RequestID) -> Double {
+        guard let container else { return 0 }
+        guard let flushState = sessionFlushState[requestID] else { return 0 }
+        let pendingCharacters = container.requestStates[requestID]?.pendingPresentedCharacterCount ?? 0
+        return streamingPresentationPolicy.charactersPerSecond(
+            forPendingCharacters: pendingCharacters,
+            isTerminalCatchUp: flushState.terminalCatchUpStartedAt != nil
+        )
+    }
+
+    private func ensureRevealLoopRunning(requestID: RequestID) {
+        guard let container else { return }
+        guard let flushState = sessionFlushState[requestID],
+              flushState.pendingRevealTask == nil,
+              let state = container.requestStates[requestID],
+              state.pendingPresentedCharacterCount > 0
+        else { return }
+
+        flushState.lastRevealAt = ContinuousClock.now
+        flushState.revealBudget = 0
+        flushState.pendingRevealTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                self.sessionFlushState[requestID]?.pendingRevealTask = nil
+            }
+
+            while !Task.isCancelled {
+                try? await Task.sleep(for: self.streamingPresentationPolicy.revealTickInterval)
+                guard !Task.isCancelled else { return }
+                guard self.performRevealTick(requestID: requestID) else { return }
+            }
+        }
+    }
+
+    @discardableResult
+    private func performRevealTick(requestID: RequestID) -> Bool {
+        guard let container else { return false }
+        guard let flushState = sessionFlushState[requestID],
+              var state = container.requestStates[requestID]
+        else { return false }
+
+        let now = ContinuousClock.now
+
+        if let startedAt = flushState.terminalCatchUpStartedAt,
+           let forceRevealAfter = streamingPresentationPolicy.terminalForceRevealAfter,
+           now - startedAt >= forceRevealAfter
+        {
+            state.revealAll()
+            container.requestStates[requestID] = state
+            completeSession(requestID: requestID)
+            return false
+        }
+
+        let elapsed: Duration
+        if let lastRevealAt = flushState.lastRevealAt {
+            elapsed = now - lastRevealAt
+        } else {
+            elapsed = streamingPresentationPolicy.revealTickInterval
+        }
+        flushState.lastRevealAt = now
+
+        let revealCharactersPerSecond = revealCharactersPerSecond(for: requestID)
+        guard revealCharactersPerSecond > 0 else { return false }
+
+        flushState.revealBudget += durationSeconds(elapsed) * revealCharactersPerSecond
+        let revealCharacters = min(
+            state.pendingPresentedCharacterCount,
+            Int(flushState.revealBudget.rounded(.towardZero))
+        )
+        guard revealCharacters > 0 else {
+            return state.pendingPresentedCharacterCount > 0
+        }
+        flushState.revealBudget = max(0, flushState.revealBudget - Double(revealCharacters))
+
+        let presented = state.revealBy(characters: revealCharacters)
+        let hasPendingCharacters = state.pendingPresentedCharacterCount > 0
+        container.requestStates[requestID] = state
+
+        if hasPendingCharacters || flushState.terminalCatchUpStartedAt == nil {
+            publishPresentedContent(requestID: requestID, content: presented)
+        }
+
+        if !hasPendingCharacters, flushState.terminalCatchUpStartedAt != nil {
+            completeSession(requestID: requestID)
+            return false
+        }
+
+        return hasPendingCharacters
+    }
+
+    private func publishPresentedContent(requestID: RequestID, content: String) {
+        guard let container else { return }
+        guard let reqState = container.requestStates[requestID],
+              let messageID = reqState.assistantMessageID,
+              let index = container.messagesForConversation(reqState.conversationId).lastIndex(where: { $0.id == messageID })
+        else { return }
+
+        let contentLength = content.count
+        if sessionFlushState[requestID]?.latestPresentedLength == contentLength {
+            return
+        }
+        sessionFlushState[requestID]?.latestPresentedLength = contentLength
+
+        applyFastFlush(
+            requestID: requestID,
+            conversationId: reqState.conversationId,
+            messageID: messageID,
+            content: content
+        )
+        throttledUIFlush(
+            requestID: requestID,
+            conversationId: reqState.conversationId,
+            index: index,
+            contentSource: .presented
+        )
+    }
+
+    private func throttledUIFlush(
+        requestID: RequestID,
+        conversationId: String,
+        index: Int,
+        contentSource: StreamingContentSource
+    ) {
         guard let flushState = sessionFlushState[requestID] else { return }
         let now = ContinuousClock.now
         let interval = RenderConstants.streamingSlowFlushInterval
         if let lastFlush = flushState.lastUIFlush, now - lastFlush < interval {
             if flushState.pendingUIFlush == nil {
-                flushState.pendingUIFlush = Task { @MainActor in
+                flushState.pendingUIFlush = Task { @MainActor [weak self] in
+                    guard let self else { return }
                     try? await Task.sleep(for: interval)
                     guard !Task.isCancelled else { return }
-                    self.applyUIFlush(requestID: requestID, conversationId: conversationId)
+                    self.applyUIFlush(
+                        requestID: requestID,
+                        conversationId: conversationId,
+                        contentSource: contentSource
+                    )
                     self.sessionFlushState[requestID]?.pendingUIFlush = nil
                 }
             }
         } else {
+            guard let container else { return }
             flushState.pendingUIFlush?.cancel()
             flushState.pendingUIFlush = nil
+            let content = currentContent(for: requestID, source: contentSource)
             container.updateMessage(at: index, inConversation: conversationId, content: content)
             flushState.lastUIFlush = now
         }
     }
 
-    private func applyUIFlush(requestID: RequestID, conversationId: String) {
+    private func applyUIFlush(
+        requestID: RequestID,
+        conversationId: String,
+        contentSource: StreamingContentSource
+    ) {
+        guard let container else { return }
         guard let reqState = container.requestStates[requestID],
               let msgID = reqState.assistantMessageID,
               let index = container.messagesForConversation(conversationId).lastIndex(where: { $0.id == msgID })
         else { return }
-        let accumulated = reqState.accumulatedText
-        container.updateMessage(at: index, inConversation: conversationId, content: accumulated)
+        let content = currentContent(for: requestID, source: contentSource)
+        container.updateMessage(at: index, inConversation: conversationId, content: content)
         sessionFlushState[requestID]?.lastUIFlush = ContinuousClock.now
     }
 
-    private func flushPendingUIUpdate(requestID: RequestID) {
+    private func flushPendingUIUpdate(
+        requestID: RequestID,
+        contentSource: StreamingContentSource = .presented
+    ) {
+        guard let container else { return }
         guard let flushState = sessionFlushState[requestID] else { return }
+        flushState.pendingRevealTask?.cancel()
+        flushState.pendingRevealTask = nil
+        flushState.lastRevealAt = nil
+        flushState.revealBudget = 0
+        flushState.terminalCatchUpStartedAt = nil
         flushState.pendingFastFlush?.cancel()
         flushState.pendingFastFlush = nil
         if let reqState = container.requestStates[requestID],
            let messageID = reqState.assistantMessageID
         {
+            let content = currentContent(for: requestID, source: contentSource)
             applyFastFlush(
                 requestID: requestID,
                 conversationId: reqState.conversationId,
                 messageID: messageID,
-                content: reqState.accumulatedText
+                content: content
             )
+            flushState.latestPresentedLength = content.count
         }
 
         flushState.pendingUIFlush?.cancel()
         flushState.pendingUIFlush = nil
         if let reqState = container.requestStates[requestID] {
-            applyUIFlush(requestID: requestID, conversationId: reqState.conversationId)
+            applyUIFlush(
+                requestID: requestID,
+                conversationId: reqState.conversationId,
+                contentSource: contentSource
+            )
         }
     }
 
     private func throttledStreamingFlush(requestID: RequestID, messageId: String, content _: String) {
+        guard let container else { return }
         guard let flushState = sessionFlushState[requestID] else { return }
         let now = ContinuousClock.now
         let interval = SessionFlushState.streamingFlushInterval
         if let lastFlush = flushState.lastStreamingFlush, now - lastFlush < interval {
             flushState.pendingStreamingFlush?.cancel()
-            flushState.pendingStreamingFlush = Task { @MainActor in
+            flushState.pendingStreamingFlush = Task { @MainActor [weak self] in
+                guard let self else { return }
                 try? await Task.sleep(for: interval)
                 guard !Task.isCancelled else { return }
-                let currentContent = self.container.requestStates[requestID]?.accumulatedText ?? ""
+                let currentContent = self.container?.requestStates[requestID]?.accumulatedText ?? ""
                 try? self.persistence?.updateStreamingContent(
                     messageId: messageId,
                     content: currentContent
@@ -725,10 +940,14 @@ extension RequestCoordinator {
             flushState.pendingFastFlush?.cancel()
             flushState.pendingUIFlush?.cancel()
             flushState.pendingStreamingFlush?.cancel()
+            flushState.pendingRevealTask?.cancel()
+            flushState.lastRevealAt = nil
+            flushState.revealBudget = 0
         }
     }
 
     func cancelThrottleTasksForConversation(_ conversationId: String) {
+        guard let container else { return }
         let matchingRequestIDs = sessionFlushState.keys.filter { requestID in
             container.requestStates[requestID]?.conversationId == conversationId
         }
@@ -750,7 +969,8 @@ extension RequestCoordinator {
 #if DEBUG
     extension RequestCoordinator {
         func hasPendingThrottleTasksForConversation(_ conversationId: String) -> Bool {
-            sessionFlushState.contains { requestID, flushState in
+            guard let container else { return false }
+            return sessionFlushState.contains { requestID, flushState in
                 container.requestStates[requestID]?.conversationId == conversationId
                     && (flushState.pendingFastFlush != nil
                         || flushState.pendingUIFlush != nil
@@ -764,6 +984,7 @@ extension RequestCoordinator {
 
 extension RequestCoordinator {
     func advanceQueue() {
+        guard let container else { return }
         while let selection = RequestScheduler.selectNext(
             state: &schedulerState,
             activeConversationId: container.activeConversationId
@@ -774,6 +995,7 @@ extension RequestCoordinator {
     }
 
     private func messagesForExecution(snapshot: QueueItemSnapshot) -> [ChatMessage] {
+        guard let container else { return [] }
         let bucket = container.messagesForConversation(snapshot.conversationId)
         guard let index = bucket.firstIndex(where: { $0.id == snapshot.userMessageID }) else {
             return applyContextLimit(bucket, limit: snapshot.parameters.contextMessageLimit)

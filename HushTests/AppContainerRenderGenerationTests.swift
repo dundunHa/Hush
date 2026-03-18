@@ -4,7 +4,6 @@ import GRDB
 import Testing
 
 @MainActor
-@Suite("AppContainer Render Generation Tests")
 struct AppContainerRenderGenerationTests {
     @Test("activateConversation increments activeConversationRenderGeneration when switching")
     func activateConversationIncrementsGeneration() async throws {

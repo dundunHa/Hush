@@ -4,7 +4,7 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("HotScenePoolController Streaming Fast-Path")
+// swiftlint:disable:next type_name
 struct HotScenePoolControllerStreamingFastPathTests {
     @Test("Streaming delta-only update pushes content without applyConversationState")
     func streamingDeltaOnlyUpdateSkipsApply() throws {

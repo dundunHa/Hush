@@ -77,7 +77,7 @@ enum PerfTrace {
     #if DEBUG
         private static let logger = Logger(subsystem: "com.hush.app", category: "PerfTrace")
 
-        struct Record: Sendable, Equatable {
+        struct Record: Equatable {
             let event: String
             let type: String
             let value: Double

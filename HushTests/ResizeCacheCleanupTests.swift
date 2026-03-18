@@ -5,7 +5,6 @@ import GRDB
 import Testing
 
 @MainActor
-@Suite("Resize Cache Cleanup Tests")
 struct ResizeCacheCleanupTests {
     private func waitForConversationReady(
         _ container: AppContainer,

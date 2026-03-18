@@ -2,7 +2,6 @@ import AppKit
 @testable import Hush
 import Testing
 
-@Suite("Math Render Cache")
 struct MathRenderCacheTests {
     private func makeKey(_ latex: String) -> MathRenderCache.CacheKey {
         MathRenderCache.makeKey(

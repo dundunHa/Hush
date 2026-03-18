@@ -3,7 +3,6 @@ import Foundation
 @testable import Hush
 import Testing
 
-@Suite("Render Cache Protection")
 struct RenderCacheProtectionTests {
     // MARK: - Helpers
 

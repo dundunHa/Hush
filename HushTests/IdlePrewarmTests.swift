@@ -4,7 +4,7 @@ import GRDB
 import Testing
 
 @MainActor
-@Suite("Idle Prewarm Tests", .serialized)
+@Suite(.serialized)
 struct IdlePrewarmTests {
     private struct ConversationReadyTimeoutError: Error {}
 

@@ -2,7 +2,6 @@ import Foundation
 @testable import Hush
 import Testing
 
-@Suite("Streaming Coalescing")
 struct StreamingCoalescingTests {
     // MARK: - Task 8.5: Bounded Render Frequency
 

@@ -3,7 +3,6 @@ import GRDB
 @testable import Hush
 import Testing
 
-@Suite("AppPreferencesRepository Tests")
 struct AppPreferencesRepositoryTests {
     private func makeRepo() throws -> GRDBAppPreferencesRepository {
         let dbManager = try DatabaseManager.inMemory()

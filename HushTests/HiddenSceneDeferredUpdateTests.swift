@@ -5,7 +5,6 @@ import GRDB
 import Testing
 
 @MainActor
-@Suite("Hidden Scene Deferred Update Tests")
 struct HiddenSceneDeferredUpdateTests {
     private func waitForConversationReady(
         _ container: AppContainer,

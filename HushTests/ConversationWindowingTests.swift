@@ -1,7 +1,6 @@
 @testable import Hush
 import Testing
 
-@Suite("Conversation Windowing — streaming, switch, and regression coverage")
 struct ConversationWindowingTests {
     // MARK: - Streaming Auto-Scroll With Windowing
 

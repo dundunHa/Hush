@@ -4,7 +4,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("MessageTableView Apply Strategy")
 struct MessageTableViewApplyStrategyTests {
     private func makeMessage(
         id: UUID,

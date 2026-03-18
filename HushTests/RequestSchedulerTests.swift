@@ -2,7 +2,6 @@ import Foundation
 @testable import Hush
 import Testing
 
-@Suite("RequestScheduler — deterministic selection")
 struct RequestSchedulerTests {
     // MARK: - Helpers
 

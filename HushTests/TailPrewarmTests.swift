@@ -5,7 +5,6 @@ import GRDB
 import Testing
 
 @MainActor
-@Suite("Tail Prewarm Tests")
 struct TailPrewarmTests {
     private func waitForConversationReady(
         _ container: AppContainer,

@@ -4,7 +4,7 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("MessageTableView Height Invalidation Scroll")
+// swiftlint:disable:next type_name
 struct MessageTableViewHeightInvalidationScrollTests {
     private func makeMessage(id: UUID, role: ChatRole, content: String) -> ChatMessage {
         ChatMessage(
@@ -202,6 +202,7 @@ struct MessageTableViewHeightInvalidationScrollTests {
     }
 
     @Test("Pinned rich invalidation defers row-height updates during live scroll and flushes after")
+    // swiftlint:disable:next function_body_length
     func pinnedInvalidationDefersDuringLiveScroll() async throws {
         let renderer = MessageContentRenderer(
             renderCache: RenderCache(capacity: 16),

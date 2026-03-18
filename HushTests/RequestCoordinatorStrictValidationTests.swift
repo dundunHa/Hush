@@ -3,7 +3,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("RequestCoordinator Strict Validation Tests")
 struct RequestCoordinatorStrictValidationTests {
     @Test("Selected model invalid for provider fails immediately without substitution")
     func invalidModelFailsImmediately() async throws {

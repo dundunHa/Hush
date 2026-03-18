@@ -4,7 +4,7 @@ import Foundation
 ///
 /// This carries conversation-local position and visibility metadata so
 /// non-streaming rich rendering can prioritize "latest + visible" work.
-struct MessageRenderHint: Sendable, Equatable {
+struct MessageRenderHint: Equatable {
     let conversationID: String
     let messageID: UUID
     let rankFromLatest: Int

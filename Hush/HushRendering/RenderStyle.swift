@@ -2,7 +2,7 @@ import AppKit
 
 /// AppKit-based style snapshot used by the renderer.
 /// Bridged from HushTypography / HushColors at the SwiftUI layer.
-struct RenderStyle: Equatable, Sendable {
+struct RenderStyle: Equatable {
     let bodyFont: NSFont
     let bodyBoldFont: NSFont
     let bodyItalicFont: NSFont

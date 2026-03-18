@@ -3,7 +3,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("AppContainer Settings Persistence Tests")
 struct AppContainerSettingsPersistenceTests {
     private func makeRepoAndContainer() throws -> (GRDBAppPreferencesRepository, AppContainer) {
         let dbManager = try DatabaseManager.inMemory()

@@ -2,7 +2,6 @@ import Foundation
 @testable import Hush
 import Testing
 
-@Suite("MessageTableView Scroll")
 struct MessageTableViewScrollTests {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
 

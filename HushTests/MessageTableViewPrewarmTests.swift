@@ -4,7 +4,6 @@ import Foundation
 import Testing
 
 @MainActor
-@Suite("MessageTableView Lookahead Prewarm")
 struct MessageTableViewPrewarmTests {
     private func makeMessage(
         id: UUID,

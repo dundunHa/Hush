@@ -23,7 +23,6 @@ private final class FakeHTTPClient: HTTPClient, @unchecked Sendable {
     }
 }
 
-@Suite("OpenAIProvider Tests")
 struct OpenAIProviderTests {
     private let endpoint = "https://api.openai.com/v1"
 
@@ -418,7 +417,6 @@ struct OpenAIProviderTests {
 
 // MARK: - Catalog Refresh Service Tests
 
-@Suite("Catalog Refresh Service Tests")
 struct CatalogRefreshServiceTests {
     @Test("Successful refresh persists models and returns success")
     func successfulRefreshPersists() async throws {

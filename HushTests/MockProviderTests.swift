@@ -2,7 +2,6 @@ import Foundation
 @testable import Hush
 import Testing
 
-@Suite("MockProvider Tests")
 struct MockProviderTests {
     private let dummyContext = ProviderInvocationContext(endpoint: "https://mock.test")
 

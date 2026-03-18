@@ -159,6 +159,7 @@ final class MarkdownToAttributed {
 
     // MARK: - Code Block
 
+    // swiftlint:disable:next function_body_length
     private func renderCodeBlock(_ codeBlock: CodeBlock) -> NSAttributedString {
         let displayLanguage = Self.normalizeCodeBlockLanguage(codeBlock.language)
         let rawLanguage = codeBlock.language?.trimmingCharacters(in: .whitespacesAndNewlines)
