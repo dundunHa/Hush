@@ -7,6 +7,7 @@ struct ComposerDock: View {
     @State private var draft: String = ""
     @State private var availableModels: [ModelDescriptor] = []
     @State private var catalogStateMessage: String?
+    @State private var isProviderHovered = false
     @State private var isModelHovered = false
     @State private var isStrengthHovered = false
     @State private var isConfigHovered = false
@@ -27,6 +28,9 @@ struct ComposerDock: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Add context")
 
+                    if enabledProviders.count > 1 {
+                        providerMenu
+                    }
                     modelMenu
                     thinkingStrengthMenu
 
@@ -101,6 +105,36 @@ struct ComposerDock: View {
                 }
                 return .handled
             }
+    }
+
+    private var enabledProviders: [ProviderConfiguration] {
+        container.settings.providerConfigurations.filter(\.isEnabled)
+    }
+
+    private var selectedProviderName: String {
+        enabledProviders.first(where: { $0.id == container.settings.selectedProviderID })?.name
+            ?? container.settings.selectedProviderID
+    }
+
+    private var providerMenu: some View {
+        Menu {
+            ForEach(enabledProviders) { provider in
+                Button {
+                    container.selectProvider(id: provider.id)
+                } label: {
+                    HStack(spacing: HushSpacing.sm) {
+                        if provider.id == container.settings.selectedProviderID {
+                            Image(systemName: "checkmark")
+                        }
+                        Text(provider.name)
+                    }
+                }
+            }
+        } label: {
+            selectorLabel(title: selectedProviderName, isHovered: isProviderHovered)
+        }
+        .buttonStyle(.plain)
+        .onHover { isProviderHovered = $0 }
     }
 
     private var modelMenu: some View {

@@ -61,6 +61,7 @@ struct ProviderSettingsView: View {
     @State private var saveMessage: String = ""
     @State private var saveFailed: Bool = false
     @State private var showDeleteConfirmation: Bool = false
+    @State private var setAsDefault: Bool = false
     @State private var modelSearchText: String = ""
     @State private var draftCatalogModels: [ModelDescriptor] = []
     @State private var draftCatalogError: String?
@@ -340,13 +341,22 @@ struct ProviderSettingsView: View {
                 isEnabled: false
             )
 
-        return ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: HushSpacing.lg) {
-                providerHeader(config)
-                connectionSection(config)
+        return VStack(spacing: 0) {
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: HushSpacing.lg) {
+                    providerHeader(config)
+                    connectionSection(config)
+                    catalogRefreshSection(providerID: providerID)
+                }
+                .padding(.horizontal, HushSpacing.xl)
+            }
+            .contentMargins(.vertical, 40)
+            .scrollBounceBehavior(.basedOnSize)
 
-                catalogRefreshSection(providerID: providerID)
+            Divider()
+                .foregroundStyle(palette.subtleStroke)
 
+            VStack(spacing: HushSpacing.xs) {
                 if !saveMessage.isEmpty {
                     Text(saveMessage)
                         .font(HushTypography.footnote)
@@ -356,9 +366,8 @@ struct ProviderSettingsView: View {
                 actionBar(config)
             }
             .padding(.horizontal, HushSpacing.xl)
+            .padding(.vertical, HushSpacing.md)
         }
-        .contentMargins(.vertical, 40)
-        .scrollBounceBehavior(.basedOnSize)
         .frame(width: 580, height: 600)
         .background(palette.rootBackground)
     }
@@ -699,6 +708,15 @@ struct ProviderSettingsView: View {
 
     // MARK: - Action Bar
 
+    private var isCurrentDefault: Bool {
+        guard let providerID = editingProviderID else { return false }
+        return container.settings.selectedProviderID == providerID
+    }
+
+    private var canBeDefault: Bool {
+        isEnabled && !defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func actionBar(_ config: ProviderConfiguration) -> some View {
         HStack {
             if isBuiltInProvider {
@@ -730,6 +748,21 @@ struct ProviderSettingsView: View {
             }
 
             Spacer()
+
+            if !isCurrentDefault, canBeDefault {
+                Toggle("Set as Default", isOn: $setAsDefault)
+                    .toggleStyle(.checkbox)
+                    .font(HushTypography.footnote)
+                    .foregroundStyle(palette.secondaryText)
+            } else if isCurrentDefault {
+                HStack(spacing: HushSpacing.xs) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(palette.successText)
+                    Text("Default")
+                        .font(HushTypography.footnote)
+                        .foregroundStyle(palette.secondaryText)
+                }
+            }
 
             Button("Save") {
                 saveSettings()
@@ -827,21 +860,21 @@ struct ProviderSettingsView: View {
         apiKey = ""
         isAPIKeyRevealed = false
         showDeleteConfirmation = false
+        setAsDefault = false
         saveMessage = ""
         saveFailed = false
         resetDraftCatalogState()
     }
 
-    private func applyPostSave(providerID: String, keepOpen: Bool = false) {
+    private func applyPostSave(providerID: String) {
+        if setAsDefault {
+            container.setDefaultProvider(id: providerID)
+        }
         apiKey = ""
         isAPIKeyRevealed = false
         saveMessage = "Saved."
         saveFailed = false
-        if keepOpen {
-            editingProviderID = providerID
-        } else {
-            editingProviderID = nil
-        }
+        editingProviderID = nil
     }
 
     private var apiKeyToSave: String {
@@ -927,7 +960,7 @@ struct ProviderSettingsView: View {
 
         container.saveProviderProfile(config)
         hasStoredCredential = config.hasPersistedAPIKey
-        applyPostSave(providerID: config.id, keepOpen: isCreatingNew)
+        applyPostSave(providerID: config.id)
 
         if config.isEnabled, hasStoredCredential {
             container.refreshCatalog(forProviderID: config.id)
