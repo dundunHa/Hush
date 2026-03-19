@@ -45,10 +45,16 @@ public enum ProviderResponseAttachment: Sendable, Equatable {
 public struct ProviderResponse: Sendable, Equatable {
     public let text: String
     public let attachments: [ProviderResponseAttachment]
+    public let debugInfo: MessageDebugInfo?
 
-    public init(text: String = "", attachments: [ProviderResponseAttachment] = []) {
+    public init(
+        text: String = "",
+        attachments: [ProviderResponseAttachment] = [],
+        debugInfo: MessageDebugInfo? = nil
+    ) {
         self.text = text
         self.attachments = attachments
+        self.debugInfo = debugInfo
     }
 }
 

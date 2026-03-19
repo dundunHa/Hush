@@ -209,7 +209,7 @@ struct RenderCacheTests {
         #expect(cache.count == 5)
 
         cache.clear()
-        #expect(cache.count == 0)
+        #expect(cache.count < 1)
     }
 
     @MainActor

@@ -29,7 +29,7 @@ private enum OpenAIProviderDebug {
 
 public struct OpenAIProvider: LLMProvider, Sendable {
     public let id: String
-    private let httpClient: any HTTPClient
+    let httpClient: any HTTPClient
 
     public static let defaultEndpoint = "https://api.openai.com/v1"
 
@@ -137,7 +137,20 @@ public struct OpenAIProvider: LLMProvider, Sendable {
             providerID: id, modelID: modelID, requestKind: "image_generation",
             endpoint: baseURL, requestURL: url, httpMethod: request.method,
             requestHeaders: Self.sanitizedHeaders(request.headers),
-            requestBodyJSON: Self.prettyPrintedJSON(from: bodyData)
+            requestBodyJSON: Self.prettyPrintedJSON(from: bodyData),
+            traceEvents: [
+                Self.traceEvent(
+                    category: .request,
+                    title: "HTTP request prepared",
+                    summary: "Prepared image generation request",
+                    sections: Self.requestSections(
+                        method: request.method,
+                        url: url,
+                        headers: Self.sanitizedHeaders(request.headers),
+                        body: Self.prettyPrintedJSON(from: bodyData)
+                    )
+                )
+            ]
         )
         logger.info("[Image] Dedicated image request: model=\(modelID), endpoint=\(url), timeout=\(httpTimeout)s")
         OpenAIProviderDebug.log("Request: \(debugInfo.prettyJSONString() ?? "{}")")
@@ -149,6 +162,17 @@ public struct OpenAIProvider: LLMProvider, Sendable {
 
         debugInfo.responseStatusCode = statusCode
         debugInfo.responseBodyPreview = Self.preview(data: data)
+        debugInfo = debugInfo.appendingTraceEvent(
+            Self.traceEvent(
+                category: .response,
+                title: "HTTP response received",
+                summary: "Image generation returned HTTP \(statusCode)",
+                sections: Self.responseSections(
+                    statusCode: statusCode,
+                    bodyPreview: debugInfo.responseBodyPreview
+                )
+            )
+        )
         OpenAIProviderDebug.log("Response: \(debugInfo.prettyJSONString() ?? "{}")")
 
         let response: OpenAIImageGenerationResponse
@@ -179,7 +203,8 @@ public struct OpenAIProvider: LLMProvider, Sendable {
                 attachments: [.image(ProviderImageAttachmentPayload(
                     data: imageData, mimeType: "image/png",
                     sourcePrompt: prompt, providerMetadataJSON: metadataJSON
-                ))]
+                ))],
+                debugInfo: debugInfo
             )
         }
         if let remoteURL = first.url, !remoteURL.isEmpty {
@@ -188,7 +213,8 @@ public struct OpenAIProvider: LLMProvider, Sendable {
                 attachments: [.image(ProviderImageAttachmentPayload(
                     remoteURL: remoteURL,
                     sourcePrompt: prompt, providerMetadataJSON: metadataJSON
-                ))]
+                ))],
+                debugInfo: debugInfo
             )
         }
         debugInfo.providerError = "Image generation response did not include image data"
@@ -235,7 +261,20 @@ public struct OpenAIProvider: LLMProvider, Sendable {
             providerID: id, modelID: modelID, requestKind: "chat_image_generation",
             endpoint: baseURL, requestURL: url, httpMethod: request.method,
             requestHeaders: Self.sanitizedHeaders(request.headers),
-            requestBodyJSON: Self.prettyPrintedJSON(from: bodyData)
+            requestBodyJSON: Self.prettyPrintedJSON(from: bodyData),
+            traceEvents: [
+                Self.traceEvent(
+                    category: .request,
+                    title: "HTTP request prepared",
+                    summary: "Prepared chat-completions image request",
+                    sections: Self.requestSections(
+                        method: request.method,
+                        url: url,
+                        headers: Self.sanitizedHeaders(request.headers),
+                        body: Self.prettyPrintedJSON(from: bodyData)
+                    )
+                )
+            ]
         )
         logger.info("[Image] Chat image request: model=\(modelID), endpoint=\(url), timeout=\(httpTimeout)s")
         OpenAIProviderDebug.log("Chat image request: \(debugInfo.prettyJSONString() ?? "{}")")
@@ -247,6 +286,17 @@ public struct OpenAIProvider: LLMProvider, Sendable {
 
         debugInfo.responseStatusCode = statusCode
         debugInfo.responseBodyPreview = Self.preview(data: data)
+        debugInfo = debugInfo.appendingTraceEvent(
+            Self.traceEvent(
+                category: .response,
+                title: "HTTP response received",
+                summary: "Chat image generation returned HTTP \(statusCode)",
+                sections: Self.responseSections(
+                    statusCode: statusCode,
+                    bodyPreview: debugInfo.responseBodyPreview
+                )
+            )
+        )
         OpenAIProviderDebug.log("Chat image response: \(debugInfo.prettyJSONString() ?? "{}")")
 
         let chatResponse: OpenAIChatCompletionResponse
@@ -282,7 +332,8 @@ public struct OpenAIProvider: LLMProvider, Sendable {
 
         return ProviderResponse(
             text: text.isEmpty ? "Generated image." : text,
-            attachments: attachments
+            attachments: attachments,
+            debugInfo: debugInfo
         )
     }
 
@@ -407,186 +458,57 @@ public struct OpenAIProvider: LLMProvider, Sendable {
         return (data, mimeType)
     }
 
-    public func sendStreaming(
-        messages: [ChatMessage],
-        modelID: String,
-        parameters: ModelParameters,
-        requestID: RequestID,
-        context: ProviderInvocationContext
-    ) -> AsyncThrowingStream<StreamEvent, Error> {
-        let input = StreamingExecutionInput(
-            messages: messages,
-            modelID: modelID,
-            parameters: parameters,
-            requestID: requestID,
-            context: context
+    static func traceEvent(
+        category: MessageTraceEventCategory,
+        title: String,
+        summary: String? = nil,
+        sections: [MessageTraceSection] = []
+    ) -> MessageTraceEvent {
+        MessageTraceEvent(
+            category: category,
+            title: title,
+            summary: summary,
+            sections: sections
         )
-
-        return AsyncThrowingStream { continuation in
-            let task = Task {
-                await runStreamingRequest(input, continuation: continuation)
-            }
-
-            continuation.onTermination = { _ in
-                task.cancel()
-            }
-        }
     }
 
-    private struct StreamingExecutionInput {
-        let messages: [ChatMessage]
-        let modelID: String
-        let parameters: ModelParameters
-        let requestID: RequestID
-        let context: ProviderInvocationContext
-    }
-
-    private func runStreamingRequest(
-        _ input: StreamingExecutionInput,
-        continuation: AsyncThrowingStream<StreamEvent, Error>.Continuation
-    ) async {
-        let providerID = id
-        do {
-            let request = try makeStreamingRequest(
-                messages: input.messages,
-                modelID: input.modelID,
-                parameters: input.parameters,
-                context: input.context,
-                providerID: providerID
-            )
-
-            continuation.yield(.started(requestID: input.requestID))
-            let sseStream = try await httpClient.streamSSE(request)
-            logger.info("[Chat] SSE stream started, waiting for events...")
-
-            try await processSSEStream(
-                sseStream,
-                requestID: input.requestID,
-                continuation: continuation
-            )
-        } catch is CancellationError {
-            continuation.finish()
-        } catch let error as RequestError {
-            finishWithFailure(error, requestID: input.requestID, continuation: continuation)
-        } catch let error as HTTPError {
-            let mapped = RequestError.remoteError(
-                provider: providerID,
-                message: error.errorDescription ?? error.localizedDescription
-            )
-            finishWithFailure(mapped, requestID: input.requestID, continuation: continuation)
-        } catch {
-            let mapped = RequestError.remoteError(
-                provider: providerID,
-                message: error.localizedDescription
-            )
-            finishWithFailure(mapped, requestID: input.requestID, continuation: continuation)
-        }
-    }
-
-    private func makeStreamingRequest(
-        messages: [ChatMessage],
-        modelID: String,
-        parameters: ModelParameters,
-        context: ProviderInvocationContext,
-        providerID: String
-    ) throws -> HTTPRequest {
-        guard let token = context.bearerToken, !token.isEmpty else {
-            throw RequestError.credentialResolution(
-                providerID: providerID,
-                providerName: nil,
-                message: "Bearer token is required for OpenAI provider"
-            )
-        }
-
-        let baseURL = try Self.normalizedEndpoint(context.endpoint, providerID: providerID)
-        let url = "\(baseURL)/chat/completions"
-        logger.info("[Chat] Sending request to: \(url)")
-
-        let useDefaults = parameters.useModelDefaults
-        let body = OpenAIChatRequest(
-            model: modelID,
-            messages: messages.map { OpenAIChatMessage(role: $0.role.rawValue, content: $0.content) },
-            stream: true,
-            temperature: useDefaults ? nil : parameters.temperature,
-            topP: useDefaults ? nil : parameters.topP,
-            topK: useDefaults ? nil : parameters.topK,
-            maxCompletionTokens: useDefaults || parameters.maxTokens == 0 ? nil : parameters.maxTokens,
-            presencePenalty: useDefaults ? nil : parameters.presencePenalty,
-            frequencyPenalty: useDefaults ? nil : parameters.frequencyPenalty,
-            reasoningEffort: Self.reasoningEffort(for: modelID, parameters: parameters)
-        )
-
-        let bodyData = try JSONEncoder().encode(body)
-        var request = HTTPRequest(method: "POST", url: url, body: bodyData)
-        request.setBearerAuth(token)
-        request.headers["Content-Type"] = "application/json"
-        request.headers["Accept"] = "text/event-stream"
-        return request
-    }
-
-    private func processSSEStream(
-        _ sseStream: AsyncThrowingStream<SSEEvent, Error>,
-        requestID: RequestID,
-        continuation: AsyncThrowingStream<StreamEvent, Error>.Continuation
-    ) async throws {
-        var eventCount = 0
-        for try await event in sseStream {
-            eventCount += 1
-            try Task.checkCancellation()
-            if processSSEEventData(event.data, requestID: requestID, continuation: continuation) {
-                logger.info("[Chat] Stream completed after \(eventCount) events")
-                return
-            }
-        }
-
-        logger.info("[Chat] SSE stream ended naturally after \(eventCount) events")
-        continuation.yield(.completed(requestID: requestID))
-        continuation.finish()
-    }
-
-    private func processSSEEventData(
-        _ data: String,
-        requestID: RequestID,
-        continuation: AsyncThrowingStream<StreamEvent, Error>.Continuation
-    ) -> Bool {
-        // SSE data field may contain multiple lines (per SSE spec, multiple data: lines are joined with \n)
-        // Each line could be a separate JSON object, so we need to process them individually
-        let dataLines = data.split(separator: "\n", omittingEmptySubsequences: true)
-
-        for dataLine in dataLines {
-            let lineStr = String(dataLine)
-
-            if lineStr == "[DONE]" {
-                logger.info("[Chat] Received [DONE], completing stream")
-                continuation.yield(.completed(requestID: requestID))
-                continuation.finish()
-                return true
-            }
-
-            guard let eventData = lineStr.data(using: .utf8) else {
-                continue
-            }
-
-            do {
-                let chunk = try JSONDecoder().decode(OpenAIChatChunk.self, from: eventData)
-                if let content = chunk.choices.first?.delta.content, !content.isEmpty {
-                    continuation.yield(.delta(requestID: requestID, text: content))
+    static func requestSections(
+        method: String,
+        url: String,
+        headers: [String: String]?,
+        body: String?
+    ) -> [MessageTraceSection] {
+        var sections: [MessageTraceSection] = [
+            MessageTraceSection(title: "Method", content: method),
+            MessageTraceSection(title: "URL", content: url)
+        ]
+        if let headers, !headers.isEmpty {
+            let headerText = headers
+                .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
+                .map { entry in
+                    "\(entry.key): \(entry.value)"
                 }
-            } catch {
-                logger.warning("[Chat] Failed to decode chunk: \(error.localizedDescription), raw: \(lineStr.prefix(300))")
-            }
+                .joined(separator: "\n")
+            sections.append(MessageTraceSection(title: "Headers", content: headerText))
         }
-
-        return false
+        if let body, !body.isEmpty {
+            sections.append(MessageTraceSection(title: "Body", content: body))
+        }
+        return sections
     }
 
-    private func finishWithFailure(
-        _ error: RequestError,
-        requestID: RequestID,
-        continuation: AsyncThrowingStream<StreamEvent, Error>.Continuation
-    ) {
-        continuation.yield(.failed(requestID: requestID, error: error))
-        continuation.finish()
+    static func responseSections(
+        statusCode: Int?,
+        bodyPreview: String?
+    ) -> [MessageTraceSection] {
+        var sections: [MessageTraceSection] = []
+        if let statusCode {
+            sections.append(MessageTraceSection(title: "Status", content: String(statusCode)))
+        }
+        if let bodyPreview, !bodyPreview.isEmpty {
+            sections.append(MessageTraceSection(title: "Body Preview", content: bodyPreview))
+        }
+        return sections
     }
 
     // MARK: - Endpoint Validation
@@ -599,7 +521,7 @@ public struct OpenAIProvider: LLMProvider, Sendable {
         "/completions"
     ]
 
-    private static func normalizedEndpoint(_ raw: String, providerID: String) throws -> String {
+    static func normalizedEndpoint(_ raw: String, providerID: String) throws -> String {
         if raw.isEmpty {
             return defaultEndpoint
         }
@@ -632,7 +554,7 @@ public struct OpenAIProvider: LLMProvider, Sendable {
         }
     }
 
-    private static func sanitizedHeaders(_ headers: [String: String]) -> [String: String] {
+    static func sanitizedHeaders(_ headers: [String: String]) -> [String: String] {
         headers.reduce(into: [String: String]()) { result, entry in
             let key = entry.key
             let value = entry.value
@@ -646,12 +568,12 @@ public struct OpenAIProvider: LLMProvider, Sendable {
         }
     }
 
-    private static func mask(token: String) -> String {
+    static func mask(token: String) -> String {
         guard token.count > 10 else { return "\(token.prefix(3))***" }
         return String(token.prefix(6)) + "***" + String(token.suffix(4))
     }
 
-    private static func prettyPrintedJSON(from data: Data) -> String? {
+    static func prettyPrintedJSON(from data: Data) -> String? {
         guard !data.isEmpty else { return nil }
         if let object = try? JSONSerialization.jsonObject(with: data),
            JSONSerialization.isValidJSONObject(object),
@@ -662,11 +584,11 @@ public struct OpenAIProvider: LLMProvider, Sendable {
         return preview(data: data)
     }
 
-    private static func preview(data: Data, limit: Int = 4096) -> String? {
+    static func preview(data: Data, limit: Int = 4096) -> String? {
         preview(String(data: data.prefix(limit), encoding: .utf8))
     }
 
-    private static func preview(_ text: String?, limit: Int = 4096) -> String? {
+    static func preview(_ text: String?, limit: Int = 4096) -> String? {
         guard let text, !text.isEmpty else { return nil }
         if text.count <= limit {
             return text
@@ -729,7 +651,7 @@ extension OpenAIProvider {
             || lowered.hasPrefix("imagen-")
     }
 
-    private static func reasoningEffort(
+    static func reasoningEffort(
         for modelID: String,
         parameters: ModelParameters
     ) -> ModelReasoningEffort? {

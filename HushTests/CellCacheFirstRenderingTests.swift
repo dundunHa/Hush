@@ -8,6 +8,7 @@ struct CellCacheFirstRenderingTests {
     private func makeRow(
         content: String,
         isStreaming: Bool,
+        role: ChatRole = .assistant,
         id: UUID = UUID(),
         generation: UInt64 = 1,
         attachments: [MessageAttachment] = [],
@@ -15,7 +16,7 @@ struct CellCacheFirstRenderingTests {
     ) -> MessageTableView.RowModel {
         let message = ChatMessage(
             id: id,
-            role: .assistant,
+            role: role,
             content: content,
             attachments: attachments,
             debugInfoJSON: debugInfoJSON
@@ -523,6 +524,33 @@ struct CellCacheFirstRenderingTests {
                 content: "Error: HTTP 500",
                 isStreaming: false,
                 debugInfoJSON: #"{"requestURL":"https://example.invalid"}"#
+            ),
+            runtime: runtime,
+            availableWidth: 600,
+            container: nil
+        )
+
+        #expect(cell.debugButtonVisibleForTesting)
+    }
+
+    @Test("User message with debug info shows trace button")
+    func userMessageWithDebugInfoShowsTraceButton() {
+        let renderer = MessageContentRenderer(
+            renderCache: RenderCache(capacity: 10),
+            mathCache: MathRenderCache(capacity: 10)
+        )
+        let runtime = MessageRenderRuntime(
+            renderer: renderer,
+            scheduler: ConversationRenderScheduler()
+        )
+
+        let cell = MessageTableCellView(identifier: NSUserInterfaceItemIdentifier("user-debug-button"))
+        cell.configure(
+            row: makeRow(
+                content: "Why did this request fail?",
+                isStreaming: false,
+                role: .user,
+                debugInfoJSON: #"{"requestURL":"https://example.invalid/v1/chat/completions"}"#
             ),
             runtime: runtime,
             availableWidth: 600,

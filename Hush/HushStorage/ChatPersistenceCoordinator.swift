@@ -447,6 +447,28 @@ public final class ChatPersistenceCoordinator: Sendable {
         try messageRepo.update(record)
     }
 
+    public func updateMessageDebugInfo(messageId: String, debugInfoJSON: String?) throws {
+        try dbManager.write { db in
+            try db.execute(
+                sql: """
+                UPDATE messages
+                SET debugInfo = ?,
+                    updatedAt = ?,
+                    syncState = ?
+                WHERE id = ?
+                """,
+                arguments: [debugInfoJSON, Date.now, SyncState.pending.rawValue, messageId]
+            )
+
+            let outbox = SyncOutboxRecord(
+                entityType: "message",
+                entityId: messageId,
+                operationType: .update
+            )
+            try outbox.insert(db)
+        }
+    }
+
     /// Finalizes an assistant message with a terminal state.
     ///
     /// - Parameters:

@@ -45,6 +45,49 @@ public nonisolated struct MessageAttachment: Identifiable, Codable, Equatable, S
     }
 }
 
+public nonisolated enum MessageTraceEventCategory: String, Codable, CaseIterable, Sendable {
+    case lifecycle
+    case request
+    case response
+    case stream
+    case error
+}
+
+public nonisolated struct MessageTraceSection: Codable, Equatable, Sendable {
+    public let title: String
+    public let content: String
+
+    public init(title: String, content: String) {
+        self.title = title
+        self.content = content
+    }
+}
+
+public nonisolated struct MessageTraceEvent: Identifiable, Codable, Equatable, Sendable {
+    public let id: UUID
+    public let category: MessageTraceEventCategory
+    public let title: String
+    public let summary: String?
+    public let sections: [MessageTraceSection]
+    public let timestamp: Date
+
+    public init(
+        id: UUID = UUID(),
+        category: MessageTraceEventCategory,
+        title: String,
+        summary: String? = nil,
+        sections: [MessageTraceSection] = [],
+        timestamp: Date = .now
+    ) {
+        self.id = id
+        self.category = category
+        self.title = title
+        self.summary = summary
+        self.sections = sections
+        self.timestamp = timestamp
+    }
+}
+
 public nonisolated struct MessageDebugInfo: Codable, Equatable, Sendable {
     public var requestID: String?
     public var providerID: String?
@@ -62,6 +105,7 @@ public nonisolated struct MessageDebugInfo: Codable, Equatable, Sendable {
     public var descriptorModelType: String?
     public var descriptorSupportedOutputs: [String]?
     public var descriptorRawMetadataJSON: String?
+    public var traceEvents: [MessageTraceEvent]?
 
     public init(
         requestID: String? = nil,
@@ -79,7 +123,8 @@ public nonisolated struct MessageDebugInfo: Codable, Equatable, Sendable {
         providerError: String? = nil,
         descriptorModelType: String? = nil,
         descriptorSupportedOutputs: [String]? = nil,
-        descriptorRawMetadataJSON: String? = nil
+        descriptorRawMetadataJSON: String? = nil,
+        traceEvents: [MessageTraceEvent]? = nil
     ) {
         self.requestID = requestID
         self.providerID = providerID
@@ -97,6 +142,7 @@ public nonisolated struct MessageDebugInfo: Codable, Equatable, Sendable {
         self.descriptorModelType = descriptorModelType
         self.descriptorSupportedOutputs = descriptorSupportedOutputs
         self.descriptorRawMetadataJSON = descriptorRawMetadataJSON
+        self.traceEvents = traceEvents
     }
 
     public func merged(with other: MessageDebugInfo) -> MessageDebugInfo {
@@ -116,15 +162,46 @@ public nonisolated struct MessageDebugInfo: Codable, Equatable, Sendable {
             providerError: other.providerError ?? providerError,
             descriptorModelType: other.descriptorModelType ?? descriptorModelType,
             descriptorSupportedOutputs: other.descriptorSupportedOutputs ?? descriptorSupportedOutputs,
-            descriptorRawMetadataJSON: other.descriptorRawMetadataJSON ?? descriptorRawMetadataJSON
+            descriptorRawMetadataJSON: other.descriptorRawMetadataJSON ?? descriptorRawMetadataJSON,
+            traceEvents: Self.mergedTraceEvents(base: traceEvents, override: other.traceEvents)
         )
     }
 
     public func prettyJSONString() -> String? {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
         guard let data = try? encoder.encode(self) else { return nil }
         return String(data: data, encoding: .utf8)
+    }
+
+    public func appendingTraceEvent(_ event: MessageTraceEvent) -> MessageDebugInfo {
+        MessageDebugInfo(
+            requestID: requestID,
+            providerID: providerID,
+            modelID: modelID,
+            requestKind: requestKind,
+            routeDecision: routeDecision,
+            endpoint: endpoint,
+            requestURL: requestURL,
+            httpMethod: httpMethod,
+            requestHeaders: requestHeaders,
+            requestBodyJSON: requestBodyJSON,
+            responseStatusCode: responseStatusCode,
+            responseBodyPreview: responseBodyPreview,
+            providerError: providerError,
+            descriptorModelType: descriptorModelType,
+            descriptorSupportedOutputs: descriptorSupportedOutputs,
+            descriptorRawMetadataJSON: descriptorRawMetadataJSON,
+            traceEvents: Self.mergedTraceEvents(base: traceEvents, override: [event])
+        )
+    }
+
+    public static func decode(from json: String?) -> MessageDebugInfo? {
+        guard let json, !json.isEmpty, let data = json.data(using: .utf8) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(MessageDebugInfo.self, from: data)
     }
 
     private func mergedHeaders(
@@ -135,6 +212,30 @@ public nonisolated struct MessageDebugInfo: Codable, Equatable, Sendable {
         guard var merged = base else { return override }
         for (key, value) in override {
             merged[key] = value
+        }
+        return merged
+    }
+
+    private static func mergedTraceEvents(
+        base: [MessageTraceEvent]?,
+        override: [MessageTraceEvent]?
+    ) -> [MessageTraceEvent]? {
+        guard let override, !override.isEmpty else { return base }
+        guard let base, !base.isEmpty else {
+            return override.sorted { lhs, rhs in
+                lhs.timestamp < rhs.timestamp
+            }
+        }
+
+        var merged = base
+        for event in override where !merged.contains(event) {
+            merged.append(event)
+        }
+        merged.sort { lhs, rhs in
+            if lhs.timestamp == rhs.timestamp {
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            return lhs.timestamp < rhs.timestamp
         }
         return merged
     }
