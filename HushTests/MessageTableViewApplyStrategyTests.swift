@@ -65,6 +65,42 @@ struct MessageTableViewApplyStrategyTests {
         #expect(table.lastUpdateModeForTesting == .appendInsert(insertedCount: 1))
     }
 
+    @Test("Starting send after a user message appends a waiting placeholder row")
+    func startingSendAfterUserMessageAppendsWaitingPlaceholderRow() throws {
+        let table = MessageTableView()
+        let runtime = MessageRenderRuntime()
+        let container = AppContainer.forTesting(settings: .testDefault)
+
+        let user = try makeMessage(
+            id: #require(UUID(uuidString: "DEADBEEF-AAAA-4444-AAAA-111111111111")),
+            role: .user,
+            content: "hello"
+        )
+
+        table.apply(
+            messages: [user],
+            activeConversationID: "conv-1",
+            isActiveConversationSending: false,
+            switchGeneration: 1,
+            theme: container.settings.theme,
+            runtime: runtime,
+            container: container
+        )
+
+        table.apply(
+            messages: [user],
+            activeConversationID: "conv-1",
+            isActiveConversationSending: true,
+            switchGeneration: 1,
+            theme: container.settings.theme,
+            runtime: runtime,
+            container: container
+        )
+
+        #expect(table.lastUpdateModeForTesting == .appendInsert(insertedCount: 1))
+        #expect(table.tableView.numberOfRows == 2)
+    }
+
     @Test("Prepend older history falls back to full reload")
     func prependFallsBackToReload() throws {
         let table = MessageTableView()
