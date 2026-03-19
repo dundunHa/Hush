@@ -3,6 +3,7 @@ import Foundation
 @testable import Hush
 import Testing
 
+@Suite(.serialized)
 @MainActor
 struct MarkdownRenderingTests {
     // MARK: - Helpers
@@ -17,6 +18,17 @@ struct MarkdownRenderingTests {
         let renderer = MessageContentRenderer()
         let input = MessageRenderInput(content: content, availableWidth: width)
         return renderer.render(input)
+    }
+
+    private func firstCodeBlockContentRange(in attributed: NSAttributedString) -> NSRange? {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        var contentRange: NSRange?
+        attributed.enumerateAttribute(.hushCodeBlockContent, in: fullRange, options: []) { value, range, stop in
+            guard value != nil else { return }
+            contentRange = range
+            stop.pointee = true
+        }
+        return contentRange
     }
 
     // MARK: - Task 8.1: Common Markdown Formatting
@@ -158,6 +170,64 @@ struct MarkdownRenderingTests {
         #expect(languages.count == 1)
         #expect(languages[0] == "Text")
         #expect(!attributed.string.contains("TEXT"))
+    }
+
+    @Test("Code block background fully contains rendered code content")
+    func codeBlockBackgroundContainsCodeContent() throws {
+        let markdown = """
+        ```go
+        package main
+
+        import (
+            "crypto/md5"
+            "encoding/hex"
+            "fmt"
+        )
+
+        // MD5 computes the string digest.
+        func MD5(str string) string {
+            h := md5.New()
+            h.Write([]byte(str))
+            return hex.EncodeToString(h.Sum(nil))
+        }
+        ```
+        """
+
+        let output = renderOutput(markdown, width: 520)
+        let attributed = output.attributedString
+        let contentRange = try #require(firstCodeBlockContentRange(in: attributed))
+
+        let textView = MessageBodyTextView()
+        textView.setFrameSize(NSSize(width: 520, height: 1200))
+        textView.setAttributedText(attributed, cachedHeight: nil)
+        textView.layoutSubtreeIfNeeded()
+        textView.layout()
+
+        let backgroundFrame = try #require(textView.codeBlockBackgroundFramesForTesting.first)
+        let layoutManager = try #require(textView.layoutManager)
+        let textContainer = try #require(textView.textContainer)
+        layoutManager.ensureLayout(for: textContainer)
+
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: contentRange, actualCharacterRange: nil)
+        var contentFrame = NSRect.null
+        var glyphIndex = glyphRange.location
+        while glyphIndex < NSMaxRange(glyphRange) {
+            var effectiveRange = NSRange()
+            let usedRect = layoutManager.lineFragmentUsedRect(
+                forGlyphAt: glyphIndex,
+                effectiveRange: &effectiveRange
+            )
+            contentFrame = contentFrame.union(usedRect)
+            glyphIndex = NSMaxRange(effectiveRange)
+        }
+
+        contentFrame = contentFrame.offsetBy(
+            dx: textView.textContainerOrigin.x,
+            dy: textView.textContainerOrigin.y
+        )
+
+        #expect(backgroundFrame.minY <= contentFrame.minY + 0.5)
+        #expect(backgroundFrame.maxY + 0.5 >= contentFrame.maxY)
     }
 
     @Test("Code block spacing before header is preserved inside ordered lists")

@@ -8,8 +8,6 @@ import os
 /// main-thread churn. Stale renders are cancelled.
 @MainActor
 final class RenderController: ObservableObject {
-    private static let waitingResponseText = "Assistant is thinking…"
-
     private struct RequestFingerprint: Equatable {
         let contentHash: Int
         let width: Int
@@ -371,7 +369,10 @@ final class RenderController: ObservableObject {
         pendingStreamingContent = content
 
         if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            currentOutput = MessageRenderOutput.plainFallback(Self.waitingResponseText, style: style)
+            currentOutput = MessageRenderOutput.plainFallback(
+                RenderConstants.assistantWaitingPlaceholder,
+                style: style
+            )
             lastAppliedFingerprint = fingerprint
             lastRenderTime = Date()
         }

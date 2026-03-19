@@ -1613,6 +1613,8 @@ final class MessageBodyTextView: NSTextView {
 
             // Background frame: union of line fragments for the whole block.
             var unionRect = NSRect.null
+            var firstUsedRect: NSRect?
+            var lastUsedRect: NSRect?
             var glyphIndex = glyphRange.location
             while glyphIndex < NSMaxRange(glyphRange) {
                 var effectiveRange = NSRange()
@@ -1620,7 +1622,15 @@ final class MessageBodyTextView: NSTextView {
                     forGlyphAt: glyphIndex,
                     effectiveRange: &effectiveRange
                 )
+                let usedRect = layoutManager.lineFragmentUsedRect(
+                    forGlyphAt: glyphIndex,
+                    effectiveRange: nil
+                )
                 unionRect = unionRect.union(lineRect)
+                if firstUsedRect == nil {
+                    firstUsedRect = usedRect
+                }
+                lastUsedRect = usedRect
                 glyphIndex = NSMaxRange(effectiveRange)
             }
 
@@ -1634,11 +1644,15 @@ final class MessageBodyTextView: NSTextView {
                 let topTrim = max(0, startParagraph?.paragraphSpacingBefore ?? 0)
                 let bottomTrim = max(0, endParagraph?.paragraphSpacing ?? 0)
 
-                let clampedTopTrim = min(topTrim, unionRect.height)
-                let clampedBottomTrim = min(bottomTrim, max(0, unionRect.height - clampedTopTrim))
+                let trimmedMinY = unionRect.minY + min(topTrim, unionRect.height)
+                let trimmedMaxY = unionRect.maxY - min(bottomTrim, unionRect.height)
+                let minContentY = firstUsedRect?.minY ?? unionRect.minY
+                let maxContentY = lastUsedRect?.maxY ?? unionRect.maxY
+                let clampedMinY = min(trimmedMinY, minContentY)
+                let clampedMaxY = max(trimmedMaxY, maxContentY)
 
-                unionRect.origin.y += clampedTopTrim
-                unionRect.size.height = max(0, unionRect.height - clampedTopTrim - clampedBottomTrim)
+                unionRect.origin.y = clampedMinY
+                unionRect.size.height = max(0, clampedMaxY - clampedMinY)
             }
 
             let headerLineRect = layoutManager.lineFragmentUsedRect(
@@ -2119,6 +2133,25 @@ final class MessageTableCellView: NSTableCellView {
         )
     }
 
+    private static func shouldShowStreamingWaitingState(for content: String) -> Bool {
+        content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func streamingFallbackText(for content: String) -> String {
+        Self.shouldShowStreamingWaitingState(for: content)
+            ? RenderConstants.assistantWaitingPlaceholder
+            : content
+    }
+
+    private func isStreamingWaitingOutput(
+        _ output: MessageRenderOutput,
+        for row: MessageTableView.RowModel
+    ) -> Bool {
+        row.isStreaming
+            && Self.shouldShowStreamingWaitingState(for: row.message.content)
+            && output.plainText == RenderConstants.assistantWaitingPlaceholder
+    }
+
     private static func containsClosedMathSegment(_ content: String) -> Bool {
         guard content.contains("$") else { return false }
         return MathSegmenter.segment(content).contains { segment in
@@ -2210,7 +2243,8 @@ final class MessageTableCellView: NSTableCellView {
     }
 
     private func shouldUseStreamingRichRender(for content: String) -> Bool {
-        isShowingStreamingRichOutput
+        Self.shouldShowStreamingWaitingState(for: content)
+            || isShowingStreamingRichOutput
             || Self.containsClosedMathSegment(content)
             || Self.containsStableMarkdownCue(content)
     }
@@ -2237,9 +2271,12 @@ final class MessageTableCellView: NSTableCellView {
             let previousHeight = self.bodyIntrinsicHeight
             let cachedHeight: CGFloat?
             if activeRow.isStreaming {
+                let isWaitingOutput = self.isStreamingWaitingOutput(output, for: activeRow)
                 cachedHeight = nil
-                self.streamingDisplayedLength = max(self.streamingDisplayedLength, output.plainText.count)
-                self.isShowingStreamingRichOutput = true
+                self.streamingDisplayedLength = isWaitingOutput
+                    ? activeRow.message.content.count
+                    : max(self.streamingDisplayedLength, output.plainText.count)
+                self.isShowingStreamingRichOutput = !isWaitingOutput
             } else {
                 let heightInput = MessageRenderInput(
                     content: activeRow.message.content,
@@ -2292,13 +2329,18 @@ final class MessageTableCellView: NSTableCellView {
     }
 
     private func applyStreamingPlainText(_ content: String) {
+        let fallbackText = streamingFallbackText(for: content)
         let existing = bodyTextView.textStorage?.string ?? ""
-        if existing == content {
+        if existing == fallbackText {
             streamingDisplayedLength = max(streamingDisplayedLength, content.count)
             return
         }
 
-        if !existing.isEmpty, content.hasPrefix(existing), let textStorage = bodyTextView.textStorage {
+        if fallbackText == content,
+           !existing.isEmpty,
+           content.hasPrefix(existing),
+           let textStorage = bodyTextView.textStorage
+        {
             let delta = String(content.dropFirst(existing.count))
             if !delta.isEmpty {
                 textStorage.beginEditing()
@@ -2312,7 +2354,7 @@ final class MessageTableCellView: NSTableCellView {
             }
         } else {
             bodyTextView.setAttributedText(
-                NSAttributedString(string: content, attributes: plainTextAttributes),
+                NSAttributedString(string: fallbackText, attributes: plainTextAttributes),
                 cachedHeight: nil
             )
             #if DEBUG
@@ -2461,7 +2503,7 @@ final class MessageTableCellView: NSTableCellView {
                 previousRow?.isStreaming == true
                     && row.message.content.count < streamingDisplayedLength
             if !shouldSkipStreamingFallback, !isShowingStreamingRichOutput {
-                applyPlainText(row.message.content, cachedHeight: nil)
+                applyPlainText(streamingFallbackText(for: row.message.content), cachedHeight: nil)
                 streamingDisplayedLength = row.message.content.count
             }
 
@@ -2900,6 +2942,12 @@ private final class MessageAttachmentPreviewView: NSView {
 }
 
 #if DEBUG
+    extension MessageBodyTextView {
+        var codeBlockBackgroundFramesForTesting: [NSRect] {
+            codeBlockLayouts.map(\.backgroundFrame)
+        }
+    }
+
     extension MessageTableView {
         // swiftlint:disable identifier_name
         var scrollOriginYForTesting: CGFloat {
