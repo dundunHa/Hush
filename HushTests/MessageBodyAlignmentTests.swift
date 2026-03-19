@@ -42,6 +42,44 @@ struct MessageBodyAlignmentTests {
         ))
     }
 
+    private func hostCell(
+        _ cell: MessageTableCellView,
+        width: CGFloat = 840,
+        height: CGFloat = 320
+    ) -> (window: NSWindow, host: NSView, container: NSView) {
+        let host = NSView()
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.display()
+
+        let containerView = NSView()
+        containerView.translatesAutoresizingMaskIntoConstraints = false
+        host.addSubview(containerView)
+        NSLayoutConstraint.activate([
+            containerView.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            containerView.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+            containerView.topAnchor.constraint(equalTo: host.topAnchor),
+            containerView.bottomAnchor.constraint(equalTo: host.bottomAnchor)
+        ])
+
+        containerView.addSubview(cell)
+        NSLayoutConstraint.activate([
+            cell.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            cell.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            cell.topAnchor.constraint(equalTo: containerView.topAnchor),
+            cell.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
+        ])
+        host.layoutSubtreeIfNeeded()
+
+        return (window, host, containerView)
+    }
+
     @Test("Cache-hit rich markdown keeps paragraph alignment natural")
     func cacheHitRichMarkdownKeepsParagraphAlignmentNatural() {
         let renderer = MessageContentRenderer(
@@ -84,8 +122,8 @@ struct MessageBodyAlignmentTests {
         #expect(paragraphStyle?.alignment != .center)
     }
 
-    @Test("Plain fallback keeps body text view noncentered")
-    func plainFallbackKeepsBodyTextViewNoncentered() {
+    @Test("User messages render as trailing text without bubble chrome")
+    func userMessagesRenderAsTrailingTextWithoutBubbleChrome() {
         let renderer = MessageContentRenderer(
             renderCache: RenderCache(capacity: 10),
             mathCache: MathRenderCache(capacity: 10)
@@ -95,15 +133,70 @@ struct MessageBodyAlignmentTests {
             scheduler: ConversationRenderScheduler()
         )
         let cell = MessageTableCellView(identifier: NSUserInterfaceItemIdentifier("plain-natural-alignment"))
+        let hosted = hostCell(cell)
+        defer {
+            hosted.window.contentView = nil
+            hosted.window.orderOut(nil)
+            withExtendedLifetime(hosted.window) {}
+        }
 
         cell.configure(
             row: makeRow(content: "say hi", isStreaming: false, role: .user),
             runtime: runtime,
-            availableWidth: 600,
+            availableWidth: min(
+                hosted.container.bounds.width,
+                HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+            ),
             container: nil
         )
+        hosted.host.layoutSubtreeIfNeeded()
 
-        #expect(cell.bodyTextAlignmentForTesting != .center)
+        #expect(cell.bodyTextAlignmentForTesting == .right)
+        #expect(cell.metaTextAlignmentForTesting == .right)
+        #expect(abs(cell.bodyFrameForTesting.maxX - (cell.contentContainerFrameForTesting.maxX - HushSpacing.xl)) <= 0.5)
+        #expect(cell.bodyFrameForTesting.width < cell.contentContainerFrameForTesting.width - HushSpacing.xl * 3)
+        #expect(cell.bodyBorderWidthForTesting == 0)
+        #expect(cell.bodyBackgroundAlphaForTesting == 0)
+        #expect(!cell.waitingBreathingAnimationActiveForTesting)
+    }
+
+    @Test("Assistant waiting state renders as light leading text with breathing animation")
+    func assistantWaitingStateRendersAsLeadingTextWithBreathingAnimation() {
+        let renderer = MessageContentRenderer(
+            renderCache: RenderCache(capacity: 10),
+            mathCache: MathRenderCache(capacity: 10)
+        )
+        let runtime = MessageRenderRuntime(
+            renderer: renderer,
+            scheduler: ConversationRenderScheduler()
+        )
+        let cell = MessageTableCellView(identifier: NSUserInterfaceItemIdentifier("assistant-waiting-bubble"))
+        let hosted = hostCell(cell)
+        defer {
+            hosted.window.contentView = nil
+            hosted.window.orderOut(nil)
+            withExtendedLifetime(hosted.window) {}
+        }
+
+        cell.configure(
+            row: makeRow(content: "", isStreaming: true, role: .assistant),
+            runtime: runtime,
+            availableWidth: min(
+                hosted.container.bounds.width,
+                HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+            ),
+            container: nil
+        )
+        hosted.host.layoutSubtreeIfNeeded()
+
+        #expect(cell.attributedStringForTesting.string == RenderConstants.assistantWaitingPlaceholder)
+        #expect(cell.metaTextAlignmentForTesting == .left)
+        #expect(cell.bodyTextAlignmentForTesting == .left)
+        #expect(abs(cell.bodyFrameForTesting.minX - (cell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
+        #expect(cell.bodyFrameForTesting.width < cell.contentContainerFrameForTesting.width * 0.6)
+        #expect(cell.bodyBorderWidthForTesting == 0)
+        #expect(cell.bodyBackgroundAlphaForTesting == 0)
+        #expect(cell.waitingBreathingAnimationActiveForTesting)
     }
 
     @Test("Wide rows center the whole message column with side gutters")
@@ -117,50 +210,22 @@ struct MessageBodyAlignmentTests {
             scheduler: ConversationRenderScheduler()
         )
 
-        let host = NSView()
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 840, height: 400),
-            styleMask: [.titled],
-            backing: .buffered,
-            defer: false
-        )
-        window.isReleasedWhenClosed = false
-        window.contentView = host
-        window.display()
-        defer {
-            window.contentView = nil
-            window.orderOut(nil)
-            withExtendedLifetime(window) {}
-        }
-
-        let containerView = NSView()
-        containerView.translatesAutoresizingMaskIntoConstraints = false
-        host.addSubview(containerView)
-        NSLayoutConstraint.activate([
-            containerView.leadingAnchor.constraint(equalTo: host.leadingAnchor),
-            containerView.trailingAnchor.constraint(equalTo: host.trailingAnchor),
-            containerView.topAnchor.constraint(equalTo: host.topAnchor),
-            containerView.bottomAnchor.constraint(equalTo: host.bottomAnchor)
-        ])
-
         let cell = MessageTableCellView(identifier: NSUserInterfaceItemIdentifier("centered-message-column"))
-        containerView.addSubview(cell)
-        NSLayoutConstraint.activate([
-            cell.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
-            cell.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
-            cell.topAnchor.constraint(equalTo: containerView.topAnchor),
-            cell.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
-        ])
-        host.layoutSubtreeIfNeeded()
+        let hosted = hostCell(cell, height: 400)
+        defer {
+            hosted.window.contentView = nil
+            hosted.window.orderOut(nil)
+            withExtendedLifetime(hosted.window) {}
+        }
 
         let maxColumnWidth = HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
         cell.configure(
             row: makeRow(content: "Hi there!", isStreaming: false),
             runtime: runtime,
-            availableWidth: min(containerView.bounds.width, maxColumnWidth),
+            availableWidth: min(hosted.container.bounds.width, maxColumnWidth),
             container: nil
         )
-        host.layoutSubtreeIfNeeded()
+        hosted.host.layoutSubtreeIfNeeded()
 
         let contentFrame = cell.contentContainerFrameForTesting
         #expect(abs(contentFrame.width - maxColumnWidth) <= 0.5)

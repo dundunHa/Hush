@@ -230,6 +230,21 @@ struct MarkdownRenderingTests {
         #expect(backgroundFrame.maxY + 0.5 >= contentFrame.maxY)
     }
 
+    @Test("Code block copy button keeps clear spacing above the header separator")
+    func codeBlockCopyButtonClearsHeaderSeparator() throws {
+        let output = renderOutput(RenderingFixtures.Markdown.fencedCodeBlock, width: 520)
+        let textView = MessageBodyTextView()
+        textView.setFrameSize(NSSize(width: 520, height: 400))
+        textView.setAttributedText(output.attributedString, cachedHeight: nil)
+        textView.layoutSubtreeIfNeeded()
+        textView.layout()
+
+        let copyButtonFrame = try #require(textView.codeBlockCopyButtonFramesForTesting.first)
+        let separatorY = try #require(textView.codeBlockHeaderSeparatorYsForTesting.first)
+
+        #expect(copyButtonFrame.minY >= separatorY + 8 - 0.5)
+    }
+
     @Test("Code block spacing before header is preserved inside ordered lists")
     func codeBlockSpacingInsideOrderedList() {
         let markdown = """

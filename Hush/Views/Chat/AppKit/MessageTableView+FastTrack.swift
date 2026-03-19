@@ -12,6 +12,7 @@ extension MessageTableView {
         rows[rowIndex] = RowModel(
             message: updatedMessage,
             isStreaming: existingRow.isStreaming,
+            isWaitingPlaceholder: existingRow.isWaitingPlaceholder,
             renderHint: existingRow.renderHint
         )
 

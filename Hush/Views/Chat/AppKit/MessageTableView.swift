@@ -163,7 +163,20 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     struct RowModel {
         let message: ChatMessage
         let isStreaming: Bool
+        let isWaitingPlaceholder: Bool
         let renderHint: MessageRenderHint
+
+        init(
+            message: ChatMessage,
+            isStreaming: Bool,
+            isWaitingPlaceholder: Bool = false,
+            renderHint: MessageRenderHint
+        ) {
+            self.message = message
+            self.isStreaming = isStreaming
+            self.isWaitingPlaceholder = isWaitingPlaceholder
+            self.renderHint = renderHint
+        }
     }
 
     private enum ApplyUpdateMode: Equatable {
@@ -214,10 +227,18 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         case none
     }
 
+    private struct WaitingPlaceholderState: Equatable {
+        let conversationID: String
+        let anchorUserMessageID: UUID
+        let messageID: UUID
+        let createdAt: Date
+    }
+
     private var lastScrollDirection: ScrollDirection = .none
     private var lastOlderLoadTriggerAt: Date = .distantPast
     private var lastKnownFirstMessageID: UUID?
     private var lastIsActiveConversationSending = false
+    private var waitingPlaceholderState: WaitingPlaceholderState?
     var lastStreamingHeight: CGFloat = 0
     var lastStreamingHeightMeasureAt: Date = .distantPast
     private var lastLayoutHeight: CGFloat = 0
@@ -409,14 +430,14 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         fontSettings = container.settings.fontSettings
 
         let previousRows = rows
+        let previousMessageCount = previousRows.filter { !$0.isWaitingPlaceholder }.count
         let oldCount = previousRows.count
-        let newCount = messages.count
         let currentFirstMessageID = messages.first?.id
         let didPrependOlder =
             lastKnownFirstMessageID != nil
                 && currentFirstMessageID != nil
                 && lastKnownFirstMessageID != currentFirstMessageID
-                && newCount > oldCount
+                && messages.count > previousMessageCount
 
         let prependAnchor = didPrependOlder && userHasScrolledUp
             ? captureScrollAnchor(rowModels: previousRows)
@@ -426,7 +447,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
 
         let rankByID = makeRankByMessageID(messages)
         let latestID = messages.last?.id
-        let newRows = messages.map { message in
+        var newRows = messages.map { message in
             RowModel(
                 message: message,
                 isStreaming: isActiveConversationSending && message.role == .assistant && message.id == latestID,
@@ -439,6 +460,15 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
                 )
             )
         }
+        if let waitingRow = makeWaitingPlaceholderRow(
+            messages: messages,
+            activeConversationID: activeConversationID,
+            switchGeneration: switchGeneration,
+            isActiveConversationSending: isActiveConversationSending
+        ) {
+            newRows.append(waitingRow)
+        }
+        let newCount = newRows.count
 
         let generationChanged = lastGeneration != switchGeneration
         if generationChanged {
@@ -526,11 +556,11 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
                 now: .now
             )
 
-            if !messages.isEmpty {
+            if !newRows.isEmpty {
                 let action = TailFollow.reduce(
                     state: &tailFollowState,
                     event: .messageAdded(
-                        role: messages.last?.role ?? .system,
+                        role: newRows.last?.message.role ?? .system,
                         didPrependOlder: false
                     ),
                     config: tailFollowConfig,
@@ -546,7 +576,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
             let action = TailFollow.reduce(
                 state: &tailFollowState,
                 event: .messageAdded(
-                    role: messages.last?.role ?? .system,
+                    role: newRows.last?.message.role ?? .system,
                     didPrependOlder: didPrependOlder
                 ),
                 config: tailFollowConfig,
@@ -1242,6 +1272,56 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         }
     #endif
 
+    private func makeWaitingPlaceholderRow(
+        messages: [ChatMessage],
+        activeConversationID: String?,
+        switchGeneration: UInt64,
+        isActiveConversationSending: Bool
+    ) -> RowModel? {
+        guard isActiveConversationSending,
+              let latestMessage = messages.last,
+              latestMessage.role == .user
+        else {
+            waitingPlaceholderState = nil
+            return nil
+        }
+
+        let conversationID = activeConversationID ?? "__unknown__"
+        let state: WaitingPlaceholderState
+        if let existing = waitingPlaceholderState,
+           existing.conversationID == conversationID,
+           existing.anchorUserMessageID == latestMessage.id
+        {
+            state = existing
+        } else {
+            state = WaitingPlaceholderState(
+                conversationID: conversationID,
+                anchorUserMessageID: latestMessage.id,
+                messageID: UUID(),
+                createdAt: latestMessage.createdAt
+            )
+            waitingPlaceholderState = state
+        }
+
+        return RowModel(
+            message: ChatMessage(
+                id: state.messageID,
+                role: .assistant,
+                content: "",
+                createdAt: state.createdAt
+            ),
+            isStreaming: true,
+            isWaitingPlaceholder: true,
+            renderHint: MessageRenderHint(
+                conversationID: conversationID,
+                messageID: state.messageID,
+                rankFromLatest: 0,
+                isVisible: true,
+                switchGeneration: switchGeneration
+            )
+        )
+    }
+
     private func makeRankByMessageID(_ messages: [ChatMessage]) -> [UUID: Int] {
         let count = messages.count
         guard count > 0 else { return [:] }
@@ -1293,6 +1373,8 @@ final class MessageBodyTextView: NSTextView {
         static let copyButtonHitSize: CGFloat = 24
         static let copyButtonInsetX: CGFloat = 10
         static let copyButtonInsetY: CGFloat = 8
+        static let copyButtonHeaderInsetY: CGFloat = 2
+        static let copyButtonHeaderMinimumSeparatorGap: CGFloat = 8
     }
 
     private final class CodeBlockCopyButton: NSButton {
@@ -1465,7 +1547,7 @@ final class MessageBodyTextView: NSTextView {
         guard let textContainer else { return }
         guard bounds.width > 0 else { return }
 
-        let targetWidth = max(1, bounds.width.rounded(.down))
+        let targetWidth = max(1, bounds.width.rounded(.down) - textContainerInset.width * 2)
         let nextSize = NSSize(width: targetWidth, height: CGFloat.greatestFiniteMagnitude)
         if abs(textContainer.containerSize.width - nextSize.width) > 0.5 {
             textContainer.containerSize = nextSize
@@ -1508,7 +1590,10 @@ final class MessageBodyTextView: NSTextView {
     func measuredHeight(safetyPadding: CGFloat = 4) -> CGFloat {
         guard let layoutManager, let textContainer else { return 1 }
         if bounds.width > 0 {
-            let nextSize = NSSize(width: bounds.width, height: CGFloat.greatestFiniteMagnitude)
+            let nextSize = NSSize(
+                width: max(1, bounds.width - textContainerInset.width * 2),
+                height: CGFloat.greatestFiniteMagnitude
+            )
             if textContainer.containerSize.width != nextSize.width {
                 textContainer.containerSize = nextSize
             }
@@ -1522,7 +1607,7 @@ final class MessageBodyTextView: NSTextView {
         {
             nextPadding = max(nextPadding, CodeBlockMetrics.backgroundVerticalPadding + HushSpacing.xs)
         }
-        return max(1, ceil(usedRect.height + nextPadding))
+        return max(1, ceil(usedRect.height + nextPadding + textContainerInset.height * 2))
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -1675,7 +1760,15 @@ final class MessageBodyTextView: NSTextView {
             let buttonX = backgroundFrame.maxX - CodeBlockMetrics.copyButtonInsetX - hitSize
             let buttonY =
                 descriptor.hasHeader
-                    ? (headerLineFrame.midY - hitSize / 2)
+                    ? min(
+                        backgroundFrame.maxY - hitSize,
+                        max(
+                            backgroundFrame.maxY - CodeBlockMetrics.copyButtonHeaderInsetY - hitSize,
+                            headerLineFrame.maxY
+                                + CodeBlockMetrics.headerSeparatorOffsetY
+                                + CodeBlockMetrics.copyButtonHeaderMinimumSeparatorGap
+                        )
+                    )
                     : (backgroundFrame.maxY - CodeBlockMetrics.copyButtonInsetY - hitSize)
             let copyButtonFrame = NSRect(
                 x: max(backgroundFrame.minX, buttonX),
@@ -1778,6 +1871,12 @@ final class MessageTableCellView: NSTableCellView {
         let styleKey: Int
     }
 
+    private enum BodyPresentationMode: Equatable {
+        case fullWidth
+        case trailingCompactText
+        case leadingCompactText
+    }
+
     private let contentContainer = NSView()
     private let metaLabel = NSTextField(labelWithString: "")
     private let bodyTextView = MessageBodyTextView()
@@ -1799,6 +1898,13 @@ final class MessageTableCellView: NSTableCellView {
     private weak var messageTableView: MessageTableView?
     private var hoverTrackingArea: NSTrackingArea?
     private var isMouseHovering = false
+    private var metaLeadingConstraint: NSLayoutConstraint!
+    private var metaTrailingConstraint: NSLayoutConstraint!
+    private var bodyLeadingFullWidthConstraint: NSLayoutConstraint!
+    private var bodyTrailingFullWidthConstraint: NSLayoutConstraint!
+    private var bodyLeadingBubbleConstraint: NSLayoutConstraint!
+    private var bodyTrailingBubbleConstraint: NSLayoutConstraint!
+    private var bodyWidthConstraint: NSLayoutConstraint!
     private var bodyBottomWithoutActionBar: NSLayoutConstraint!
     private var copyButtonTopToBodyConstraint: NSLayoutConstraint!
     private var copyButtonTopToPreviewConstraint: NSLayoutConstraint!
@@ -1830,6 +1936,7 @@ final class MessageTableCellView: NSTableCellView {
     private var streamingDisplayedLength: Int = 0
     private var currentContentWidth: CGFloat = 0
     private var isShowingStreamingRichOutput = false
+    private var currentBodyPresentationMode: BodyPresentationMode = .fullWidth
     private var theme: AppTheme = .dark {
         didSet {
             metaLabel.textColor = NSColor(palette.secondaryText)
@@ -1857,12 +1964,27 @@ final class MessageTableCellView: NSTableCellView {
         RenderStyle.fromPalette(palette, fontSettings: fontSettings)
     }
 
-    private var plainTextAttributes: [NSAttributedString.Key: Any] {
+    private func plainTextAttributes(
+        alignment: NSTextAlignment = .left,
+        foregroundColor: NSColor? = nil
+    ) -> [NSAttributedString.Key: Any] {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = alignment
+        paragraphStyle.lineBreakMode = .byWordWrapping
+
         return [
             .font: HushFontResolver.contentFont(settings: fontSettings, referenceSize: 14),
-            .foregroundColor: NSColor(palette.primaryText)
+            .foregroundColor: foregroundColor ?? NSColor(palette.primaryText),
+            .paragraphStyle: paragraphStyle
         ]
     }
+
+    private static let compactTextMaxWidthRatio: CGFloat = 0.76
+    private static let compactTextMinWidth: CGFloat = 44
+    private static let assistantWaitingBreathingAnimationKey = "assistantWaitingBreathing"
+    private static let assistantWaitingBreathingDuration: CFTimeInterval = 1.18
+    private static let assistantWaitingRestingOpacity: Float = 0.88
+    private static let assistantWaitingMinimumOpacity: Float = 0.42
 
     #if DEBUG
         // swiftlint:disable identifier_name
@@ -1872,6 +1994,7 @@ final class MessageTableCellView: NSTableCellView {
         // swiftlint:enable identifier_name
     #endif
 
+    // swiftlint:disable function_body_length
     init(identifier: NSUserInterfaceItemIdentifier) {
         super.init(frame: .zero)
         self.identifier = identifier
@@ -1909,6 +2032,7 @@ final class MessageTableCellView: NSTableCellView {
         metaLabel.translatesAutoresizingMaskIntoConstraints = false
 
         bodyTextView.translatesAutoresizingMaskIntoConstraints = false
+        bodyTextView.wantsLayer = true
         bodyTextView.setContentCompressionResistancePriority(.required, for: .vertical)
         bodyTextView.setContentHuggingPriority(.required, for: .vertical)
 
@@ -1966,19 +2090,51 @@ final class MessageTableCellView: NSTableCellView {
         )
         copyButtonHeightConstraint = copyButton.heightAnchor.constraint(equalToConstant: HushSpacing.xl)
         copyButtonLeadingToBodyConstraint = copyButton.leadingAnchor.constraint(equalTo: bodyTextView.leadingAnchor)
-        copyButtonLeadingToDebugConstraint = copyButton.leadingAnchor.constraint(equalTo: debugButton.trailingAnchor, constant: HushSpacing.xs)
+        copyButtonLeadingToDebugConstraint = copyButton.leadingAnchor.constraint(
+            equalTo: debugButton.trailingAnchor,
+            constant: HushSpacing.xs
+        )
         copyButtonWidthConstraint = copyButton.widthAnchor.constraint(equalToConstant: HushSpacing.xl)
+        metaLeadingConstraint = metaLabel.leadingAnchor.constraint(
+            equalTo: contentContainer.leadingAnchor,
+            constant: HushSpacing.xl
+        )
+        metaTrailingConstraint = metaLabel.trailingAnchor.constraint(
+            equalTo: contentContainer.trailingAnchor,
+            constant: -HushSpacing.xl
+        )
+        bodyLeadingFullWidthConstraint = bodyTextView.leadingAnchor.constraint(
+            equalTo: contentContainer.leadingAnchor,
+            constant: HushSpacing.xl
+        )
+        bodyTrailingFullWidthConstraint = bodyTextView.trailingAnchor.constraint(
+            equalTo: contentContainer.trailingAnchor,
+            constant: -HushSpacing.xl
+        )
+        bodyLeadingBubbleConstraint = bodyTextView.leadingAnchor.constraint(
+            equalTo: contentContainer.leadingAnchor,
+            constant: HushSpacing.xl
+        )
+        bodyTrailingBubbleConstraint = bodyTextView.trailingAnchor.constraint(
+            equalTo: contentContainer.trailingAnchor,
+            constant: -HushSpacing.xl
+        )
+        bodyWidthConstraint = bodyTextView.widthAnchor.constraint(equalToConstant: 0)
+        bodyLeadingBubbleConstraint.priority = .defaultHigh
+        bodyTrailingBubbleConstraint.priority = .defaultHigh
 
         NSLayoutConstraint.activate([
-            metaLabel.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor, constant: HushSpacing.xl),
-            metaLabel.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor, constant: -HushSpacing.xl),
+            metaLeadingConstraint,
+            metaTrailingConstraint,
             metaLabel.topAnchor.constraint(equalTo: contentContainer.topAnchor, constant: HushSpacing.sm),
-            bodyTextView.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor, constant: HushSpacing.xl),
-            bodyTextView.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor, constant: -HushSpacing.xl),
+            bodyLeadingFullWidthConstraint,
+            bodyTrailingFullWidthConstraint,
             bodyTextView.topAnchor.constraint(equalTo: metaLabel.bottomAnchor, constant: HushSpacing.xs),
             bodyBottomWithoutActionBar
         ])
     }
+
+    // swiftlint:enable function_body_length
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
@@ -2001,6 +2157,7 @@ final class MessageTableCellView: NSTableCellView {
     override func layout() {
         let previousHeight = bodyIntrinsicHeight
         super.layout()
+        updateBodyPresentationGeometry()
         refreshAttachmentPreviewForCurrentWidth(previousHeight: previousHeight)
     }
 
@@ -2013,6 +2170,7 @@ final class MessageTableCellView: NSTableCellView {
         currentContentWidth = 0
         renderRuntime = nil
         isShowingStreamingRichOutput = false
+        currentBodyPresentationMode = .fullWidth
         owningTableView = nil
         messageTableView = nil
         isMouseHovering = false
@@ -2044,6 +2202,7 @@ final class MessageTableCellView: NSTableCellView {
         copyButton.resetState()
         copyButton.alphaValue = 0
         copyButton.isHidden = true
+        resetBodyPresentation()
         bodyTextView.setAttributedText(NSAttributedString(), cachedHeight: nil)
         attachmentPreviewView.reset()
         isPreviewVisible = false
@@ -2105,6 +2264,7 @@ final class MessageTableCellView: NSTableCellView {
         let shouldRenderStreamingRich = shouldUseStreamingRichRender(for: content)
         if !isShowingStreamingRichOutput {
             applyStreamingPlainText(content)
+            updateBodyPresentationGeometry()
         }
 
         guard shouldRenderStreamingRich else { return }
@@ -2129,6 +2289,7 @@ final class MessageTableCellView: NSTableCellView {
         self.currentRow = MessageTableView.RowModel(
             message: updatedMessage,
             isStreaming: currentRow.isStreaming,
+            isWaitingPlaceholder: currentRow.isWaitingPlaceholder,
             renderHint: currentRow.renderHint
         )
     }
@@ -2141,6 +2302,39 @@ final class MessageTableCellView: NSTableCellView {
         Self.shouldShowStreamingWaitingState(for: content)
             ? RenderConstants.assistantWaitingPlaceholder
             : content
+    }
+
+    private func isAssistantWaitingState(
+        for row: MessageTableView.RowModel,
+        content: String
+    ) -> Bool {
+        row.message.role == .assistant
+            && row.isStreaming
+            && Self.shouldShowStreamingWaitingState(for: content)
+    }
+
+    private func plainTextAlignment(for row: MessageTableView.RowModel) -> NSTextAlignment {
+        row.message.role == .user ? .right : .left
+    }
+
+    private func plainTextColor(for row: MessageTableView.RowModel) -> NSColor {
+        if isAssistantWaitingState(for: row, content: row.message.content) {
+            return NSColor(palette.tertiaryText)
+        }
+        return NSColor(palette.primaryText)
+    }
+
+    private func attributedPlainText(
+        _ content: String,
+        for row: MessageTableView.RowModel
+    ) -> NSAttributedString {
+        NSAttributedString(
+            string: content,
+            attributes: plainTextAttributes(
+                alignment: plainTextAlignment(for: row),
+                foregroundColor: plainTextColor(for: row)
+            )
+        )
     }
 
     private func isStreamingWaitingOutput(
@@ -2243,8 +2437,7 @@ final class MessageTableCellView: NSTableCellView {
     }
 
     private func shouldUseStreamingRichRender(for content: String) -> Bool {
-        Self.shouldShowStreamingWaitingState(for: content)
-            || isShowingStreamingRichOutput
+        isShowingStreamingRichOutput
             || Self.containsClosedMathSegment(content)
             || Self.containsStableMarkdownCue(content)
     }
@@ -2293,6 +2486,7 @@ final class MessageTableCellView: NSTableCellView {
                 output.attributedString,
                 cachedHeight: cachedHeight
             )
+            self.applyBodyPresentation(for: activeRow, maxBodyWidth: contentWidth)
             self.invalidateOwningRowHeightIfNeeded(
                 owningTableView: owningTableView,
                 rowIndex: rowIndex,
@@ -2329,6 +2523,20 @@ final class MessageTableCellView: NSTableCellView {
     }
 
     private func applyStreamingPlainText(_ content: String) {
+        guard let currentRow else {
+            if bodyTextView.textStorage?.string != content {
+                bodyTextView.setAttributedText(
+                    NSAttributedString(string: content, attributes: plainTextAttributes()),
+                    cachedHeight: nil
+                )
+                #if DEBUG
+                    streamingUpdateAssignmentsForTesting += 1
+                #endif
+            }
+            streamingDisplayedLength = content.count
+            return
+        }
+
         let fallbackText = streamingFallbackText(for: content)
         let existing = bodyTextView.textStorage?.string ?? ""
         if existing == fallbackText {
@@ -2344,7 +2552,7 @@ final class MessageTableCellView: NSTableCellView {
             let delta = String(content.dropFirst(existing.count))
             if !delta.isEmpty {
                 textStorage.beginEditing()
-                textStorage.append(NSAttributedString(string: delta, attributes: plainTextAttributes))
+                textStorage.append(attributedPlainText(delta, for: currentRow))
                 textStorage.endEditing()
                 bodyTextView.cachedIntrinsicHeight = nil
                 bodyTextView.finalizeTextMutation()
@@ -2354,7 +2562,7 @@ final class MessageTableCellView: NSTableCellView {
             }
         } else {
             bodyTextView.setAttributedText(
-                NSAttributedString(string: fallbackText, attributes: plainTextAttributes),
+                attributedPlainText(fallbackText, for: currentRow),
                 cachedHeight: nil
             )
             #if DEBUG
@@ -2365,11 +2573,148 @@ final class MessageTableCellView: NSTableCellView {
         streamingDisplayedLength = content.count
     }
 
-    private func applyPlainText(_ content: String, cachedHeight: CGFloat?) {
+    private func applyPlainText(
+        _ content: String,
+        for row: MessageTableView.RowModel,
+        cachedHeight: CGFloat?
+    ) {
         bodyTextView.setAttributedText(
-            NSAttributedString(string: content, attributes: plainTextAttributes),
+            attributedPlainText(content, for: row),
             cachedHeight: cachedHeight
         )
+    }
+
+    private func bodyPresentationMode(for row: MessageTableView.RowModel) -> BodyPresentationMode {
+        if row.message.role == .user {
+            return .trailingCompactText
+        }
+        if isAssistantWaitingState(for: row, content: row.message.content) {
+            return .leadingCompactText
+        }
+        return .fullWidth
+    }
+
+    private func applyBodyPresentation(for row: MessageTableView.RowModel, maxBodyWidth: CGFloat) {
+        let mode = bodyPresentationMode(for: row)
+        currentBodyPresentationMode = mode
+        metaLabel.alignment = row.message.role == .user ? .right : .left
+        let textAlignment = plainTextAlignment(for: row)
+
+        switch mode {
+        case .fullWidth:
+            bodyTextView.textContainerInset = .zero
+            bodyTextView.alignment = textAlignment
+            bodyTextView.cachedIntrinsicHeight = nil
+            bodyTextView.layer?.cornerRadius = 0
+            bodyTextView.layer?.borderWidth = 0
+            bodyTextView.layer?.backgroundColor = NSColor.clear.cgColor
+            bodyTextView.layer?.borderColor = NSColor.clear.cgColor
+            bodyLeadingBubbleConstraint.isActive = false
+            bodyTrailingBubbleConstraint.isActive = false
+            bodyWidthConstraint.isActive = false
+            bodyLeadingFullWidthConstraint.isActive = true
+            bodyTrailingFullWidthConstraint.isActive = true
+        case .trailingCompactText:
+            applyCompactTextPresentation(
+                alignTrailing: true,
+                maxBodyWidth: maxBodyWidth,
+                textAlignment: textAlignment
+            )
+        case .leadingCompactText:
+            applyCompactTextPresentation(
+                alignTrailing: false,
+                maxBodyWidth: maxBodyWidth,
+                textAlignment: textAlignment
+            )
+        }
+
+        updateWaitingBreathingAnimation(isActive: mode == .leadingCompactText)
+    }
+
+    private func applyCompactTextPresentation(
+        alignTrailing: Bool,
+        maxBodyWidth: CGFloat,
+        textAlignment: NSTextAlignment
+    ) {
+        bodyTextView.textContainerInset = .zero
+        bodyTextView.alignment = textAlignment
+        bodyTextView.cachedIntrinsicHeight = nil
+        bodyTextView.layer?.cornerRadius = 0
+        bodyTextView.layer?.borderWidth = 0
+        bodyTextView.layer?.backgroundColor = NSColor.clear.cgColor
+        bodyTextView.layer?.borderColor = NSColor.clear.cgColor
+        bodyLeadingFullWidthConstraint.isActive = false
+        bodyTrailingFullWidthConstraint.isActive = false
+        bodyLeadingBubbleConstraint.isActive = !alignTrailing
+        bodyTrailingBubbleConstraint.isActive = alignTrailing
+        bodyWidthConstraint.constant = preferredCompactTextWidth(maxBodyWidth: maxBodyWidth)
+        bodyWidthConstraint.isActive = true
+    }
+
+    private func preferredCompactTextWidth(maxBodyWidth: CGFloat) -> CGFloat {
+        let maxCompactWidth = min(
+            maxBodyWidth,
+            max(180, floor(maxBodyWidth * Self.compactTextMaxWidthRatio))
+        )
+        let minCompactWidth = min(maxCompactWidth, Self.compactTextMinWidth)
+        guard let storage = bodyTextView.textStorage, storage.length > 0 else {
+            return minCompactWidth
+        }
+
+        let measurementWidth = max(1, maxCompactWidth)
+        let bounds = storage.boundingRect(
+            with: NSSize(width: measurementWidth, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+        let contentWidth = ceil(bounds.width)
+        return max(minCompactWidth, min(maxCompactWidth, contentWidth))
+    }
+
+    private func updateWaitingBreathingAnimation(isActive: Bool) {
+        guard let layer = bodyTextView.layer else { return }
+        layer.opacity = isActive ? Self.assistantWaitingRestingOpacity : 1
+
+        guard isActive else {
+            layer.removeAnimation(forKey: Self.assistantWaitingBreathingAnimationKey)
+            return
+        }
+
+        guard layer.animation(forKey: Self.assistantWaitingBreathingAnimationKey) == nil else { return }
+
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = Self.assistantWaitingMinimumOpacity
+        animation.toValue = Self.assistantWaitingRestingOpacity
+        animation.duration = Self.assistantWaitingBreathingDuration
+        animation.autoreverses = true
+        animation.repeatCount = .greatestFiniteMagnitude
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(animation, forKey: Self.assistantWaitingBreathingAnimationKey)
+    }
+
+    private func updateBodyPresentationGeometry() {
+        guard let currentRow else {
+            resetBodyPresentation()
+            return
+        }
+        let maxBodyWidth = max(1, currentContentWidth)
+        applyBodyPresentation(for: currentRow, maxBodyWidth: maxBodyWidth)
+    }
+
+    private func resetBodyPresentation() {
+        metaLabel.alignment = .left
+        bodyTextView.textContainerInset = .zero
+        bodyTextView.alignment = .left
+        bodyTextView.cachedIntrinsicHeight = nil
+        bodyLeadingBubbleConstraint?.isActive = false
+        bodyTrailingBubbleConstraint?.isActive = false
+        bodyWidthConstraint?.isActive = false
+        bodyLeadingFullWidthConstraint?.isActive = true
+        bodyTrailingFullWidthConstraint?.isActive = true
+        bodyTextView.layer?.cornerRadius = 0
+        bodyTextView.layer?.borderWidth = 0
+        bodyTextView.layer?.backgroundColor = NSColor.clear.cgColor
+        bodyTextView.layer?.borderColor = NSColor.clear.cgColor
+        updateWaitingBreathingAnimation(isActive: false)
     }
 
     private static func expectedRenderedPlainText(for content: String) -> String {
@@ -2491,7 +2836,8 @@ final class MessageTableCellView: NSTableCellView {
         )
 
         guard row.message.role == ChatRole.assistant else {
-            applyPlainText(row.message.content, cachedHeight: nil)
+            applyPlainText(row.message.content, for: row, cachedHeight: nil)
+            applyBodyPresentation(for: row, maxBodyWidth: contentWidth)
             streamingDisplayedLength = 0
             cancelRenderWork(resetFingerprint: false)
             return
@@ -2503,9 +2849,14 @@ final class MessageTableCellView: NSTableCellView {
                 previousRow?.isStreaming == true
                     && row.message.content.count < streamingDisplayedLength
             if !shouldSkipStreamingFallback, !isShowingStreamingRichOutput {
-                applyPlainText(streamingFallbackText(for: row.message.content), cachedHeight: nil)
+                applyPlainText(
+                    streamingFallbackText(for: row.message.content),
+                    for: row,
+                    cachedHeight: nil
+                )
                 streamingDisplayedLength = row.message.content.count
             }
+            applyBodyPresentation(for: row, maxBodyWidth: contentWidth)
 
             guard shouldRenderStreamingRich else {
                 cancelRenderWork(resetFingerprint: false)
@@ -2547,6 +2898,7 @@ final class MessageTableCellView: NSTableCellView {
                     previousHeight: previousHeight,
                     messageTableView: messageTableView
                 )
+                applyBodyPresentation(for: row, maxBodyWidth: contentWidth)
                 streamingDisplayedLength = 0
                 container?.reportActiveConversationRichRenderReadyIfNeeded()
                 cancelRenderWork(resetFingerprint: false)
@@ -2555,7 +2907,8 @@ final class MessageTableCellView: NSTableCellView {
         }
 
         // Cache miss: show plain fallback, then async rich render.
-        applyPlainText(row.message.content, cachedHeight: nil)
+        applyPlainText(row.message.content, for: row, cachedHeight: nil)
+        applyBodyPresentation(for: row, maxBodyWidth: contentWidth)
         streamingDisplayedLength = 0
 
         if renderController == nil {
@@ -2946,6 +3299,16 @@ private final class MessageAttachmentPreviewView: NSView {
         var codeBlockBackgroundFramesForTesting: [NSRect] {
             codeBlockLayouts.map(\.backgroundFrame)
         }
+
+        var codeBlockCopyButtonFramesForTesting: [NSRect] {
+            codeBlockLayouts.map(\.copyButtonFrame)
+        }
+
+        var codeBlockHeaderSeparatorYsForTesting: [CGFloat] {
+            codeBlockLayouts
+                .filter(\.hasHeader)
+                .map { $0.headerLineFrame.maxY + CodeBlockMetrics.headerSeparatorOffsetY }
+        }
     }
 
     extension MessageTableView {
@@ -3051,6 +3414,31 @@ private final class MessageAttachmentPreviewView: NSView {
 
         var bodyTextAlignmentForTesting: NSTextAlignment {
             bodyTextView.alignment
+        }
+
+        var metaTextAlignmentForTesting: NSTextAlignment {
+            metaLabel.alignment
+        }
+
+        var bodyFrameForTesting: NSRect {
+            convert(bodyTextView.frame, from: contentContainer)
+        }
+
+        var bodyBackgroundAlphaForTesting: CGFloat {
+            guard let cgColor = bodyTextView.layer?.backgroundColor,
+                  let color = NSColor(cgColor: cgColor)
+            else {
+                return 0
+            }
+            return color.alphaComponent
+        }
+
+        var bodyBorderWidthForTesting: CGFloat {
+            bodyTextView.layer?.borderWidth ?? 0
+        }
+
+        var waitingBreathingAnimationActiveForTesting: Bool {
+            bodyTextView.layer?.animation(forKey: Self.assistantWaitingBreathingAnimationKey) != nil
         }
 
         var contentContainerFrameForTesting: NSRect {

@@ -114,6 +114,40 @@ struct RequestCoordinatorStreamingUIFlushTests {
         #expect(container.messages.last(where: { $0.role == .assistant })?.content == expected)
     }
 
+    @Test("Delayed first delta still shows an assistant waiting row")
+    func delayedFirstDeltaStillShowsAssistantWaitingRow() async throws {
+        let provider = DelayedFirstDeltaProvider(
+            id: "mock",
+            firstDeltaDelay: .milliseconds(350),
+            deltaText: "ready"
+        )
+        let container = makeContainer(provider: provider)
+        let (pool, scene, _) = try attachActiveScene(container)
+        _ = pool
+
+        container.sendDraft("hello")
+        syncSceneSnapshot(scene, from: container)
+
+        #expect(container.messages.last?.role == .user)
+        #expect(scene.messageTableViewForTesting.tableView.numberOfRows == 2)
+
+        scene.messageTableViewForTesting.prepareCellForTesting(row: 1)
+        let waitingCell = try #require(
+            scene.messageTableViewForTesting.visibleCellForTesting(row: 1)
+        )
+        #expect(waitingCell.attributedStringForTesting.string == RenderConstants.assistantWaitingPlaceholder)
+
+        try await Task.sleep(for: .milliseconds(120))
+        syncSceneSnapshot(scene, from: container)
+
+        #expect(container.messages.last?.role == .user)
+        #expect(scene.messageTableViewForTesting.tableView.numberOfRows == 2)
+
+        try await waitForCompletion(container)
+
+        #expect(container.messages.last(where: { $0.role == .assistant })?.content == "ready")
+    }
+
     @Test("Large first delta is revealed incrementally instead of appearing all at once")
     func largeFirstDeltaRevealsIncrementally() async throws {
         let burst = String(repeating: "x", count: 200)
@@ -586,6 +620,60 @@ private actor SingleBurstProvider: LLMProvider {
                 if delay > .zero {
                     try await Task.sleep(for: delay)
                 }
+                continuation.yield(.completed(requestID: requestID))
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+}
+
+private actor DelayedFirstDeltaProvider: LLMProvider {
+    nonisolated let id: String
+    let firstDeltaDelay: Duration
+    let deltaText: String
+
+    init(id: String, firstDeltaDelay: Duration, deltaText: String) {
+        self.id = id
+        self.firstDeltaDelay = firstDeltaDelay
+        self.deltaText = deltaText
+    }
+
+    // swiftlint:disable async_without_await
+    nonisolated func availableModels(
+        context _: ProviderInvocationContext
+    ) async throws -> [ModelDescriptor] {
+        [ModelDescriptor(id: "mock-text-1", displayName: "Mock", capabilities: [.text])]
+    }
+
+    nonisolated func send(
+        messages _: [ChatMessage],
+        modelID _: String,
+        parameters _: ModelParameters,
+        context _: ProviderInvocationContext
+    ) async throws -> ProviderResponse {
+        ProviderResponse(text: "unused")
+    }
+
+    // swiftlint:enable async_without_await
+
+    nonisolated func sendStreaming(
+        messages _: [ChatMessage],
+        modelID _: String,
+        parameters _: ModelParameters,
+        requestID: RequestID,
+        context _: ProviderInvocationContext
+    ) -> AsyncThrowingStream<StreamEvent, Error> {
+        let delay = firstDeltaDelay
+        let text = deltaText
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                continuation.yield(.started(requestID: requestID))
+                try await Task.sleep(for: delay)
+                try Task.checkCancellation()
+                continuation.yield(.delta(requestID: requestID, text: text))
                 continuation.yield(.completed(requestID: requestID))
                 continuation.finish()
             }

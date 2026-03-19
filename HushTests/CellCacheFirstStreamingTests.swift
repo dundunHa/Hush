@@ -140,11 +140,56 @@ struct CellCacheFirstStreamingTests {
             try await Task.sleep(for: .milliseconds(20))
         }
 
-        #expect(cell.hasRenderControllerForTesting)
-        #expect(cell.renderRequestCountForTesting > 0)
+        #expect(!cell.hasRenderControllerForTesting)
+        #expect(cell.renderRequestCountForTesting == 0)
         #expect(cell.attributedStringForTesting.string == RenderConstants.assistantWaitingPlaceholder)
-        #expect(cell.renderControllerCurrentPlainTextForTesting == RenderConstants.assistantWaitingPlaceholder)
+        #expect(cell.waitingBreathingAnimationActiveForTesting)
         #expect(cell.streamingDisplayedLengthForTesting == 0)
+
+        cell.updateStreamingText("hello")
+
+        #expect(cell.attributedStringForTesting.string == "hello")
+        #expect(cell.streamingDisplayedLengthForTesting == 5)
+    }
+
+    @Test("Whitespace-only streaming assistant keeps showing waiting placeholder until real content arrives")
+    func whitespaceOnlyStreamingAssistantShowsWaitingPlaceholder() async throws {
+        let renderer = MessageContentRenderer(
+            renderCache: RenderCache(capacity: 10),
+            mathCache: MathRenderCache(capacity: 10)
+        )
+        let runtime = MessageRenderRuntime(
+            renderer: renderer,
+            scheduler: ConversationRenderScheduler()
+        )
+
+        let availableWidth: CGFloat = 600
+        let messageID = try #require(UUID(uuidString: "88888888-6666-6666-6666-666666666666"))
+        let row = makeRow(
+            content: " \n\t ",
+            isStreaming: true,
+            id: messageID,
+            generation: 1
+        )
+        let cell = MessageTableCellView(identifier: NSUserInterfaceItemIdentifier("test-streaming-whitespace-waiting"))
+
+        cell.configure(
+            row: row,
+            runtime: runtime,
+            availableWidth: availableWidth,
+            container: nil
+        )
+
+        let deadline = ContinuousClock.now + .seconds(1)
+        while cell.attributedStringForTesting.string != RenderConstants.assistantWaitingPlaceholder,
+              ContinuousClock.now < deadline
+        {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        #expect(cell.attributedStringForTesting.string == RenderConstants.assistantWaitingPlaceholder)
+        #expect(!cell.hasRenderControllerForTesting)
+        #expect(cell.waitingBreathingAnimationActiveForTesting)
 
         cell.updateStreamingText("hello")
 
