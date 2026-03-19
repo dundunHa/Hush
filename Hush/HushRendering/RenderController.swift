@@ -8,6 +8,8 @@ import os
 /// main-thread churn. Stale renders are cancelled.
 @MainActor
 final class RenderController: ObservableObject {
+    private static let waitingResponseText = "Assistant is thinking…"
+
     private struct RequestFingerprint: Equatable {
         let contentHash: Int
         let width: Int
@@ -367,6 +369,12 @@ final class RenderController: ObservableObject {
     ) {
         lastQueuedPriority = nil
         pendingStreamingContent = content
+
+        if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            currentOutput = MessageRenderOutput.plainFallback(Self.waitingResponseText, style: style)
+            lastAppliedFingerprint = fingerprint
+            lastRenderTime = Date()
+        }
 
         // Cancel stale work
         pendingStreamingTask?.cancel()

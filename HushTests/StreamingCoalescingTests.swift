@@ -165,6 +165,39 @@ struct StreamingCoalescingTests {
     }
 
     @MainActor
+    @Test("Empty streaming content shows waiting state until first token arrives")
+    func emptyStreamingShowsWaitingState() async {
+        let renderer = MessageContentRenderer()
+        let controller = RenderController(
+            renderer: renderer,
+            coalesceInterval: 0.01
+        )
+
+        controller.requestRender(
+            content: "",
+            availableWidth: 600,
+            style: .appDefault(),
+            isStreaming: true
+        )
+
+        #expect(controller.currentOutput?.plainText == "Assistant is thinking…")
+
+        controller.requestRender(
+            content: "Hello",
+            availableWidth: 600,
+            style: .appDefault(),
+            isStreaming: true
+        )
+
+        let deadline = ContinuousClock.now + .seconds(1)
+        while controller.currentOutput?.plainText != "Hello", ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+
+        #expect(controller.currentOutput?.plainText == "Hello")
+    }
+
+    @MainActor
     @Test("Non-streaming retry is not dedup-skipped after stale enqueue drop")
     func nonStreamingRetryAfterStaleDropRendersFinal() async throws {
         let renderer = MessageContentRenderer()
