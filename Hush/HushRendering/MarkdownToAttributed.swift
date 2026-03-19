@@ -52,27 +52,14 @@ final class MarkdownToAttributed {
         return result
     }
 
-    private func makeBlockSeparator(after block: NSAttributedString) -> NSAttributedString {
-        var attrs: [NSAttributedString.Key: Any] = [
+    private func makeBlockSeparator(after _: NSAttributedString) -> NSAttributedString {
+        let attrs: [NSAttributedString.Key: Any] = [
             .font: style.bodyFont,
             .foregroundColor: style.bodyColor
         ]
-
-        guard block.length > 0 else {
-            return NSAttributedString(string: "\n", attributes: attrs)
-        }
-
-        let lastAttrs = block.attributes(at: block.length - 1, effectiveRange: nil)
-        if let paragraphStyle = lastAttrs[.paragraphStyle] {
-            attrs[.paragraphStyle] = paragraphStyle
-        }
-        if let font = lastAttrs[.font] {
-            attrs[.font] = font
-        }
-        if let color = lastAttrs[.foregroundColor] {
-            attrs[.foregroundColor] = color
-        }
-
+        // Always use baseline body attributes for inter-block separators.
+        // Carrying the previous block's paragraph style/font can leak code-block
+        // typography into the line below the block.
         return NSAttributedString(string: "\n", attributes: attrs)
     }
 
