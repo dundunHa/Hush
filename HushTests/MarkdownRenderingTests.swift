@@ -194,6 +194,41 @@ struct MarkdownRenderingTests {
         #expect(paragraphStyle?.paragraphSpacingBefore == expectedSpacing)
     }
 
+    @Test("Separator after code block uses body style instead of code style")
+    func separatorAfterCodeBlockDoesNotLeakCodeTypography() {
+        let markdown = """
+        ```swift
+        let value = 1
+        ```
+
+        Following paragraph
+        """
+
+        let output = renderOutput(markdown)
+        let attributed = output.attributedString
+        let fullRange = NSRange(location: 0, length: attributed.length)
+
+        var codeContainer: NSRange?
+        attributed.enumerateAttribute(.hushCodeBlockLanguage, in: fullRange, options: []) { value, range, stop in
+            guard value != nil else { return }
+            codeContainer = range
+            stop.pointee = true
+        }
+
+        guard let codeContainer else {
+            #expect(Bool(false), "Expected one fenced code block in output")
+            return
+        }
+
+        let separatorIndex = NSMaxRange(codeContainer)
+        let separatorAttrs = attributed.attributes(at: separatorIndex, effectiveRange: nil)
+        let style = RenderStyle.appDefault()
+        let separatorFont = separatorAttrs[.font] as? NSFont
+
+        #expect(separatorFont?.fontName == style.bodyFont.fontName)
+        #expect(separatorFont?.pointSize == style.bodyFont.pointSize)
+    }
+
     @Test("Inline code preserves literal characters")
     func inlineCodeLiteral() {
         let text = renderPlain("Use `<div>` and `&amp;` in HTML.")

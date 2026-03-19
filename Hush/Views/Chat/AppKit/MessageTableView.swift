@@ -1844,7 +1844,7 @@ final class MessageTableCellView: NSTableCellView {
     }
 
     private var plainTextAttributes: [NSAttributedString.Key: Any] {
-        [
+        return [
             .font: HushFontResolver.contentFont(settings: fontSettings, referenceSize: 14),
             .foregroundColor: NSColor(palette.primaryText)
         ]
@@ -1868,9 +1868,9 @@ final class MessageTableCellView: NSTableCellView {
 
         let maxContentWidth = HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
         let fillLeading = contentContainer.leadingAnchor.constraint(equalTo: leadingAnchor)
-        fillLeading.priority = .defaultHigh
+        fillLeading.priority = .defaultLow
         let fillTrailing = contentContainer.trailingAnchor.constraint(equalTo: trailingAnchor)
-        fillTrailing.priority = .defaultHigh
+        fillTrailing.priority = .defaultLow
         let preferredWidth = contentContainer.widthAnchor.constraint(equalToConstant: maxContentWidth)
         preferredWidth.priority = .defaultHigh
 
@@ -2999,6 +2999,14 @@ private final class MessageAttachmentPreviewView: NSView {
         var attributedStringForTesting: NSAttributedString {
             guard let storage = bodyTextView.textStorage else { return NSAttributedString() }
             return NSAttributedString(attributedString: storage)
+        }
+
+        var bodyTextAlignmentForTesting: NSTextAlignment {
+            bodyTextView.alignment
+        }
+
+        var contentContainerFrameForTesting: NSRect {
+            contentContainer.frame
         }
 
         var streamingDisplayedLengthForTesting: Int {
