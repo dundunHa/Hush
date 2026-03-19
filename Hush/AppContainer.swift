@@ -290,6 +290,31 @@ final class AppContainer: ObservableObject {
         hotScenePool?.markNeedsReload(conversationID: conversationId)
     }
 
+    func updateMessagesDebugInfo(
+        _ messageIDs: [UUID],
+        inConversation conversationId: String,
+        debugInfoJSON: String?
+    ) {
+        guard !messageIDs.isEmpty else { return }
+        let messageIDSet = Set(messageIDs)
+
+        if conversationId == activeConversationId {
+            messages = messages.map { message in
+                guard messageIDSet.contains(message.id) else { return message }
+                return message.updatingDebugInfo(debugInfoJSON)
+            }
+        }
+
+        if let bucket = messagesByConversationId[conversationId] {
+            messagesByConversationId[conversationId] = bucket.map { message in
+                guard messageIDSet.contains(message.id) else { return message }
+                return message.updatingDebugInfo(debugInfoJSON)
+            }
+        }
+
+        hotScenePool?.markNeedsReload(conversationID: conversationId)
+    }
+
     func resolveURL(for attachment: MessageAttachment) -> URL? {
         messageAssetStore?.url(forRelativePath: attachment.localRelativePath)
     }

@@ -22,6 +22,7 @@ public struct RequestID: Hashable, Codable, Sendable, CustomStringConvertible {
 
 public enum StreamEvent: Sendable, Equatable {
     case started(requestID: RequestID)
+    case debug(requestID: RequestID, info: MessageDebugInfo)
     case delta(requestID: RequestID, text: String)
     case completed(requestID: RequestID)
     case failed(requestID: RequestID, error: RequestError)

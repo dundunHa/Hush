@@ -20,6 +20,8 @@ final class RequestCoordinator {
     // MARK: - Per-Session Stream State
 
     private var sessionFlushState: [RequestID: SessionFlushState] = [:]
+    private var sessionSnapshots: [RequestID: QueueItemSnapshot] = [:]
+    private var sessionDebugInfo: [RequestID: MessageDebugInfo] = [:]
 
     // MARK: - Testing Overrides
 
@@ -98,6 +100,8 @@ final class RequestCoordinator {
             flushState.pendingRevealTask?.cancel()
         }
         sessionFlushState.removeAll()
+        sessionSnapshots.removeAll()
+        sessionDebugInfo.removeAll()
     }
 
     func updateMaxConcurrent(_ limit: Int) {
@@ -145,6 +149,145 @@ final class RequestCoordinator {
     }
 }
 
+// MARK: - Message Trace
+
+extension RequestCoordinator {
+    private func initializeDebugInfo(for snapshot: QueueItemSnapshot) {
+        sessionDebugInfo[snapshot.id] = MessageDebugInfo(
+            requestID: snapshot.id.description,
+            providerID: snapshot.providerID,
+            modelID: snapshot.modelID,
+            traceEvents: [
+                makeTraceEvent(
+                    category: .lifecycle,
+                    title: "User message queued",
+                    summary: "Queued request for provider \(snapshot.providerID)",
+                    sections: traceSections([
+                        ("Prompt", trimmedDebugPreview(snapshot.prompt))
+                    ])
+                )
+            ]
+        )
+        syncDebugInfoToMessages(requestID: snapshot.id)
+    }
+
+    private func mergeDebugInfo(
+        _ debugInfo: MessageDebugInfo,
+        for requestID: RequestID
+    ) {
+        mutateDebugInfo(for: requestID) { current in
+            current = current.merged(with: debugInfo)
+        }
+    }
+
+    private func appendTraceEvent(
+        for requestID: RequestID,
+        category: MessageTraceEventCategory,
+        title: String,
+        summary: String? = nil,
+        sections: [MessageTraceSection] = []
+    ) {
+        mutateDebugInfo(for: requestID) { current in
+            current = current.appendingTraceEvent(
+                makeTraceEvent(
+                    category: category,
+                    title: title,
+                    summary: summary,
+                    sections: sections
+                )
+            )
+        }
+    }
+
+    private func mutateDebugInfo(
+        for requestID: RequestID,
+        _ mutate: (inout MessageDebugInfo) -> Void
+    ) {
+        guard var current = sessionDebugInfo[requestID]
+            ?? (sessionSnapshots[requestID] != nil ? MessageDebugInfo() : nil)
+        else {
+            return
+        }
+        mutate(&current)
+        sessionDebugInfo[requestID] = current
+        syncDebugInfoToMessages(requestID: requestID)
+    }
+
+    private func syncDebugInfoToMessages(requestID: RequestID) {
+        guard let container,
+              let snapshot = sessionSnapshots[requestID],
+              let debugInfo = sessionDebugInfo[requestID]
+        else {
+            return
+        }
+        let debugInfoJSON = debugInfo.prettyJSONString()
+        var messageIDs: [UUID] = [snapshot.userMessageID]
+        if let assistantMessageID = container.requestStates[requestID]?.assistantMessageID {
+            messageIDs.append(assistantMessageID)
+        }
+        let uniqueMessageIDs = Array(Set(messageIDs))
+        container.updateMessagesDebugInfo(
+            uniqueMessageIDs,
+            inConversation: snapshot.conversationId,
+            debugInfoJSON: debugInfoJSON
+        )
+        for messageID in uniqueMessageIDs {
+            try? persistence?.updateMessageDebugInfo(
+                messageId: messageID.uuidString,
+                debugInfoJSON: debugInfoJSON
+            )
+        }
+    }
+
+    private func currentDebugInfoJSON(for requestID: RequestID) -> String? {
+        sessionDebugInfo[requestID]?.prettyJSONString()
+    }
+
+    private func finalizedDebugInfoJSON(
+        for requestID: RequestID,
+        errorDescription: String,
+        fallbackJSON: String?
+    ) -> String? {
+        if let fallback = MessageDebugInfo.decode(from: fallbackJSON) {
+            mergeDebugInfo(fallback, for: requestID)
+        }
+
+        mutateDebugInfo(for: requestID) { current in
+            current.providerError = errorDescription
+            current = current.appendingTraceEvent(
+                makeTraceEvent(
+                    category: .error,
+                    title: "Request failed",
+                    summary: errorDescription
+                )
+            )
+        }
+
+        return currentDebugInfoJSON(for: requestID) ?? fallbackJSON
+    }
+
+    private func makeTraceEvent(
+        category: MessageTraceEventCategory,
+        title: String,
+        summary: String? = nil,
+        sections: [MessageTraceSection] = []
+    ) -> MessageTraceEvent {
+        MessageTraceEvent(
+            category: category,
+            title: title,
+            summary: summary,
+            sections: sections
+        )
+    }
+
+    private func traceSections(_ pairs: [(String, String?)]) -> [MessageTraceSection] {
+        pairs.compactMap { title, content in
+            guard let content, !content.isEmpty else { return nil }
+            return MessageTraceSection(title: title, content: content)
+        }
+    }
+}
+
 // MARK: - Session Lifecycle
 
 extension RequestCoordinator {
@@ -166,7 +309,9 @@ extension RequestCoordinator {
             conversationId: snapshot.conversationId,
             streamTask: task
         )
+        sessionSnapshots[snapshot.id] = snapshot
         sessionFlushState[snapshot.id] = SessionFlushState()
+        initializeDebugInfo(for: snapshot)
         container.cancelIdlePrewarmFromCoordinator()
         container.statusMessage = "Processing..."
         container.syncPublishedSchedulerState()
@@ -178,6 +323,14 @@ extension RequestCoordinator {
               !state.isTerminal else { return }
         let hadContent = !state.accumulatedText.isEmpty
         let owningConversationId = state.conversationId
+
+        appendTraceEvent(
+            for: requestID,
+            category: .lifecycle,
+            title: "Request stopped",
+            summary: "Stopped before the provider finished responding"
+        )
+        let stoppedDebugInfoJSON = currentDebugInfoJSON(for: requestID)
 
         container.requestStates[requestID]?.status = .stopped
         container.requestStates[requestID]?.revealAll()
@@ -192,7 +345,11 @@ extension RequestCoordinator {
             )
         }
         if !hadContent {
-            let stoppedMessage = ChatMessage(role: .assistant, content: "[Request stopped]")
+            let stoppedMessage = ChatMessage(
+                role: .assistant,
+                content: "[Request stopped]",
+                debugInfoJSON: stoppedDebugInfoJSON
+            )
             container.appendMessage(stoppedMessage, toConversation: owningConversationId)
             if !owningConversationId.isEmpty {
                 try? persistence?.persistSystemMessage(
@@ -217,6 +374,19 @@ extension RequestCoordinator {
         guard let state = container.requestStates[requestID],
               !state.isTerminal else { return }
         let owningConversationId = state.conversationId
+        let flushState = sessionFlushState[requestID]
+
+        appendTraceEvent(
+            for: requestID,
+            category: .response,
+            title: "Response completed",
+            summary: "Received \(state.accumulatedText.count) characters",
+            sections: traceSections([
+                ("SSE Delta Count", flushState.map { String($0.deltaChunkCount) }),
+                ("Delta Preview", trimmedDebugPreview(flushState?.deltaPreview)),
+                ("Assistant Preview", trimmedDebugPreview(state.accumulatedText))
+            ])
+        )
 
         container.requestStates[requestID]?.status = .completed
         container.requestStates[requestID]?.revealAll()
@@ -258,6 +428,11 @@ extension RequestCoordinator {
               !state.isTerminal else { return }
         let owningConversationId = state.conversationId
         let errorDescription = error.errorDescription ?? "Unknown error"
+        let resolvedDebugInfoJSON = finalizedDebugInfoJSON(
+            for: requestID,
+            errorDescription: errorDescription,
+            fallbackJSON: debugInfoJSON
+        )
 
         container.requestStates[requestID]?.status = .failed(error)
         logger.error("[Request] Request failed: \(errorDescription)")
@@ -276,7 +451,7 @@ extension RequestCoordinator {
         let errorMessage = ChatMessage(
             role: .assistant,
             content: "Error: \(errorDescription)",
-            debugInfoJSON: debugInfoJSON
+            debugInfoJSON: resolvedDebugInfoJSON
         )
         container.appendMessage(errorMessage, toConversation: owningConversationId)
         logger.info("[Request] Error message added to chat: \(errorDescription)")
@@ -321,6 +496,16 @@ extension RequestCoordinator {
         }
         let provider = container.ensureProviderRegistered(for: config)
         logger.info("[Request] Provider resolved successfully: \(config.name)")
+        appendTraceEvent(
+            for: requestID,
+            category: .lifecycle,
+            title: "Provider resolved",
+            summary: "Using provider \(config.name)",
+            sections: traceSections([
+                ("Provider ID", config.id),
+                ("Provider Type", config.type.rawValue)
+            ])
+        )
         return (config, provider)
     }
 
@@ -368,6 +553,20 @@ extension RequestCoordinator {
             }
         }
         logger.info("[Request] Invocation context created with endpoint: \(config.endpoint)")
+        mutateDebugInfo(for: requestID) { current in
+            current.endpoint = config.endpoint
+            current = current.appendingTraceEvent(
+                makeTraceEvent(
+                    category: .lifecycle,
+                    title: "Invocation context ready",
+                    summary: "Resolved endpoint and credentials",
+                    sections: traceSections([
+                        ("Endpoint", config.endpoint),
+                        ("Credential", skipCredential ? "Skipped in debug for mock provider" : "Resolved bearer token")
+                    ])
+                )
+            )
+        }
         return ProviderInvocationContext(endpoint: config.endpoint, bearerToken: bearerToken)
     }
 
@@ -410,9 +609,39 @@ extension RequestCoordinator {
 
         guard let reqState = container.requestStates[requestID], !reqState.isTerminal else { return }
         container.requestStates[requestID]?.status = .streaming
-        logger.info(
-            "[Request] Model route decision: model=\(snapshot.modelID), type=\(modelDescriptor.modelType.rawValue), outputs=\(modelDescriptor.supportedOutputs.map(\.rawValue).joined(separator: ","))"
-        )
+        let routeOutputs = modelDescriptor.supportedOutputs.map(\.rawValue).joined(separator: ",")
+        let routeLogMessage =
+            "[Request] Model route decision: model=\(snapshot.modelID), "
+                + "type=\(modelDescriptor.modelType.rawValue), outputs=\(routeOutputs)"
+        logger.info("\(routeLogMessage, privacy: .public)")
+        mutateDebugInfo(for: requestID) { current in
+            let supportedOutputs = modelDescriptor.supportedOutputs.map(\.rawValue)
+            let requestKind = self.modelProducesImageOutput(modelDescriptor) ? "image_generation" : "chat_completion"
+            let routeTarget = requestKind == "image_generation"
+                ? "provider.send"
+                : "provider.sendStreaming"
+            current.requestKind = requestKind
+            current.routeDecision =
+                "RequestCoordinator routed to \(routeTarget) because "
+                    + "modelType=\(modelDescriptor.modelType.rawValue) and "
+                    + "supportedOutputs=\(supportedOutputs.joined(separator: ","))"
+            current.descriptorModelType = modelDescriptor.modelType.rawValue
+            current.descriptorSupportedOutputs = supportedOutputs
+            current.descriptorRawMetadataJSON = self.trimmedDebugPreview(modelDescriptor.rawMetadataJSON)
+            current = current.appendingTraceEvent(
+                makeTraceEvent(
+                    category: .lifecycle,
+                    title: "Model validated",
+                    summary: "Resolved \(modelDescriptor.modelType.rawValue) model",
+                    sections: traceSections([
+                        ("Model ID", snapshot.modelID),
+                        ("Model Type", modelDescriptor.modelType.rawValue),
+                        ("Supported Outputs", supportedOutputs.joined(separator: ", ")),
+                        ("Route Decision", current.routeDecision)
+                    ])
+                )
+            )
+        }
 
         let contextMessages = messagesForExecution(snapshot: snapshot)
 
@@ -525,6 +754,7 @@ extension RequestCoordinator {
             modelDescriptor: modelDescriptor,
             context: context
         )
+        mergeDebugInfo(baseDebugInfo, for: requestID)
 
         let imageTimeout = generationTimeoutOverride ?? RuntimeConstants.imageGenerationTimeout
         let timeoutTask = makeGenerationTimeoutTask(requestID: requestID, timeout: imageTimeout)
@@ -541,6 +771,9 @@ extension RequestCoordinator {
                 parameters: snapshot.parameters,
                 context: context
             )
+            if let debugInfo = response.debugInfo {
+                mergeDebugInfo(debugInfo, for: requestID)
+            }
 
             guard let state = container.requestStates[requestID], !state.isTerminal else { return }
 
@@ -576,7 +809,8 @@ extension RequestCoordinator {
                 id: assistantMessageID,
                 role: .assistant,
                 content: response.text.isEmpty ? "Generated image." : response.text,
-                attachments: attachments
+                attachments: attachments,
+                debugInfoJSON: currentDebugInfoJSON(for: requestID)
             )
             container.requestStates[requestID]?.assistantMessageID = assistantMessage.id
             container.appendMessage(assistantMessage, toConversation: snapshot.conversationId)
@@ -593,6 +827,17 @@ extension RequestCoordinator {
                 container.markUnreadCompletion(forConversation: snapshot.conversationId)
             }
 
+            appendTraceEvent(
+                for: requestID,
+                category: .response,
+                title: "Image response completed",
+                summary: "Received \(attachments.count) attachment(s)",
+                sections: traceSections([
+                    ("Assistant Preview", trimmedDebugPreview(assistantMessage.content)),
+                    ("Attachment Count", String(attachments.count))
+                ])
+            )
+
             let totalElapsed = ContinuousClock.now - startTime
             logger.info("[Image] Image generation complete: messageID=\(assistantMessageID), totalElapsed=\(totalElapsed)")
             finishImageSession(requestID: requestID, conversationId: snapshot.conversationId)
@@ -602,6 +847,7 @@ extension RequestCoordinator {
             let elapsed = ContinuousClock.now - startTime
             logger.error("[Image] Image generation failed after \(elapsed): \(error.message)")
             let mergedDebugInfo = baseDebugInfo.merged(with: error.debugInfo)
+            mergeDebugInfo(mergedDebugInfo, for: requestID)
             failSession(
                 requestID: requestID,
                 error: .remoteError(provider: error.providerID, message: error.message),
@@ -610,6 +856,7 @@ extension RequestCoordinator {
         } catch let error as RequestError {
             let elapsed = ContinuousClock.now - startTime
             logger.error("[Image] Image generation failed after \(elapsed): \(error.errorDescription ?? "unknown")")
+            mergeDebugInfo(baseDebugInfo, for: requestID)
             failSession(
                 requestID: requestID,
                 error: error,
@@ -620,6 +867,7 @@ extension RequestCoordinator {
             logger.error("[Image] Image generation failed after \(elapsed): \(error.localizedDescription)")
             var mergedDebugInfo = baseDebugInfo
             mergedDebugInfo.providerError = error.localizedDescription
+            mergeDebugInfo(mergedDebugInfo, for: requestID)
             failSession(
                 requestID: requestID,
                 error: .remoteError(provider: snapshot.providerID, message: error.localizedDescription),
@@ -659,7 +907,9 @@ extension RequestCoordinator {
             providerID: snapshot.providerID,
             modelID: snapshot.modelID,
             requestKind: "image_generation",
-            routeDecision: "RequestCoordinator routed to provider.send because modelType=\(modelDescriptor.modelType.rawValue) and supportedOutputs=\(supportedOutputs.joined(separator: ","))",
+            routeDecision: "RequestCoordinator routed to provider.send because "
+                + "modelType=\(modelDescriptor.modelType.rawValue) and "
+                + "supportedOutputs=\(supportedOutputs.joined(separator: ","))",
             endpoint: context.endpoint,
             descriptorModelType: modelDescriptor.modelType.rawValue,
             descriptorSupportedOutputs: supportedOutputs,
@@ -701,6 +951,9 @@ extension RequestCoordinator {
     ) -> Bool {
         switch event {
         case let .started(rid) where rid == requestID:
+            return false
+        case let .debug(rid, info) where rid == requestID:
+            mergeDebugInfo(info, for: requestID)
             return false
         case let .delta(rid, text) where rid == requestID:
             handleDelta(requestID: requestID, text: text)
@@ -788,6 +1041,13 @@ extension RequestCoordinator {
         }
 
         container.requestStates[requestID]?.appendDelta(text)
+        if let flushState = sessionFlushState[requestID] {
+            flushState.deltaChunkCount += 1
+            let remainingPreviewBudget = max(0, 1024 - flushState.deltaPreview.count)
+            if remainingPreviewBudget > 0 {
+                flushState.deltaPreview += String(text.prefix(remainingPreviewBudget))
+            }
+        }
         let accumulated = container.requestStates[requestID]?.flushText() ?? ""
 
         if let msgID = container.requestStates[requestID]?.assistantMessageID {
@@ -797,7 +1057,11 @@ extension RequestCoordinator {
         }
 
         let initialPresented = primePresentedContent(requestID: requestID)
-        let newMessage = ChatMessage(role: .assistant, content: initialPresented)
+        let newMessage = ChatMessage(
+            role: .assistant,
+            content: initialPresented,
+            debugInfoJSON: currentDebugInfoJSON(for: requestID)
+        )
         container.requestStates[requestID]?.assistantMessageID = newMessage.id
         container.appendMessage(newMessage, toConversation: owningConversationId)
 
@@ -812,6 +1076,7 @@ extension RequestCoordinator {
                 id: newMessage.id,
                 role: .assistant,
                 content: accumulated,
+                debugInfoJSON: currentDebugInfoJSON(for: requestID),
                 createdAt: newMessage.createdAt
             )
             try? persistence?.persistAssistantDraft(
@@ -820,6 +1085,8 @@ extension RequestCoordinator {
                 requestId: requestID.value.uuidString
             )
         }
+
+        syncDebugInfoToMessages(requestID: requestID)
 
         ensureRevealLoopRunning(requestID: requestID)
         throttledStreamingFlush(requestID: requestID, messageId: newMessage.id.uuidString, content: accumulated)
@@ -846,6 +1113,8 @@ private final class SessionFlushState {
     var revealBudget: Double = 0
     var terminalCatchUpStartedAt: ContinuousClock.Instant?
     var latestPresentedLength: Int = 0
+    var deltaChunkCount: Int = 0
+    var deltaPreview: String = ""
 }
 
 extension RequestCoordinator {
@@ -1138,6 +1407,8 @@ extension RequestCoordinator {
             flushState.lastRevealAt = nil
             flushState.revealBudget = 0
         }
+        sessionSnapshots.removeValue(forKey: requestID)
+        sessionDebugInfo.removeValue(forKey: requestID)
     }
 
     func cancelThrottleTasksForConversation(_ conversationId: String) {

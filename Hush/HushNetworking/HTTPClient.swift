@@ -48,7 +48,17 @@ public struct HTTPRequest: Sendable {
 
 public protocol HTTPClient: Sendable {
     func sendJSON(_ request: HTTPRequest) async throws -> (Data, Int)
-    func streamSSE(_ request: HTTPRequest) async throws -> AsyncThrowingStream<SSEEvent, Error>
+    func streamSSE(_ request: HTTPRequest) async throws -> HTTPStreamResponse
+}
+
+public struct HTTPStreamResponse: Sendable {
+    public let events: AsyncThrowingStream<SSEEvent, Error>
+    public let statusCode: Int
+
+    public init(events: AsyncThrowingStream<SSEEvent, Error>, statusCode: Int) {
+        self.events = events
+        self.statusCode = statusCode
+    }
 }
 
 public final class URLSessionHTTPClient: HTTPClient, Sendable {
@@ -97,7 +107,7 @@ public final class URLSessionHTTPClient: HTTPClient, Sendable {
         }
     }
 
-    public func streamSSE(_ request: HTTPRequest) async throws -> AsyncThrowingStream<SSEEvent, Error> {
+    public func streamSSE(_ request: HTTPRequest) async throws -> HTTPStreamResponse {
         guard let url = URL(string: request.url) else {
             throw HTTPError.invalidURL(request.url)
         }
@@ -127,7 +137,7 @@ public final class URLSessionHTTPClient: HTTPClient, Sendable {
             )
         }
 
-        return AsyncThrowingStream { continuation in
+        let events = AsyncThrowingStream { continuation in
             let task = Task {
                 var parser = SSEParser()
                 do {
@@ -148,5 +158,10 @@ public final class URLSessionHTTPClient: HTTPClient, Sendable {
                 task.cancel()
             }
         }
+
+        return HTTPStreamResponse(
+            events: events,
+            statusCode: httpResponse.statusCode
+        )
     }
 }

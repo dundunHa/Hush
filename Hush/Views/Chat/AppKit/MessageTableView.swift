@@ -631,16 +631,21 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         }
         guard stableIDs else { return .fullReload }
 
+        let debugInfoChangedRows = zip(previousRows, newRows).enumerated().compactMap { index, pair in
+            pair.0.message.debugInfoJSON != pair.1.message.debugInfoJSON ? index : nil
+        }
+        if debugInfoChangedRows.count == 1, let singleDebugInfoChangedRow = debugInfoChangedRows.first {
+            return .streamingRefresh(row: singleDebugInfoChangedRow)
+        }
+        if !debugInfoChangedRows.isEmpty {
+            return .fullReload
+        }
+
         let oldLast = previousRows[count - 1]
         let newLast = newRows[count - 1]
         let wasOrIsStreaming = oldLast.isStreaming || newLast.isStreaming
         if oldLast.message.id == newLast.message.id,
            oldLast.message.attachments != newLast.message.attachments
-        {
-            return .streamingRefresh(row: count - 1)
-        }
-        if oldLast.message.id == newLast.message.id,
-           oldLast.message.debugInfoJSON != newLast.message.debugInfoJSON
         {
             return .streamingRefresh(row: count - 1)
         }
@@ -1765,9 +1770,10 @@ final class MessageTableCellView: NSTableCellView {
     private let attachmentPreviewView = MessageAttachmentPreviewView()
     private let debugButton = MessageActionOverlayButton(
         frame: .zero,
-        defaultSymbolName: "ladybug",
-        defaultToolTip: "Copy debug details",
-        copiedToolTip: "Debug copied"
+        defaultSymbolName: "point.3.connected.trianglepath.dotted",
+        copiedSymbolName: "point.3.connected.trianglepath.dotted",
+        defaultToolTip: "View request trace",
+        copiedToolTip: "View request trace"
     )
     private let copyButton = MessageActionOverlayButton(
         frame: .zero,
@@ -2427,14 +2433,19 @@ final class MessageTableCellView: NSTableCellView {
         outputObservation = nil
         bodyTextView.cachedIntrinsicHeight = nil
 
-        let shouldShowActionBar = row.message.role == .assistant && !row.isStreaming
-        let shouldShowDebugButton = shouldShowActionBar && row.message.debugInfoJSON != nil
+        let supportsTraceButton = row.message.role == .assistant || row.message.role == .user
+        let shouldShowDebugButton = supportsTraceButton
+            && !row.isStreaming
+            && row.message.debugInfoJSON != nil
+        let shouldShowCopyButton = row.message.role == .assistant && !row.isStreaming
+        let shouldShowActionBar = shouldShowDebugButton || shouldShowCopyButton
         let renderableAttachment = row.message.attachments.first(where: { $0.kind == .image })
         updateAttachmentPreview(attachment: renderableAttachment, availableWidth: contentWidth)
         updateActionBarLayout(
             showActionBar: shouldShowActionBar,
             showPreview: renderableAttachment != nil,
-            showDebugButton: shouldShowDebugButton
+            showDebugButton: shouldShowDebugButton,
+            showCopyButton: shouldShowCopyButton
         )
 
         guard row.message.role == ChatRole.assistant else {
@@ -2571,11 +2582,13 @@ final class MessageTableCellView: NSTableCellView {
     private func updateActionBarLayout(
         showActionBar: Bool,
         showPreview: Bool,
-        showDebugButton: Bool
+        showDebugButton: Bool,
+        showCopyButton: Bool
     ) {
         guard showActionBar != isActionBarActive
             || showPreview != isPreviewVisible
             || showDebugButton != isDebugButtonVisible
+            || showCopyButton != !copyButton.isHidden
         else {
             return
         }
@@ -2630,7 +2643,7 @@ final class MessageTableCellView: NSTableCellView {
                     copyButtonLeadingToDebugConstraint,
                     copyButtonWidthConstraint
                 ])
-            } else {
+            } else if showCopyButton {
                 NSLayoutConstraint.activate([
                     copyTopConstraint,
                     copyButtonBottomConstraint,
@@ -2641,8 +2654,8 @@ final class MessageTableCellView: NSTableCellView {
             }
             debugButton.isHidden = !showDebugButton
             debugButton.alphaValue = showDebugButton && isMouseHovering ? 1 : 0
-            copyButton.isHidden = false
-            copyButton.alphaValue = isMouseHovering ? 1 : 0
+            copyButton.isHidden = !showCopyButton
+            copyButton.alphaValue = showCopyButton && isMouseHovering ? 1 : 0
         } else {
             if showPreview {
                 previewBottomConstraint.isActive = true
@@ -2684,13 +2697,19 @@ final class MessageTableCellView: NSTableCellView {
     }
 
     @objc private func handleDebugButtonPressed() {
-        guard let debugInfoJSON = currentRow?.message.debugInfoJSON, !debugInfoJSON.isEmpty else { return }
+        guard let row = currentRow,
+              let debugInfoJSON = row.message.debugInfoJSON,
+              !debugInfoJSON.isEmpty
+        else {
+            return
+        }
 
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(debugInfoJSON, forType: .string)
-
-        debugButton.flashCopied()
+        MessageTraceSheetPresenter.present(
+            message: row.message,
+            rawDebugInfoJSON: debugInfoJSON,
+            theme: theme,
+            from: window
+        )
     }
 
     @objc private func handleCopyButtonPressed() {

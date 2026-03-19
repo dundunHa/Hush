@@ -398,10 +398,13 @@ struct AppContainerCatalogTests {
             return (Data(), 200)
         }
         client.streamSSEHandler = { _ in
-            AsyncThrowingStream { continuation in
-                continuation.yield(SSEEvent(data: "[DONE]"))
-                continuation.finish()
-            }
+            HTTPStreamResponse(
+                events: AsyncThrowingStream { continuation in
+                    continuation.yield(SSEEvent(data: "[DONE]"))
+                    continuation.finish()
+                },
+                statusCode: 200
+            )
         }
         let provider = OpenAIProvider(id: "openai", httpClient: client)
         registry.register(provider)
@@ -454,7 +457,7 @@ struct AppContainerCatalogTests {
 
 private final class FakeHTTPClientForCatalogTests: HTTPClient, @unchecked Sendable {
     nonisolated(unsafe) var sendJSONHandler: ((HTTPRequest) async throws -> (Data, Int))?
-    nonisolated(unsafe) var streamSSEHandler: ((HTTPRequest) async throws -> AsyncThrowingStream<SSEEvent, Error>)?
+    nonisolated(unsafe) var streamSSEHandler: ((HTTPRequest) async throws -> HTTPStreamResponse)?
 
     func sendJSON(_ request: HTTPRequest) async throws -> (Data, Int) {
         guard let handler = sendJSONHandler else {
@@ -463,7 +466,7 @@ private final class FakeHTTPClientForCatalogTests: HTTPClient, @unchecked Sendab
         return try await handler(request)
     }
 
-    func streamSSE(_ request: HTTPRequest) async throws -> AsyncThrowingStream<SSEEvent, Error> {
+    func streamSSE(_ request: HTTPRequest) async throws -> HTTPStreamResponse {
         guard let handler = streamSSEHandler else {
             fatalError("streamSSEHandler not configured")
         }
