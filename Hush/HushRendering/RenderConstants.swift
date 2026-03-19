@@ -54,6 +54,9 @@ struct StreamingPresentationPolicy: Equatable {
 
 /// Configurable constants for the rendering pipeline.
 nonisolated enum RenderConstants {
+    /// Placeholder shown for an inserted assistant row before the first token arrives.
+    static let assistantWaitingPlaceholder = "Assistant is thinking…"
+
     /// Maximum number of math segments rendered per message.
     static let maxMathSegmentsPerMessage = 200
 
