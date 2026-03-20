@@ -491,8 +491,8 @@ struct CellCacheFirstStreamingTests {
         #expect(!cell.attributedStringForTesting.string.contains("**"))
     }
 
-    @Test("Final configure keeps plain text when rich render is pending")
-    func finalConfigureKeepsPlainTextWhileRichPending() throws {
+    @Test("Final configure preserves streaming rich output while final rich render is pending")
+    func finalConfigurePreservesStreamingRichOutputWhileFinalRichPending() async throws {
         let renderer = MessageContentRenderer(
             renderCache: RenderCache(capacity: 10),
             mathCache: MathRenderCache(capacity: 10)
@@ -504,17 +504,26 @@ struct CellCacheFirstStreamingTests {
         let cell = MessageTableCellView(identifier: NSUserInterfaceItemIdentifier("test-final-guard"))
         let availableWidth: CGFloat = 600
         let messageID = try #require(UUID(uuidString: "F0F0F0F0-7777-7777-7777-777777777777"))
+        let initialContent = "Hello **world**"
 
         cell.configure(
-            row: makeRow(content: "stream old + tail", isStreaming: true, id: messageID),
+            row: makeRow(content: initialContent, isStreaming: true, id: messageID),
             runtime: runtime,
             availableWidth: availableWidth,
             container: nil
         )
-        #expect(cell.attributedStringForTesting.string == "stream old + tail")
-        #expect(!cell.hasRenderControllerForTesting)
 
-        let finalContent = "stream old + tail **final**"
+        let richDeadline = ContinuousClock.now + .seconds(2)
+        while cell.attributedStringForTesting.string.contains("**"),
+              ContinuousClock.now < richDeadline
+        {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        #expect(cell.attributedStringForTesting.string == "Hello world")
+        #expect(cell.currentVisiblePlainTextForTesting == initialContent)
+
+        let finalContent = "Hello **world** and **friends**"
         cell.configure(
             row: makeRow(content: finalContent, isStreaming: false, id: messageID),
             runtime: runtime,
@@ -522,8 +531,16 @@ struct CellCacheFirstStreamingTests {
             container: nil
         )
 
-        // Non-streaming cache miss shows the plain fallback immediately.
-        #expect(cell.attributedStringForTesting.string == finalContent)
+        #expect(!cell.attributedStringForTesting.string.contains("**"))
         #expect(cell.hasRenderControllerForTesting)
+
+        let finalDeadline = ContinuousClock.now + .seconds(2)
+        while cell.attributedStringForTesting.string != "Hello world and friends",
+              ContinuousClock.now < finalDeadline
+        {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        #expect(cell.attributedStringForTesting.string == "Hello world and friends")
     }
 }

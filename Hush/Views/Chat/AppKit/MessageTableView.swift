@@ -220,6 +220,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     private var isRowHeightInvalidationFlushScheduled = false
     private var lastScrollToBottomRequestAt: Date = .distantPast
     private var pendingScrollToBottomTask: Task<Void, Never>?
+    private var isBottomPinSettleCheckScheduled = false
 
     private enum ScrollDirection: Equatable {
         case up
@@ -1024,7 +1025,13 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
 
     func scrollToBottom() {
         guard !rows.isEmpty else { return }
-        tableView.scrollRowToVisible(rows.count - 1)
+        layoutSubtreeIfNeeded()
+        tableView.layoutSubtreeIfNeeded()
+        scrollView.layoutSubtreeIfNeeded()
+        let documentHeight = scrollView.documentView?.frame.height ?? tableView.frame.height
+        let targetY = max(0, documentHeight - scrollView.contentView.bounds.height)
+        setScrollOriginY(targetY)
+        scheduleBottomPinSettleCheckIfNeeded()
     }
 
     func requestCoalescedScrollToBottom() {
@@ -1058,6 +1065,33 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
 
     private func performCoalescedScrollToBottom() {
         scrollToBottom()
+    }
+
+    private func scheduleBottomPinSettleCheckIfNeeded() {
+        guard !rows.isEmpty else { return }
+        guard !userHasScrolledUp else { return }
+        guard !isBottomPinSettleCheckScheduled else { return }
+        isBottomPinSettleCheckScheduled = true
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isBottomPinSettleCheckScheduled = false
+            guard !self.rows.isEmpty else { return }
+            guard !self.userHasScrolledUp else { return }
+            guard !self.isLiveScrolling else { return }
+
+            self.layoutSubtreeIfNeeded()
+            self.tableView.layoutSubtreeIfNeeded()
+            self.scrollView.layoutSubtreeIfNeeded()
+
+            let documentHeight = self.scrollView.documentView?.frame.height ?? self.tableView.frame.height
+            let maxY = max(0, documentHeight - self.scrollView.contentView.bounds.height)
+            let currentY = self.scrollView.contentView.bounds.origin.y
+            guard abs(currentY - maxY) > 1.0 else { return }
+
+            self.setScrollOriginY(maxY)
+            self.scheduleBottomPinSettleCheckIfNeeded()
+        }
     }
 
     private func setScrollOriginY(_ y: CGFloat) {
@@ -1934,6 +1968,7 @@ final class MessageTableCellView: NSTableCellView {
     private var currentRowIndex: Int?
     private var lastFingerprint: RenderInputFingerprint?
     private var streamingDisplayedLength: Int = 0
+    private var currentVisiblePlainText: String = ""
     private var currentContentWidth: CGFloat = 0
     private var isShowingStreamingRichOutput = false
     private var currentBodyPresentationMode: BodyPresentationMode = .fullWidth
@@ -2203,7 +2238,11 @@ final class MessageTableCellView: NSTableCellView {
         copyButton.alphaValue = 0
         copyButton.isHidden = true
         resetBodyPresentation()
-        bodyTextView.setAttributedText(NSAttributedString(), cachedHeight: nil)
+        setBodyText(
+            NSAttributedString(),
+            cachedHeight: nil,
+            visiblePlainText: ""
+        )
         attachmentPreviewView.reset()
         isPreviewVisible = false
     }
@@ -2482,9 +2521,10 @@ final class MessageTableCellView: NSTableCellView {
                 self.isShowingStreamingRichOutput = false
             }
 
-            self.bodyTextView.setAttributedText(
+            self.setBodyText(
                 output.attributedString,
-                cachedHeight: cachedHeight
+                cachedHeight: cachedHeight,
+                visiblePlainText: output.plainText
             )
             self.applyBodyPresentation(for: activeRow, maxBodyWidth: contentWidth)
             self.invalidateOwningRowHeightIfNeeded(
@@ -2525,9 +2565,10 @@ final class MessageTableCellView: NSTableCellView {
     private func applyStreamingPlainText(_ content: String) {
         guard let currentRow else {
             if bodyTextView.textStorage?.string != content {
-                bodyTextView.setAttributedText(
+                setBodyText(
                     NSAttributedString(string: content, attributes: plainTextAttributes()),
-                    cachedHeight: nil
+                    cachedHeight: nil,
+                    visiblePlainText: content
                 )
                 #if DEBUG
                     streamingUpdateAssignmentsForTesting += 1
@@ -2555,15 +2596,17 @@ final class MessageTableCellView: NSTableCellView {
                 textStorage.append(attributedPlainText(delta, for: currentRow))
                 textStorage.endEditing()
                 bodyTextView.cachedIntrinsicHeight = nil
+                currentVisiblePlainText = content
                 bodyTextView.finalizeTextMutation()
                 #if DEBUG
                     streamingUpdateAssignmentsForTesting += 1
                 #endif
             }
         } else {
-            bodyTextView.setAttributedText(
+            setBodyText(
                 attributedPlainText(fallbackText, for: currentRow),
-                cachedHeight: nil
+                cachedHeight: nil,
+                visiblePlainText: content
             )
             #if DEBUG
                 streamingUpdateAssignmentsForTesting += 1
@@ -2578,10 +2621,31 @@ final class MessageTableCellView: NSTableCellView {
         for row: MessageTableView.RowModel,
         cachedHeight: CGFloat?
     ) {
-        bodyTextView.setAttributedText(
+        setBodyText(
             attributedPlainText(content, for: row),
-            cachedHeight: cachedHeight
+            cachedHeight: cachedHeight,
+            visiblePlainText: content
         )
+    }
+
+    private func setBodyText(
+        _ text: NSAttributedString,
+        cachedHeight: CGFloat?,
+        visiblePlainText: String
+    ) {
+        bodyTextView.setAttributedText(text, cachedHeight: cachedHeight)
+        currentVisiblePlainText = visiblePlainText
+    }
+
+    private func shouldPreserveVisibleOutputForFinalTransition(
+        previousRow: MessageTableView.RowModel?,
+        nextRow: MessageTableView.RowModel,
+        wasShowingStreamingRichOutput: Bool
+    ) -> Bool {
+        guard let previousRow else { return false }
+        guard previousRow.message.id == nextRow.message.id else { return false }
+        guard previousRow.isStreaming, !nextRow.isStreaming else { return false }
+        return wasShowingStreamingRichOutput
     }
 
     private func bodyPresentationMode(for row: MessageTableView.RowModel) -> BodyPresentationMode {
@@ -2604,7 +2668,6 @@ final class MessageTableCellView: NSTableCellView {
         case .fullWidth:
             bodyTextView.textContainerInset = .zero
             bodyTextView.alignment = textAlignment
-            bodyTextView.cachedIntrinsicHeight = nil
             bodyTextView.layer?.cornerRadius = 0
             bodyTextView.layer?.borderWidth = 0
             bodyTextView.layer?.backgroundColor = NSColor.clear.cgColor
@@ -2812,6 +2875,7 @@ final class MessageTableCellView: NSTableCellView {
         lastFingerprint = fingerprint
 
         let previousRow = currentRow
+        let wasShowingStreamingRichOutput = isShowingStreamingRichOutput
         self.container = container
         currentRow = row
 
@@ -2877,6 +2941,11 @@ final class MessageTableCellView: NSTableCellView {
             return
         }
 
+        let shouldPreserveVisibleOutput = shouldPreserveVisibleOutputForFinalTransition(
+            previousRow: previousRow,
+            nextRow: row,
+            wasShowingStreamingRichOutput: wasShowingStreamingRichOutput
+        )
         isShowingStreamingRichOutput = false
 
         if !row.isStreaming {
@@ -2888,9 +2957,10 @@ final class MessageTableCellView: NSTableCellView {
             )
             if let cached = runtime.cachedOutput(for: input) {
                 let previousHeight = bodyIntrinsicHeight
-                bodyTextView.setAttributedText(
+                setBodyText(
                     cached.attributedString,
-                    cachedHeight: runtime.cachedRowHeight(for: input)
+                    cachedHeight: runtime.cachedRowHeight(for: input),
+                    visiblePlainText: cached.plainText
                 )
                 invalidateOwningRowHeightIfNeeded(
                     owningTableView: owningTableView,
@@ -2907,7 +2977,9 @@ final class MessageTableCellView: NSTableCellView {
         }
 
         // Cache miss: show plain fallback, then async rich render.
-        applyPlainText(row.message.content, for: row, cachedHeight: nil)
+        if !shouldPreserveVisibleOutput {
+            applyPlainText(row.message.content, for: row, cachedHeight: nil)
+        }
         applyBodyPresentation(for: row, maxBodyWidth: contentWidth)
         streamingDisplayedLength = 0
 
@@ -3317,6 +3389,11 @@ private final class MessageAttachmentPreviewView: NSView {
             scrollView.contentView.bounds.origin.y
         }
 
+        var maxScrollOriginYForTesting: CGFloat {
+            let documentHeight = scrollView.documentView?.frame.height ?? tableView.frame.height
+            return max(0, documentHeight - scrollView.contentView.bounds.height)
+        }
+
         var isLiveScrollingForTesting: Bool {
             isLiveScrolling
         }
@@ -3447,6 +3524,10 @@ private final class MessageAttachmentPreviewView: NSView {
 
         var streamingDisplayedLengthForTesting: Int {
             streamingDisplayedLength
+        }
+
+        var currentVisiblePlainTextForTesting: String {
+            currentVisiblePlainText
         }
 
         var streamingUpdateAssignmentCountForTesting: Int {

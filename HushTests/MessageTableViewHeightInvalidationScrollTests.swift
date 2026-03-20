@@ -3,6 +3,7 @@ import Foundation
 @testable import Hush
 import Testing
 
+@Suite(.serialized)
 @MainActor
 // swiftlint:disable:next type_name
 struct MessageTableViewHeightInvalidationScrollTests {
@@ -316,5 +317,111 @@ struct MessageTableViewHeightInvalidationScrollTests {
         let after = table.scrollOriginYForTesting
         #expect(abs(after - before) <= 1.0)
         #expect(table.pendingPinnedRowHeightInvalidationsCountForTesting == 0)
+    }
+
+    @Test("Rich height invalidation keeps transcript pinned to bottom while following tail")
+    func richHeightInvalidationKeepsBottomPinWhileFollowingTail() async throws {
+        let renderer = MessageContentRenderer(
+            renderCache: RenderCache(capacity: 16),
+            mathCache: MathRenderCache(capacity: 16)
+        )
+        let runtime = MessageRenderRuntime(
+            renderer: renderer,
+            scheduler: ConversationRenderScheduler()
+        )
+        let container = AppContainer.forTesting(settings: .testDefault)
+        let table = MessageTableView()
+
+        let host = NSView()
+        host.addSubview(table)
+        NSLayoutConstraint.activate([
+            table.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            table.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+            table.topAnchor.constraint(equalTo: host.topAnchor),
+            table.bottomAnchor.constraint(equalTo: host.bottomAnchor)
+        ])
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 860, height: 640),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.display()
+        host.layoutSubtreeIfNeeded()
+        defer {
+            window.contentView = nil
+            window.orderOut(nil)
+            withExtendedLifetime(window) {}
+        }
+
+        let messageID = UUID()
+        let content = """
+        # Final Answer
+
+        A long assistant message that should stay pinned to the latest content.
+
+        | Feature | Description | Status |
+        |---|---|---|
+        | Auth | Login support | Done |
+        | Search | Full-text | WIP |
+
+        \(Array(repeating: "- item with some text", count: 260).joined(separator: "\n"))
+        """
+
+        table.apply(
+            messages: [makeMessage(id: messageID, role: .assistant, content: content)],
+            activeConversationID: "conv-height-invalidation-bottom-pin",
+            isActiveConversationSending: false,
+            switchGeneration: 1,
+            theme: container.settings.theme,
+            runtime: runtime,
+            container: container
+        )
+
+        host.layoutSubtreeIfNeeded()
+        table.prepareCellForTesting(row: 0)
+        let cell = try #require(table.visibleCellForTesting(row: 0))
+        cell.cancelRenderWork()
+
+        table.userHasScrolledUp = false
+        table.scrollToBottom()
+        let before = table.scrollOriginYForTesting
+        #expect(before > 0)
+
+        let rawWidth = table.bounds.width > 1
+            ? table.bounds.width
+            : (HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2)
+        let availableWidth = min(rawWidth, HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2)
+        let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
+
+        _ = renderer.render(MessageRenderInput(
+            content: content,
+            availableWidth: contentWidth,
+            style: RenderStyle.fromTheme(),
+            isStreaming: false
+        ))
+
+        table.tableView.reloadData(
+            forRowIndexes: IndexSet(integer: 0),
+            columnIndexes: IndexSet(integer: 0)
+        )
+        host.layoutSubtreeIfNeeded()
+
+        let settleDeadline = ContinuousClock.now + .seconds(1)
+        while abs(table.scrollOriginYForTesting - table.maxScrollOriginYForTesting) > 1.0,
+              ContinuousClock.now < settleDeadline
+        {
+            host.layoutSubtreeIfNeeded()
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+
+        let after = table.scrollOriginYForTesting
+        let maxScrollOriginY = table.maxScrollOriginYForTesting
+        #expect(abs(after - maxScrollOriginY) <= 1.0)
+        #expect(after >= before)
     }
 }
