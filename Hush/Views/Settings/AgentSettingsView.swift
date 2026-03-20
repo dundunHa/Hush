@@ -191,7 +191,7 @@ struct AgentSettingsView: View {
                     .font(HushTypography.captionBold)
                     .foregroundStyle(palette.secondaryText)
 
-                Text("Select an API provider and one of its pinned models for this agent.")
+                Text("Select an API provider and one of its selected models for this agent.")
                     .font(HushTypography.footnote)
                     .foregroundStyle(palette.secondaryText.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
