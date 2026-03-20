@@ -1,34 +1,55 @@
 import Foundation
 
 public enum AppTheme: String, Codable, CaseIterable, Sendable {
-    case dark
     case graphiteGlass
-    case light
-    case readPaper
+    case lightGlass
+    case ivoryGlass
 
     public var displayName: String {
         switch self {
-        case .dark:
-            return "Dark"
         case .graphiteGlass:
             return "Graphite Glass"
-        case .light:
-            return "Light"
-        case .readPaper:
-            return "ReadPaper"
+        case .lightGlass:
+            return "Light Glass"
+        case .ivoryGlass:
+            return "Ivory Glass"
         }
     }
 
     public var subtitle: String {
         switch self {
-        case .dark:
-            return "Slate contrast for focused work"
         case .graphiteGlass:
-            return "Liquid sidebar with a calm graphite workspace"
-        case .light:
-            return "Clean daylight canvas"
-        case .readPaper:
-            return "Warm paper tone for long reading"
+            return "Smoked glass for low-glare focus"
+        case .lightGlass:
+            return "Daylight glass with airy contrast"
+        case .ivoryGlass:
+            return "Warm paper glass tuned for long reading"
+        }
+    }
+
+    public var usesGlassSurface: Bool {
+        true
+    }
+
+    public var usesDarkAppearance: Bool {
+        switch self {
+        case .graphiteGlass:
+            return true
+        case .lightGlass, .ivoryGlass:
+            return false
+        }
+    }
+
+    public static func persistedValue(_ rawValue: String) -> AppTheme {
+        switch rawValue {
+        case AppTheme.graphiteGlass.rawValue, "dark":
+            return .graphiteGlass
+        case AppTheme.lightGlass.rawValue, "light":
+            return .lightGlass
+        case AppTheme.ivoryGlass.rawValue, "readPaper":
+            return .ivoryGlass
+        default:
+            return .graphiteGlass
         }
     }
 }
@@ -105,7 +126,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         selectedModelID: String,
         parameters: ModelParameters,
         quickBar: QuickBarConfiguration,
-        theme: AppTheme = .dark,
+        theme: AppTheme = .graphiteGlass,
         fontSettings: AppFontSettings = .default,
         maxConcurrentRequests: Int = RuntimeConstants.defaultMaxConcurrentRequests
     ) {
@@ -138,7 +159,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         selectedModelID = try container.decodeIfPresent(String.self, forKey: .selectedModelID) ?? ""
         parameters = try container.decodeIfPresent(ModelParameters.self, forKey: .parameters) ?? .standard
         quickBar = try container.decodeIfPresent(QuickBarConfiguration.self, forKey: .quickBar) ?? .standard
-        theme = try container.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .dark
+        let rawTheme = try container.decodeIfPresent(String.self, forKey: .theme)
+        theme = rawTheme.map(AppTheme.persistedValue) ?? .graphiteGlass
         fontSettings = try container.decodeIfPresent(AppFontSettings.self, forKey: .fontSettings) ?? .default
         maxConcurrentRequests = try container.decodeIfPresent(Int.self, forKey: .maxConcurrentRequests)
             ?? RuntimeConstants.defaultMaxConcurrentRequests
@@ -162,7 +184,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         selectedModelID: "",
         parameters: .standard,
         quickBar: .standard,
-        theme: .dark,
+        theme: .graphiteGlass,
         fontSettings: .default,
         maxConcurrentRequests: RuntimeConstants.defaultMaxConcurrentRequests
     )
@@ -174,7 +196,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
             selectedModelID: "mock-text-1",
             parameters: .standard,
             quickBar: .standard,
-            theme: .dark,
+            theme: .graphiteGlass,
             fontSettings: .default,
             maxConcurrentRequests: RuntimeConstants.defaultMaxConcurrentRequests
         )

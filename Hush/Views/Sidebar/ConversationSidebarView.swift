@@ -175,9 +175,11 @@ struct ConversationSidebarView: View {
     }
 
     private func sidebarControlBackground(isHovered: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let usesGlassChrome = theme.usesGlassSurface
+
+        return RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(
-                theme == .graphiteGlass
+                usesGlassChrome
                     ? (isHovered ? palette.softFillStrong : .clear)
                     : (isHovered ? palette.hoverFill : palette.softFill)
             )
@@ -186,12 +188,12 @@ struct ConversationSidebarView: View {
                     .stroke(
                         isHovered
                             ? palette.hoverStroke
-                            : (theme == .graphiteGlass ? palette.subtleStroke.opacity(0.72) : palette.subtleStroke),
+                            : (usesGlassChrome ? palette.subtleStroke.opacity(0.72) : palette.subtleStroke),
                         lineWidth: 1
                     )
             )
             .shadow(
-                color: theme == .graphiteGlass && isHovered ? palette.sidebarGlassShadow.opacity(0.18) : .clear,
+                color: usesGlassChrome && isHovered ? palette.sidebarGlassShadow.opacity(0.18) : .clear,
                 radius: 6,
                 x: 0,
                 y: 2
@@ -381,11 +383,12 @@ private struct SidebarThreadRow: View {
 
     private var rowBackground: some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let usesGlassChrome = theme.usesGlassSurface
 
         return shape
             .fill(isActive ? palette.selectionFill : (isHovered ? palette.hoverFill : .clear))
             .overlay {
-                if theme == .graphiteGlass && (isActive || isHovered) {
+                if usesGlassChrome && (isActive || isHovered) {
                     shape
                         .fill(
                             LinearGradient(
@@ -407,7 +410,7 @@ private struct SidebarThreadRow: View {
                     )
             )
             .shadow(
-                color: theme == .graphiteGlass && (isActive || isHovered)
+                color: usesGlassChrome && (isActive || isHovered)
                     ? palette.sidebarGlassShadow.opacity(isActive ? 0.16 : 0.10) : .clear,
                 radius: isActive ? 8 : 6,
                 x: 0,

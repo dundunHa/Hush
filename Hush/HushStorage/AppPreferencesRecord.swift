@@ -41,7 +41,7 @@ public nonisolated struct AppPreferencesRecord: Codable, Sendable, Equatable {
         reasoningEffort: String? = nil,
         quickBarKey: String,
         quickBarModifiers: String = "[]",
-        theme: String = AppTheme.dark.rawValue,
+        theme: String = AppTheme.graphiteGlass.rawValue,
         fontFamilyName: String? = nil,
         fontSize: Double? = nil,
         maxConcurrentRequests: Int? = nil,
@@ -113,7 +113,7 @@ public extension AppPreferencesRecord {
             from: Data(quickBarModifiers.utf8)
         )) ?? []
 
-        let parsedTheme = AppTheme(rawValue: theme) ?? .dark
+        let parsedTheme = AppTheme.persistedValue(theme)
 
         return AppPreferencesSnapshot(
             selectedProviderID: selectedProviderID,

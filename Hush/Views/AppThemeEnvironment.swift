@@ -1,11 +1,11 @@
 import SwiftUI
 
 private struct HushThemeEnvironmentKey: EnvironmentKey {
-    static let defaultValue: AppTheme = .dark
+    static let defaultValue: AppTheme = .graphiteGlass
 }
 
 private struct HushThemePaletteEnvironmentKey: EnvironmentKey {
-    static let defaultValue: HushThemePalette = HushColors.palette(for: .dark)
+    static let defaultValue: HushThemePalette = HushColors.palette(for: .graphiteGlass)
 }
 
 extension EnvironmentValues {
