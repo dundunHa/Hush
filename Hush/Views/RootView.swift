@@ -99,7 +99,7 @@ struct RootView: View {
         }
         .ignoresSafeArea(edges: .top)
         .font(HushTypography.body)
-        .background(themePalette.rootBackground.ignoresSafeArea())
+        .background(Color.clear.ignoresSafeArea())
         .environment(\.hushTheme, container.settings.theme)
         .environment(\.hushThemePalette, themePalette)
         .preferredColorScheme(preferredScheme(forTheme: container.settings.theme))

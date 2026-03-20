@@ -95,6 +95,38 @@ struct SidebarMaterialBackground: View {
         theme.usesGlassSurface
     }
 
+    private var glassTintOpacity: Double {
+        theme.usesDarkAppearance ? 0.72 : 0.64
+    }
+
+    private var glassHighlightOpacity: Double {
+        theme.usesDarkAppearance ? 0.90 : 0.58
+    }
+
+    private var glassSecondaryTintOpacity: Double {
+        theme.usesDarkAppearance ? 0.18 : 0.10
+    }
+
+    private var glassRadialHighlightOpacity: Double {
+        theme.usesDarkAppearance ? 0.18 : 0.14
+    }
+
+    private var leadingEdgeStrokeOpacity: Double {
+        theme.usesDarkAppearance ? 0.40 : 0.68
+    }
+
+    private var trailingEdgeStrokeOpacity: Double {
+        theme.usesDarkAppearance ? 0.18 : 0.56
+    }
+
+    private var trailingEdgeShadowOpacity: Double {
+        theme.usesDarkAppearance ? 0.12 : 0.18
+    }
+
+    private var trailingEdgeShadowWidth: CGFloat {
+        theme.usesDarkAppearance ? 14 : 22
+    }
+
     var body: some View {
         ZStack {
             if usesGlassSidebar {
@@ -105,7 +137,7 @@ struct SidebarMaterialBackground: View {
                         LinearGradient(
                             colors: [
                                 palette.sidebarBackground,
-                                palette.sidebarGlassTint.opacity(0.72)
+                                palette.sidebarGlassTint.opacity(glassTintOpacity)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -116,8 +148,8 @@ struct SidebarMaterialBackground: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                palette.sidebarGlassHighlight.opacity(0.90),
-                                palette.sidebarGlassTint.opacity(0.18),
+                                palette.sidebarGlassHighlight.opacity(glassHighlightOpacity),
+                                palette.sidebarGlassTint.opacity(glassSecondaryTintOpacity),
                                 .clear
                             ],
                             startPoint: .topLeading,
@@ -127,7 +159,7 @@ struct SidebarMaterialBackground: View {
 
                 RadialGradient(
                     colors: [
-                        palette.sidebarGlassHighlight.opacity(0.18),
+                        palette.sidebarGlassHighlight.opacity(glassRadialHighlightOpacity),
                         .clear
                     ],
                     center: .topLeading,
@@ -142,8 +174,27 @@ struct SidebarMaterialBackground: View {
         .overlay(alignment: .leading) {
             if usesGlassSidebar {
                 Rectangle()
-                    .fill(palette.sidebarGlassHighlight.opacity(0.40))
+                    .fill(palette.sidebarGlassStroke.opacity(leadingEdgeStrokeOpacity))
                     .frame(width: 1)
+            }
+        }
+        .overlay(alignment: .trailing) {
+            if usesGlassSidebar {
+                ZStack(alignment: .trailing) {
+                    LinearGradient(
+                        colors: [
+                            palette.sidebarGlassShadow.opacity(trailingEdgeShadowOpacity),
+                            .clear
+                        ],
+                        startPoint: .trailing,
+                        endPoint: .leading
+                    )
+                    .frame(width: trailingEdgeShadowWidth)
+
+                    Rectangle()
+                        .fill(palette.sidebarGlassStroke.opacity(trailingEdgeStrokeOpacity))
+                        .frame(width: 1)
+                }
             }
         }
     }

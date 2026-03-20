@@ -21,6 +21,11 @@ struct HushApp: App {
                     container.handleScenePhaseChange(newPhase)
                 }
                 .background(
+                    WindowAppearanceConfigurator(
+                        transparencyEnabled: container.settings.theme.usesGlassSurface
+                    )
+                )
+                .background(
                     WindowCloseObserver {
                         appDelegate.mainWindowDidClose()
                     }
@@ -63,6 +68,35 @@ struct HushApp: App {
 }
 
 // MARK: - WindowCloseObserver
+
+struct WindowAppearanceConfigurator: NSViewRepresentable {
+    let transparencyEnabled: Bool
+
+    func makeNSView(context _: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            configure(window: view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context _: Context) {
+        DispatchQueue.main.async {
+            configure(window: view.window)
+        }
+    }
+
+    @MainActor
+    private func configure(window: NSWindow?) {
+        guard let window else { return }
+
+        window.isOpaque = !transparencyEnabled
+        window.backgroundColor = transparencyEnabled ? .clear : .windowBackgroundColor
+        window.titlebarAppearsTransparent = transparencyEnabled
+        window.isMovableByWindowBackground = true
+        window.hasShadow = true
+    }
+}
 
 struct WindowCloseObserver: NSViewRepresentable {
     let onClose: () -> Void
