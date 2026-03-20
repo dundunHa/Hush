@@ -7,6 +7,9 @@ SPM_DIR ?= /tmp/hush-spm
 APP_PATH ?= $(DERIVED_DATA)/Build/Products/Debug/Hush.app
 RELEASE_APP_PATH ?= $(DERIVED_DATA)/Build/Products/Release/Hush.app
 RELEASE_DIR ?= build/release
+VERSION_XCCONFIG ?= Config/Versions.xcconfig
+APP_VERSION := $(shell awk -F '=' '/^[[:space:]]*MARKETING_VERSION[[:space:]]*=/{gsub(/[[:space:]]/, "", $$2); print $$2}' $(VERSION_XCCONFIG))
+APP_BUILD_VERSION := $(shell awk -F '=' '/^[[:space:]]*CURRENT_PROJECT_VERSION[[:space:]]*=/{gsub(/[[:space:]]/, "", $$2); print $$2}' $(VERSION_XCCONFIG))
 RELEASE_ARCHS ?= arm64 x86_64
 SRC_DIRS ?= Hush HushTests
 WATCH_DIRS ?= $(CURDIR)/Hush $(CURDIR)/HushTests
@@ -19,7 +22,7 @@ TEST_RESULTS_DIR ?= /tmp/hush-test-results
 XCCOV ?= xcrun xccov
 XCTRACE_ARGS ?=
 
-.PHONY: help setup check-tools resolve build check-xcode release test test-cov run fmt crash-context xctrace-memory clean
+.PHONY: help setup check-tools resolve build check-xcode release version test test-cov run fmt crash-context xctrace-memory clean
 
 help: ## Show available targets
 	@echo "Available targets:"
@@ -33,6 +36,10 @@ check-tools: ## Verify required local tools are installed
 			exit 1; \
 		fi; \
 	done
+	@if [ ! -f "$(VERSION_XCCONFIG)" ]; then \
+		echo "Missing version config: $(VERSION_XCCONFIG)"; \
+		exit 1; \
+	fi
 	@echo "All required tools are available."
 
 resolve: ## Resolve Swift Package dependencies
@@ -81,10 +88,14 @@ check-xcode: ## Run Xcode diagnostics build with strict concurrency
 		build \
 		SWIFT_STRICT_CONCURRENCY=complete
 
+version: ## Show the centrally managed marketing/build versions
+	@echo "MARKETING_VERSION=$(APP_VERSION)"
+	@echo "CURRENT_PROJECT_VERSION=$(APP_BUILD_VERSION)"
+
 release: ## Build Release app and package into a DMG installer
 	@mkdir -p "$(DERIVED_DATA)" "$(SPM_DIR)" "$(RELEASE_DIR)"
 	@xattr -cr "$(DERIVED_DATA)" 2>/dev/null || true
-	@echo "==> Building Release configuration..."
+	@echo "==> Building Release configuration $(APP_VERSION) ($(APP_BUILD_VERSION))..."
 	@$(XCODEBUILD) \
 		-project "$(PROJECT)" \
 		-scheme "$(SCHEME)" \
@@ -109,15 +120,13 @@ release: ## Build Release app and package into a DMG installer
 	@echo "==> Verifying Release app signature..."
 	@codesign --verify --deep --strict --verbose=2 "$(RELEASE_APP_PATH)"
 	@echo "==> Packaging DMG..."
-	@VERSION=$$(defaults read "$$(pwd)/$(RELEASE_APP_PATH)/Contents/Info" CFBundleShortVersionString); \
-	BUILD=$$(defaults read "$$(pwd)/$(RELEASE_APP_PATH)/Contents/Info" CFBundleVersion); \
-	DMG_NAME="Hush-$${VERSION}-$${BUILD}.dmg"; \
+	@DMG_NAME="Hush-$(APP_VERSION)-$(APP_BUILD_VERSION).dmg"; \
 	DMG_PATH="$(RELEASE_DIR)/$$DMG_NAME"; \
 	STAGING=$$(mktemp -d); \
 	ditto "$(RELEASE_APP_PATH)" "$$STAGING/Hush.app"; \
 	ln -s /Applications "$$STAGING/Applications"; \
 	rm -f "$$DMG_PATH"; \
-	hdiutil create -volname "Hush" \
+	hdiutil create -volname "Hush $(APP_VERSION)" \
 		-srcfolder "$$STAGING" \
 		-ov -format UDZO \
 		-imagekey zlib-level=9 \
