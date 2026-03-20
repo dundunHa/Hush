@@ -193,7 +193,7 @@ struct HotScenePoolTests {
         let hotApplyCount = hotScene.applyCountForTesting
         let activeApplyCount = activeScene.applyCountForTesting
 
-        container.settings.theme = .light
+        container.settings.theme = .lightGlass
         controller.update(container: container, theme: container.settings.theme)
 
         #expect(hotScene.applyCountForTesting == hotApplyCount + 1)

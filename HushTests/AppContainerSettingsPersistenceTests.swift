@@ -110,14 +110,14 @@ struct AppContainerSettingsPersistenceTests {
     @Test("flushSettings preserves theme value in persisted preferences")
     func flushSettingsPreservesThemeValue() throws {
         let (repo, container) = try makeRepoAndContainer()
-        #expect(container.settings.theme == .dark)
+        #expect(container.settings.theme == .graphiteGlass)
 
-        container.settings.theme = .readPaper
+        container.settings.theme = .ivoryGlass
         container.settings.selectedModelID = "theme-persist-model"
         container.flushSettings()
 
         let loaded = try repo.fetch()
-        #expect(loaded?.theme == AppTheme.readPaper.rawValue)
+        #expect(loaded?.theme == AppTheme.ivoryGlass.rawValue)
     }
 
     @Test("theme-related settings flush does not mutate sidebar threads")
@@ -130,7 +130,7 @@ struct AppContainerSettingsPersistenceTests {
         )
         container.sidebarThreads = [thread]
 
-        container.settings.theme = .light
+        container.settings.theme = .lightGlass
         container.settings.selectedModelID = "theme-safety-model"
         container.flushSettings()
 

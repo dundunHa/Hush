@@ -5,7 +5,7 @@ extension RenderStyle {
     // MARK: - Theme Bridge
 
     static func fromTheme(
-        _ theme: AppTheme = .dark,
+        _ theme: AppTheme = .graphiteGlass,
         fontSettings: AppFontSettings = .default
     ) -> RenderStyle {
         fromPalette(HushColors.palette(for: theme), fontSettings: fontSettings)

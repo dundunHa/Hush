@@ -91,13 +91,13 @@ struct SidebarMaterialBackground: View {
     let theme: AppTheme
     let palette: HushThemePalette
 
-    private var isGraphiteGlass: Bool {
-        theme == .graphiteGlass
+    private var usesGlassSidebar: Bool {
+        theme.usesGlassSurface
     }
 
     var body: some View {
         ZStack {
-            if isGraphiteGlass {
+            if usesGlassSidebar {
                 SidebarVibrancyHost()
 
                 Rectangle()
@@ -140,7 +140,7 @@ struct SidebarMaterialBackground: View {
             }
         }
         .overlay(alignment: .leading) {
-            if isGraphiteGlass {
+            if usesGlassSidebar {
                 Rectangle()
                     .fill(palette.sidebarGlassHighlight.opacity(0.40))
                     .frame(width: 1)
@@ -153,16 +153,16 @@ struct WorkspaceChromeBackground: View {
     let theme: AppTheme
     let palette: HushThemePalette
 
-    private var isGraphiteGlass: Bool {
-        theme == .graphiteGlass
+    private var usesGlassChrome: Bool {
+        theme.usesGlassSurface
     }
 
     var body: some View {
         ZStack {
             Rectangle()
-                .fill(isGraphiteGlass ? palette.workspaceChromeBackground : palette.rootBackground)
+                .fill(usesGlassChrome ? palette.workspaceChromeBackground : palette.rootBackground)
 
-            if isGraphiteGlass {
+            if usesGlassChrome {
                 Rectangle()
                     .fill(
                         LinearGradient(
@@ -178,7 +178,7 @@ struct WorkspaceChromeBackground: View {
         }
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(isGraphiteGlass ? palette.separator : .clear)
+                .fill(usesGlassChrome ? palette.separator : .clear)
                 .frame(height: 1)
         }
     }

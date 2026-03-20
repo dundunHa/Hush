@@ -42,8 +42,8 @@ struct GeneralSettingsView: View {
             }
 
             Text(
-                "Dark stays familiar, Graphite Glass adds a liquid sidebar with a calmer workspace, " +
-                    "Light is neutral for daily work, and ReadPaper uses a warmer reading surface."
+                "Graphite Glass keeps the low-glare studio feel, Light Glass opens it up for daylight work, " +
+                    "and Ivory Glass adds a warmer paper surface for reading-heavy sessions."
             )
             .font(HushTypography.caption)
             .foregroundStyle(themePalette.secondaryText)

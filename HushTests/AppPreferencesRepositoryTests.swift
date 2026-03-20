@@ -26,7 +26,7 @@ struct AppPreferencesRepositoryTests {
             selectedModelID: "gpt-4o-mini",
             parameters: .standard,
             quickBar: .standard,
-            theme: .readPaper,
+            theme: .ivoryGlass,
             fontSettings: AppFontSettings(
                 familyName: "Helvetica Neue",
                 size: 16
@@ -42,7 +42,7 @@ struct AppPreferencesRepositoryTests {
         #expect(prefs.selectedModelID == "gpt-4o-mini")
         #expect(prefs.parameters == .standard)
         #expect(prefs.quickBar == .standard)
-        #expect(prefs.theme == .readPaper)
+        #expect(prefs.theme == .ivoryGlass)
         #expect(prefs.fontSettings.normalizedFamilyName == "Helvetica Neue")
         #expect(prefs.fontSettings.normalizedSize == 16)
     }
@@ -161,5 +161,12 @@ struct AppPreferencesRepositoryTests {
         let prefs = try #require(loaded?.toAppPreferences())
         #expect(prefs.fontSettings.normalizedFamilyName == nil)
         #expect(prefs.fontSettings.normalizedSize == AppFontSettings.defaultSize)
+    }
+
+    @Test("Legacy persisted theme values migrate to new glass variants")
+    func legacyThemeValuesMigrateToGlassVariants() {
+        #expect(AppTheme.persistedValue("dark") == .graphiteGlass)
+        #expect(AppTheme.persistedValue("light") == .lightGlass)
+        #expect(AppTheme.persistedValue("readPaper") == .ivoryGlass)
     }
 }

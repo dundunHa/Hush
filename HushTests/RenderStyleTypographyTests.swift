@@ -7,7 +7,7 @@ struct RenderStyleTypographyTests {
     @Test("RenderStyle uses configured body font size")
     func renderStyleUsesConfiguredBodyFontSize() {
         let fontSettings = AppFontSettings(size: 18)
-        let style = RenderStyle.fromTheme(.dark, fontSettings: fontSettings)
+        let style = RenderStyle.fromTheme(.graphiteGlass, fontSettings: fontSettings)
 
         #expect(abs(style.bodyFont.pointSize - 18) < 0.001)
         #expect(style.heading1Font.pointSize > style.bodyFont.pointSize)
@@ -18,9 +18,9 @@ struct RenderStyleTypographyTests {
     func renderStyleCacheKeyChangesWithFontFamily() throws {
         let familyName = try #require(HushFontResolver.availableFamilies().first)
 
-        let baseline = RenderStyle.fromTheme(.dark, fontSettings: .default)
+        let baseline = RenderStyle.fromTheme(.graphiteGlass, fontSettings: .default)
         let custom = RenderStyle.fromTheme(
-            .dark,
+            .graphiteGlass,
             fontSettings: AppFontSettings(
                 familyName: familyName,
                 size: AppFontSettings.defaultSize

@@ -38,7 +38,7 @@ private final class VerticalOnlyScrollView: NSScrollView {
 
 @MainActor
 private final class MessageActionOverlayButton: NSButton {
-    var themePalette: HushThemePalette = HushColors.palette(for: .dark) {
+    var themePalette: HushThemePalette = HushColors.palette(for: .graphiteGlass) {
         didSet { updateVisualState() }
     }
 
@@ -201,7 +201,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     var rows: [RowModel] = []
     private var runtime: MessageRenderRuntime?
     private weak var container: AppContainer?
-    private var theme: AppTheme = .dark
+    private var theme: AppTheme = .graphiteGlass
     private var fontSettings: AppFontSettings = .default
     private var lastGeneration: UInt64?
     private var tailFollowState = TailFollowState()
@@ -1390,7 +1390,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
 }
 
 final class MessageBodyTextView: NSTextView {
-    var themePalette: HushThemePalette = HushColors.palette(for: .dark) {
+    var themePalette: HushThemePalette = HushColors.palette(for: .graphiteGlass) {
         didSet {
             codeBlockCopyButtons.forEach { $0.themePalette = themePalette }
             needsDisplay = true
@@ -1428,7 +1428,7 @@ final class MessageBodyTextView: NSTextView {
     }
 
     private final class CodeBlockCopyButton: NSButton {
-        var themePalette: HushThemePalette = HushColors.palette(for: .dark) {
+        var themePalette: HushThemePalette = HushColors.palette(for: .graphiteGlass) {
             didSet { updateVisualState() }
         }
 
@@ -1988,7 +1988,7 @@ final class MessageTableCellView: NSTableCellView {
     private var currentContentWidth: CGFloat = 0
     private var isShowingStreamingRichOutput = false
     private var currentBodyPresentationMode: BodyPresentationMode = .fullWidth
-    private var theme: AppTheme = .dark {
+    private var theme: AppTheme = .graphiteGlass {
         didSet {
             metaLabel.textColor = NSColor(palette.secondaryText)
             bodyTextView.themePalette = palette
@@ -2860,7 +2860,7 @@ final class MessageTableCellView: NSTableCellView {
         row: MessageTableView.RowModel,
         runtime: MessageRenderRuntime,
         availableWidth: CGFloat,
-        theme: AppTheme = .dark,
+        theme: AppTheme = .graphiteGlass,
         container: AppContainer?,
         owningTableView: NSTableView? = nil,
         rowIndex: Int? = nil,

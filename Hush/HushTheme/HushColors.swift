@@ -69,82 +69,14 @@ struct HushThemePalette {
 enum HushColors {
     static func palette(for theme: AppTheme) -> HushThemePalette {
         switch theme {
-        case .dark:
-            return darkPalette
         case .graphiteGlass:
             return graphiteGlassPalette
-        case .light:
-            return lightPalette
-        case .readPaper:
-            return readPaperPalette
+        case .lightGlass:
+            return lightGlassPalette
+        case .ivoryGlass:
+            return ivoryGlassPalette
         }
     }
-
-    private static let darkPalette = HushThemePalette(
-        rootBackground: Color(hex: 0x0B0D12),
-        sidebarBackground: Color(hex: 0x10141B),
-        workspaceChromeBackground: Color(hex: 0x11161E),
-        cardBackground: Color(hex: 0x171C26),
-        composerBackground: Color(hex: 0x121720),
-        composerEditorBackground: Color(hex: 0x363634),
-        separator: Color(hex: 0x323A47, opacity: 0.65),
-        subtleStroke: Color(hex: 0x445063, opacity: 0.58),
-        splitPaneEdgeStroke: Color(hex: 0x5A667B, opacity: 0.58),
-        splitPaneShadow: Color(hex: 0x000000, opacity: 0.30),
-        sidebarGlassTint: Color(hex: 0x183459, opacity: 0.22),
-        sidebarGlassStroke: Color(hex: 0xFFFFFF, opacity: 0.10),
-        sidebarGlassHighlight: Color(hex: 0xFFFFFF, opacity: 0.12),
-        sidebarGlassShadow: Color(hex: 0x000000, opacity: 0.28),
-        primaryText: Color(hex: 0xF5F7FB),
-        secondaryText: Color(hex: 0xC0C8D6),
-        tertiaryText: Color(hex: 0x8893A5),
-        accent: Color(hex: 0x5AA2FF),
-        accentMutedBackground: Color(hex: 0x183459, opacity: 0.80),
-        accentMutedStroke: Color(hex: 0x4D86CB, opacity: 0.85),
-        hoverFill: Color(hex: 0xFFFFFF, opacity: 0.06),
-        hoverStroke: Color(hex: 0xFFFFFF, opacity: 0.14),
-        selectionFill: Color(hex: 0xFFFFFF, opacity: 0.10),
-        selectionStroke: Color(hex: 0x7BAAF2, opacity: 0.42),
-        softFill: Color(hex: 0xFFFFFF, opacity: 0.05),
-        softFillStrong: Color(hex: 0xFFFFFF, opacity: 0.08),
-        primaryActionBackground: Color(hex: 0x5AA2FF),
-        primaryActionForeground: Color(hex: 0x07111F),
-        disabledActionBackground: Color(hex: 0xFFFFFF, opacity: 0.18),
-        disabledActionForeground: Color(hex: 0x000000, opacity: 0.38),
-        destructiveActionBackground: Color(hex: 0xE05C58),
-        destructiveActionForeground: Color(hex: 0xFFFFFF),
-        controlForeground: Color(hex: 0xE7ECF5),
-        controlForegroundMuted: Color(hex: 0xC5CFDE, opacity: 0.72),
-        debugOverlayBackground: Color(hex: 0x06080C, opacity: 0.70),
-        debugOverlayForeground: Color(hex: 0xF5F7FB),
-        errorText: Color(hex: 0xF28E8A),
-        successText: Color(hex: 0x63D08D),
-        badgeRunning: Color(hex: 0x63D08D),
-        badgeQueued: Color(hex: 0xE0A24A),
-        badgeUnread: Color(hex: 0x5AA2FF),
-        userBubble: Color(hex: 0x204C81, opacity: 0.58),
-        userBubbleStroke: Color(hex: 0x5AA2FF, opacity: 0.46),
-        toolBubble: Color(hex: 0x6B4C22, opacity: 0.36),
-        toolBubbleStroke: Color(hex: 0xC58E49, opacity: 0.40),
-        systemBubble: Color(hex: 0x7F8CA0, opacity: 0.18),
-        systemBubbleStroke: Color(hex: 0xE0E6F1, opacity: 0.18),
-        markdownBody: Color(hex: 0xE8ECF3),
-        markdownHeading: Color(hex: 0xF8FAFD),
-        markdownCode: Color(hex: 0xD9E5FA),
-        markdownCodeBackground: Color(hex: 0x202937),
-        markdownLink: Color(hex: 0x7CB8FF),
-        markdownBlockquote: Color(hex: 0xAFB8C6),
-        markdownBlockquoteBar: Color(hex: 0x546072),
-        markdownMathFallback: Color(hex: 0x9BC2FF),
-        markdownTableHeader: Color(hex: 0xF4F7FB),
-        markdownTableBorder: Color(hex: 0x505C6E),
-        codeBlockBackground: Color(hex: 0x1A2230),
-        codeBlockBorder: Color(hex: 0x3E495B),
-        codeBlockSeparator: Color(hex: 0x455165),
-        composerShellTop: Color(hex: 0x363634),
-        composerShellBottom: Color(hex: 0x363634),
-        composerShellStroke: Color(hex: 0xFFFFFF, opacity: 0.14)
-    )
 
     private static let graphiteGlassPalette = HushThemePalette(
         rootBackground: Color(hex: 0x2E2F31),
@@ -212,21 +144,21 @@ enum HushColors {
         composerShellStroke: Color(hex: 0xFFFFFF, opacity: 0.14)
     )
 
-    private static let lightPalette = HushThemePalette(
-        rootBackground: Color(hex: 0xF5F7FB),
-        sidebarBackground: Color(hex: 0xEDF2F7),
+    private static let lightGlassPalette = HushThemePalette(
+        rootBackground: Color(hex: 0xEEF3F8),
+        sidebarBackground: Color(hex: 0xF8FBFF, opacity: 0.52),
         workspaceChromeBackground: Color(hex: 0xF7FAFD),
-        cardBackground: Color(hex: 0xFFFFFF),
-        composerBackground: Color(hex: 0xFFFFFF),
-        composerEditorBackground: Color(hex: 0xF6F9FC),
-        separator: Color(hex: 0xDCE3EC),
-        subtleStroke: Color(hex: 0xD2DAE6),
-        splitPaneEdgeStroke: Color(hex: 0xC6D1DE),
+        cardBackground: Color(hex: 0xFFFFFF, opacity: 0.86),
+        composerBackground: Color(hex: 0xFFFFFF, opacity: 0.80),
+        composerEditorBackground: Color(hex: 0xF8FBFF),
+        separator: Color(hex: 0xD6DEE9, opacity: 0.84),
+        subtleStroke: Color(hex: 0xD4DDEA, opacity: 0.90),
+        splitPaneEdgeStroke: Color(hex: 0xC9D4E2),
         splitPaneShadow: Color(hex: 0x081120, opacity: 0.08),
-        sidebarGlassTint: Color(hex: 0xFFFFFF, opacity: 0.00),
-        sidebarGlassStroke: Color(hex: 0xD7E0EB),
-        sidebarGlassHighlight: Color(hex: 0xFFFFFF, opacity: 0.48),
-        sidebarGlassShadow: Color(hex: 0x081120, opacity: 0.08),
+        sidebarGlassTint: Color(hex: 0xCFE0F5, opacity: 0.26),
+        sidebarGlassStroke: Color(hex: 0xFFFFFF, opacity: 0.72),
+        sidebarGlassHighlight: Color(hex: 0xFFFFFF, opacity: 0.74),
+        sidebarGlassShadow: Color(hex: 0x334865, opacity: 0.10),
         primaryText: Color(hex: 0x172033),
         secondaryText: Color(hex: 0x5B677B),
         tertiaryText: Color(hex: 0x8B96A8),
@@ -235,10 +167,10 @@ enum HushColors {
         accentMutedStroke: Color(hex: 0xB9CEFF),
         hoverFill: Color(hex: 0x1A2538, opacity: 0.04),
         hoverStroke: Color(hex: 0x42506A, opacity: 0.12),
-        selectionFill: Color(hex: 0xDCE8FF),
+        selectionFill: Color(hex: 0xDCE8FF, opacity: 0.82),
         selectionStroke: Color(hex: 0x9CB9F7),
-        softFill: Color(hex: 0x182339, opacity: 0.04),
-        softFillStrong: Color(hex: 0x182339, opacity: 0.07),
+        softFill: Color(hex: 0x182339, opacity: 0.035),
+        softFillStrong: Color(hex: 0x182339, opacity: 0.06),
         primaryActionBackground: Color(hex: 0x2E6FEA),
         primaryActionForeground: Color(hex: 0xFFFFFF),
         disabledActionBackground: Color(hex: 0xD7DEE8),
@@ -273,26 +205,26 @@ enum HushColors {
         codeBlockBackground: Color(hex: 0xF3F7FB),
         codeBlockBorder: Color(hex: 0xD8E0EA),
         codeBlockSeparator: Color(hex: 0xD3DCE7),
-        composerShellTop: Color(hex: 0xFFFFFF),
-        composerShellBottom: Color(hex: 0xF4F7FB),
-        composerShellStroke: Color(hex: 0xD7E0EB)
+        composerShellTop: Color(hex: 0xFFFFFF, opacity: 0.96),
+        composerShellBottom: Color(hex: 0xEEF4FB, opacity: 0.92),
+        composerShellStroke: Color(hex: 0xD6E0EC)
     )
 
-    private static let readPaperPalette = HushThemePalette(
-        rootBackground: Color(hex: 0xF4EFE6),
-        sidebarBackground: Color(hex: 0xECE4D7),
-        workspaceChromeBackground: Color(hex: 0xF2EBDD),
-        cardBackground: Color(hex: 0xFAF5EC),
-        composerBackground: Color(hex: 0xF8F1E5),
+    private static let ivoryGlassPalette = HushThemePalette(
+        rootBackground: Color(hex: 0xF4EEE3),
+        sidebarBackground: Color(hex: 0xFBF4E9, opacity: 0.56),
+        workspaceChromeBackground: Color(hex: 0xF7F0E4),
+        cardBackground: Color(hex: 0xFFF9F0, opacity: 0.88),
+        composerBackground: Color(hex: 0xFCF5EA, opacity: 0.82),
         composerEditorBackground: Color(hex: 0xFFFDF8),
-        separator: Color(hex: 0xD9CFBE),
-        subtleStroke: Color(hex: 0xD1C5B1),
-        splitPaneEdgeStroke: Color(hex: 0xC5B8A3),
+        separator: Color(hex: 0xD8CCBA, opacity: 0.86),
+        subtleStroke: Color(hex: 0xD8CBB9, opacity: 0.92),
+        splitPaneEdgeStroke: Color(hex: 0xD0C1AE),
         splitPaneShadow: Color(hex: 0x6A543A, opacity: 0.10),
-        sidebarGlassTint: Color(hex: 0xFFFFFF, opacity: 0.00),
-        sidebarGlassStroke: Color(hex: 0xE2D7C8),
-        sidebarGlassHighlight: Color(hex: 0xFFF9F0, opacity: 0.42),
-        sidebarGlassShadow: Color(hex: 0x6A543A, opacity: 0.10),
+        sidebarGlassTint: Color(hex: 0xF0DDC3, opacity: 0.28),
+        sidebarGlassStroke: Color(hex: 0xFFF8EE, opacity: 0.70),
+        sidebarGlassHighlight: Color(hex: 0xFFFDF8, opacity: 0.72),
+        sidebarGlassShadow: Color(hex: 0x7D6548, opacity: 0.12),
         primaryText: Color(hex: 0x2D2822),
         secondaryText: Color(hex: 0x6A6156),
         tertiaryText: Color(hex: 0x94897C),
@@ -301,10 +233,10 @@ enum HushColors {
         accentMutedStroke: Color(hex: 0xE1BE98),
         hoverFill: Color(hex: 0x5F4A31, opacity: 0.05),
         hoverStroke: Color(hex: 0x8B7257, opacity: 0.16),
-        selectionFill: Color(hex: 0xE9DAC7),
+        selectionFill: Color(hex: 0xE9DAC7, opacity: 0.84),
         selectionStroke: Color(hex: 0xD0AF8A),
-        softFill: Color(hex: 0x6A543B, opacity: 0.05),
-        softFillStrong: Color(hex: 0x6A543B, opacity: 0.08),
+        softFill: Color(hex: 0x6A543B, opacity: 0.04),
+        softFillStrong: Color(hex: 0x6A543B, opacity: 0.065),
         primaryActionBackground: Color(hex: 0xC67843),
         primaryActionForeground: Color(hex: 0xFFF8F1),
         disabledActionBackground: Color(hex: 0xDDD4C7),
@@ -339,9 +271,9 @@ enum HushColors {
         codeBlockBackground: Color(hex: 0xF0E6D8),
         codeBlockBorder: Color(hex: 0xD7C8B4),
         codeBlockSeparator: Color(hex: 0xD2C4B1),
-        composerShellTop: Color(hex: 0xFBF5EB),
-        composerShellBottom: Color(hex: 0xF4ECDF),
-        composerShellStroke: Color(hex: 0xD8CCBB)
+        composerShellTop: Color(hex: 0xFFF9F1, opacity: 0.97),
+        composerShellBottom: Color(hex: 0xF5ECE0, opacity: 0.93),
+        composerShellStroke: Color(hex: 0xDCCFBE)
     )
 }
 

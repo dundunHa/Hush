@@ -712,7 +712,7 @@ private struct AgentPresetRow: View {
         }
         .padding(HushSpacing.lg)
         .frame(width: 600)
-        .background(HushColors.palette(for: .dark).rootBackground)
+        .background(HushColors.palette(for: .graphiteGlass).rootBackground)
     }
 
 #endif

@@ -106,12 +106,7 @@ struct RootView: View {
     }
 
     private func preferredScheme(forTheme theme: AppTheme) -> ColorScheme {
-        switch theme {
-        case .dark, .graphiteGlass:
-            return .dark
-        case .light, .readPaper:
-            return .light
-        }
+        theme.usesDarkAppearance ? .dark : .light
     }
 }
 
