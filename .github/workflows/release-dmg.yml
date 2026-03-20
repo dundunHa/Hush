@@ -1,0 +1,162 @@
+name: Release DMG
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "*"
+    tags-ignore:
+      - main-latest
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-dmg-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-dmg:
+    name: Build and publish DMG
+    runs-on: macos-15
+    env:
+      DERIVED_DATA: /tmp/hush-dd
+      SPM_DIR: /tmp/hush-spm
+      ROLLING_RELEASE_TAG: main-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run unit tests
+        run: make test
+
+      - name: Build DMG
+        run: make release
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          marketing_version="$(awk -F '=' '/^[[:space:]]*MARKETING_VERSION[[:space:]]*=/{gsub(/[[:space:]]/, "", $2); print $2}' Config/Versions.xcconfig)"
+          build_version="$(awk -F '=' '/^[[:space:]]*CURRENT_PROJECT_VERSION[[:space:]]*=/{gsub(/[[:space:]]/, "", $2); print $2}' Config/Versions.xcconfig)"
+          dmg_name="Hush-${marketing_version}-${build_version}.dmg"
+          dmg_path="build/release/${dmg_name}"
+
+          if [[ ! -f "${dmg_path}" ]]; then
+            echo "Expected DMG not found: ${dmg_path}" >&2
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            release_tag="${GITHUB_REF_NAME}"
+            release_name="Hush ${GITHUB_REF_NAME}"
+            prerelease=false
+            trigger_label="tag"
+          else
+            release_tag="${ROLLING_RELEASE_TAG}"
+            release_name="Hush main latest"
+            prerelease=true
+            trigger_label="main"
+          fi
+
+          echo "marketing_version=${marketing_version}" >> "${GITHUB_OUTPUT}"
+          echo "build_version=${build_version}" >> "${GITHUB_OUTPUT}"
+          echo "dmg_name=${dmg_name}" >> "${GITHUB_OUTPUT}"
+          echo "dmg_path=${dmg_path}" >> "${GITHUB_OUTPUT}"
+          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+          echo "release_name=${release_name}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
+          echo "trigger_label=${trigger_label}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.dmg_name }}
+          path: ${{ steps.meta.outputs.dmg_path }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Move rolling prerelease tag
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "${ROLLING_RELEASE_TAG}" "${GITHUB_SHA}"
+          git push origin "refs/tags/${ROLLING_RELEASE_TAG}" --force
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+          RELEASE_NAME: ${{ steps.meta.outputs.release_name }}
+          PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+          DMG_NAME: ${{ steps.meta.outputs.dmg_name }}
+          DMG_PATH: ${{ steps.meta.outputs.dmg_path }}
+          MARKETING_VERSION: ${{ steps.meta.outputs.marketing_version }}
+          BUILD_VERSION: ${{ steps.meta.outputs.build_version }}
+          TRIGGER_LABEL: ${{ steps.meta.outputs.trigger_label }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_notes_path="${RUNNER_TEMP}/release-notes.md"
+          commit_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            cat > "${release_notes_path}" <<EOF
+          Automated DMG release for tag \`${GITHUB_REF_NAME}\`.
+
+          - Trigger: tag push
+          - Marketing version: \`${MARKETING_VERSION}\`
+          - Build version: \`${BUILD_VERSION}\`
+          - Commit: [\`${GITHUB_SHA}\`](${commit_url})
+          EOF
+          else
+            cat > "${release_notes_path}" <<EOF
+          Automated rolling DMG prerelease for the latest \`main\` commit.
+
+          - Trigger: main push
+          - Rolling tag: \`${RELEASE_TAG}\`
+          - Marketing version: \`${MARKETING_VERSION}\`
+          - Build version: \`${BUILD_VERSION}\`
+          - Commit: [\`${GITHUB_SHA}\`](${commit_url})
+          EOF
+          fi
+
+          release_body="$(cat "${release_notes_path}")"
+          encoded_tag="$(jq -rn --arg value "${RELEASE_TAG}" '$value|@uri')"
+
+          if release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${encoded_tag}" 2>/dev/null)"; then
+            release_id="$(jq -r '.id' <<< "${release_json}")"
+            gh api \
+              --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+              --raw-field tag_name="${RELEASE_TAG}" \
+              --raw-field target_commitish="${GITHUB_SHA}" \
+              --raw-field name="${RELEASE_NAME}" \
+              --raw-field body="${release_body}" \
+              --field draft=false \
+              --field prerelease="${PRERELEASE}" \
+              --silent
+          else
+            gh api \
+              --method POST \
+              "repos/${GITHUB_REPOSITORY}/releases" \
+              --raw-field tag_name="${RELEASE_TAG}" \
+              --raw-field target_commitish="${GITHUB_SHA}" \
+              --raw-field name="${RELEASE_NAME}" \
+              --raw-field body="${release_body}" \
+              --field draft=false \
+              --field prerelease="${PRERELEASE}" \
+              --silent
+          fi
+
+          gh release upload "${RELEASE_TAG}" "${DMG_PATH}" --clobber

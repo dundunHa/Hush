@@ -43,6 +43,21 @@ ls build/release
 - 从互联网下载的 DMG 在 macOS 上仍可能被 Gatekeeper 标记为未验证应用；预期路径是用户可通过“右键打开”或“系统设置 → Privacy & Security → Open Anyway”继续。
 - 若希望用户下载后直接正常打开、不出现风险提示，仍需要 Developer ID 签名 + notarization。
 
+### GitHub Actions 自动发布
+
+- `.github/workflows/release-dmg.yml` 会复用 `make release`，不会单独维护另一套打包逻辑。
+- push 到 `master` 时，workflow 会：
+  - 跑 `make test`
+  - 构建 DMG
+  - 上传 workflow artifact
+  - 更新滚动预发布 `master-latest`，覆盖同名 DMG 资产
+- push 任意 tag 时，workflow 会：
+  - 跑 `make test`
+  - 构建 DMG
+  - 创建或更新对应 tag 的 GitHub release
+  - 上传当前 DMG 作为 release asset
+- CI 侧仍以 `Config/Versions.xcconfig` 为版本真相源，DMG 命名规则与本地 `make release` 保持一致。
+
 ## 目录结构
 
 ```text

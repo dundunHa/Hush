@@ -37,7 +37,8 @@ public struct ProviderConfiguration: Identifiable, Codable, Equatable, Sendable 
     /// Legacy credential reference retained for compatibility with older stored data.
     public var credentialRef: String?
 
-    /// IDs of models the user has pinned/favorited for quick access.
+    /// Persisted subset of provider models that should remain visible in picker UIs.
+    /// The field name is retained for backward compatibility with existing storage.
     public var pinnedModelIDs: [String]
 
     // MARK: - CodingKeys

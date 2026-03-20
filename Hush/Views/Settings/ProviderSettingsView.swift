@@ -44,11 +44,136 @@ private struct ProviderCatalogDraftSignature: Equatable {
     let normalizedEndpoint: String
 }
 
+enum ProviderCatalogSelectionLogic {
+    static func filteredModels(
+        _ models: [ModelDescriptor],
+        searchText: String
+    ) -> [ModelDescriptor] {
+        let trimmedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSearch.isEmpty else { return models }
+        return models.filter { model in
+            model.id.localizedCaseInsensitiveContains(trimmedSearch)
+                || model.displayName.localizedCaseInsensitiveContains(trimmedSearch)
+        }
+    }
+
+    static func selectedCatalogModelIDs(
+        from storedModelIDs: [String],
+        catalogModels: [ModelDescriptor]
+    ) -> [String] {
+        let storedSelection = Set(normalizedModelIDs(storedModelIDs))
+        return catalogModels.map(\.id).filter(storedSelection.contains)
+    }
+
+    static func selectingAllFilteredModels(
+        currentSelection: [String],
+        filteredModelIDs: [String]
+    ) -> [String] {
+        normalizedModelIDs(currentSelection + filteredModelIDs)
+    }
+
+    static func clearingCatalogSelection(
+        currentSelection: [String],
+        catalogModelIDs: [String]
+    ) -> [String] {
+        let catalogModelSet = Set(catalogModelIDs)
+        return normalizedModelIDs(currentSelection.filter { !catalogModelSet.contains($0) })
+    }
+
+    static func defaultModelAfterCatalogSelectionChange(
+        currentDefaultModelID: String,
+        selectedCatalogModelIDs: [String],
+        catalogModelIDs: [String]
+    ) -> String {
+        let normalizedDefault = currentDefaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedDefault.isEmpty else { return "" }
+
+        let catalogModelSet = Set(catalogModelIDs)
+        guard catalogModelSet.contains(normalizedDefault) else {
+            return normalizedDefault
+        }
+
+        return selectedCatalogModelIDs.contains(normalizedDefault) ? normalizedDefault : ""
+    }
+
+    static func isManualDefaultModelID(
+        _ modelID: String,
+        catalogModelIDs: [String]
+    ) -> Bool {
+        let normalizedDefault = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedDefault.isEmpty else { return false }
+        return !Set(catalogModelIDs).contains(normalizedDefault)
+    }
+
+    static func normalizedModelIDs(_ modelIDs: [String]) -> [String] {
+        var uniqueIDs: [String] = []
+        for rawID in modelIDs {
+            let trimmed = rawID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            guard !uniqueIDs.contains(trimmed) else { continue }
+            uniqueIDs.append(trimmed)
+        }
+        return uniqueIDs
+    }
+}
+
+private enum ProviderEditorTarget: Equatable {
+    case existing(String)
+    case new
+
+    var providerID: String? {
+        switch self {
+        case let .existing(providerID):
+            return providerID
+        case .new:
+            return nil
+        }
+    }
+}
+
+private struct ProviderEditorSelectionRequest: Equatable {
+    let target: ProviderEditorTarget
+    let reloadIfSame: Bool
+}
+
+private struct ProviderEditorSnapshot: Equatable {
+    let name: String
+    let type: ProviderType
+    let endpoint: String
+    let defaultModelID: String
+    let pinnedModelIDs: [String]
+    let isEnabled: Bool
+    let hasStoredCredential: Bool
+}
+
+private struct ProviderEditorBaseline: Equatable {
+    let target: ProviderEditorTarget
+    let name: String
+    let type: ProviderType
+    let endpoint: String
+    let defaultModelID: String
+    let pinnedModelIDs: [String]
+    let isEnabled: Bool
+    let hasStoredCredential: Bool
+}
+
+private enum ProviderSettingsLayout {
+    static let wideThreshold: CGFloat = 980
+    static let listPaneMinWidth: CGFloat = 320
+    static let listPaneMaxWidth: CGFloat = 380
+    static let listPaneWidthFraction: CGFloat = 0.28
+    static let compactListMaxHeight: CGFloat = 280
+    static let paneCornerRadius: CGFloat = 22
+}
+
 struct ProviderSettingsView: View {
     @EnvironmentObject private var container: AppContainer
     @Environment(\.hushThemePalette) private var palette
 
-    @State private var editingProviderID: String?
+    @State private var selectedTarget: ProviderEditorTarget?
+    @State private var editorBaseline: ProviderEditorBaseline?
+    @State private var pendingSelectionRequest: ProviderEditorSelectionRequest?
+
     @State private var providerName: String = ""
     @State private var providerType: ProviderType = .openAI
     @State private var endpoint: String = OpenAIProvider.defaultEndpoint
@@ -61,16 +186,25 @@ struct ProviderSettingsView: View {
     @State private var saveMessage: String = ""
     @State private var saveFailed: Bool = false
     @State private var showDeleteConfirmation: Bool = false
+    @State private var showDiscardChangesConfirmation: Bool = false
     @State private var setAsDefault: Bool = false
     @State private var modelSearchText: String = ""
     @State private var draftCatalogModels: [ModelDescriptor] = []
     @State private var draftCatalogError: String?
     @State private var draftCatalogSignature: ProviderCatalogDraftSignature?
     @State private var isDraftCatalogRefreshing: Bool = false
-    @State private var prefersManualDefaultModelEntry: Bool = false
+    @State private var isAdvancedSectionExpanded: Bool = false
 
     private var isCreatingNew: Bool {
-        editingProviderID == "__new__"
+        selectedTarget == .new
+    }
+
+    private var selectedProviderID: String? {
+        selectedTarget?.providerID
+    }
+
+    private var providerIDs: [String] {
+        providers.map(\.id)
     }
 
     private var providers: [ProviderConfiguration] {
@@ -100,15 +234,55 @@ struct ProviderSettingsView: View {
     }
 
     var body: some View {
-        providerListPane
-            .sheet(isPresented: Binding(
-                get: { editingProviderID != nil },
-                set: { if !$0 { editingProviderID = nil } }
-            )) {
-                if let providerID = editingProviderID {
-                    providerDetailSheet(providerID: providerID)
+        GeometryReader { proxy in
+            let isWideLayout = proxy.size.width >= ProviderSettingsLayout.wideThreshold
+            let listPaneWidth = min(
+                max(
+                    proxy.size.width * ProviderSettingsLayout.listPaneWidthFraction,
+                    ProviderSettingsLayout.listPaneMinWidth
+                ),
+                ProviderSettingsLayout.listPaneMaxWidth
+            )
+
+            Group {
+                if isWideLayout {
+                    HStack(alignment: .top, spacing: HushSpacing.xl) {
+                        providerListPanel
+                            .frame(width: listPaneWidth)
+
+                        detailPane
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: HushSpacing.lg) {
+                        providerListPanel
+                            .frame(maxWidth: .infinity)
+                            .frame(maxHeight: ProviderSettingsLayout.compactListMaxHeight)
+
+                        detailPane
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
             }
+            .padding(HushSpacing.xl)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .onAppear {
+            ensureInitialSelection()
+        }
+        .onChange(of: providerIDs) { _, _ in
+            reconcileSelectionAfterProviderListChange()
+        }
+        .alert("Discard unsaved changes?", isPresented: $showDiscardChangesConfirmation) {
+            Button("Cancel", role: .cancel) {
+                pendingSelectionRequest = nil
+            }
+            Button("Discard Changes", role: .destructive) {
+                discardUnsavedChangesAndContinue()
+            }
+        } message: {
+            Text("Your current provider edits have not been saved.")
+        }
     }
 
     // MARK: - Helpers
@@ -154,14 +328,7 @@ struct ProviderSettingsView: View {
     }
 
     private func normalizedModelIDs(_ modelIDs: [String]) -> [String] {
-        var uniqueIDs: [String] = []
-        for rawID in modelIDs {
-            let trimmed = rawID.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            guard !uniqueIDs.contains(trimmed) else { continue }
-            uniqueIDs.append(trimmed)
-        }
-        return uniqueIDs
+        ProviderCatalogSelectionLogic.normalizedModelIDs(modelIDs)
     }
 
     private func currentCatalogDraftSignature() -> ProviderCatalogDraftSignature {
@@ -173,6 +340,15 @@ struct ProviderSettingsView: View {
 
     private func persistedConfig(for providerID: String) -> ProviderConfiguration? {
         container.settings.providerConfigurations.first(where: { $0.id == providerID })
+    }
+
+    private func editorProviderID(for target: ProviderEditorTarget) -> String {
+        switch target {
+        case let .existing(providerID):
+            return providerID
+        case .new:
+            return "__new__"
+        }
     }
 
     private func usesDraftRefresh(for providerID: String) -> Bool {
@@ -221,6 +397,75 @@ struct ProviderSettingsView: View {
         provider.defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var normalizedDraftDefaultModelID: String {
+        defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func filteredCatalogModels(_ models: [ModelDescriptor]) -> [ModelDescriptor] {
+        ProviderCatalogSelectionLogic.filteredModels(models, searchText: modelSearchText)
+    }
+
+    private func selectedCatalogModelIDs(for models: [ModelDescriptor]) -> [String] {
+        ProviderCatalogSelectionLogic.selectedCatalogModelIDs(
+            from: pinnedModelIDs,
+            catalogModels: models
+        )
+    }
+
+    private func catalogDefaultSelection(for models: [ModelDescriptor]) -> String {
+        let selectedModelIDs = selectedCatalogModelIDs(for: models)
+        return selectedModelIDs.contains(normalizedDraftDefaultModelID) ? normalizedDraftDefaultModelID : ""
+    }
+
+    private func isUsingManualDefaultModelID(for models: [ModelDescriptor]) -> Bool {
+        ProviderCatalogSelectionLogic.isManualDefaultModelID(
+            normalizedDraftDefaultModelID,
+            catalogModelIDs: models.map(\.id)
+        )
+    }
+
+    private func applyCatalogSelection(_ selectedModelIDs: [String], allModels: [ModelDescriptor]) {
+        let normalizedSelection = normalizedModelIDs(selectedModelIDs)
+        let reconciledDefaultModelID = ProviderCatalogSelectionLogic.defaultModelAfterCatalogSelectionChange(
+            currentDefaultModelID: normalizedDraftDefaultModelID,
+            selectedCatalogModelIDs: normalizedSelection,
+            catalogModelIDs: allModels.map(\.id)
+        )
+
+        pinnedModelIDs = normalizedSelection
+        defaultModelID = reconciledDefaultModelID
+    }
+
+    private func toggleSelectedCatalogModel(_ modelID: String, allModels: [ModelDescriptor]) {
+        let currentSelection = selectedCatalogModelIDs(for: allModels)
+        let nextSelection: [String]
+        if currentSelection.contains(modelID) {
+            nextSelection = currentSelection.filter { $0 != modelID }
+        } else {
+            nextSelection = currentSelection + [modelID]
+        }
+        applyCatalogSelection(nextSelection, allModels: allModels)
+    }
+
+    private func selectAllFilteredCatalogModels(
+        filteredModels: [ModelDescriptor],
+        allModels: [ModelDescriptor]
+    ) {
+        let nextSelection = ProviderCatalogSelectionLogic.selectingAllFilteredModels(
+            currentSelection: selectedCatalogModelIDs(for: allModels),
+            filteredModelIDs: filteredModels.map(\.id)
+        )
+        applyCatalogSelection(nextSelection, allModels: allModels)
+    }
+
+    private func clearSelectedCatalogModels(_ allModels: [ModelDescriptor]) {
+        let nextSelection = ProviderCatalogSelectionLogic.clearingCatalogSelection(
+            currentSelection: selectedCatalogModelIDs(for: allModels),
+            catalogModelIDs: allModels.map(\.id)
+        )
+        applyCatalogSelection(nextSelection, allModels: allModels)
+    }
+
     private func providerHasCredential(_ provider: ProviderConfiguration) -> Bool {
         provider.hasPersistedAPIKey
     }
@@ -257,71 +502,198 @@ struct ProviderSettingsView: View {
         return nil
     }
 
-    private func openProviderSettings(providerID: String) {
-        loadSnapshotForProvider(providerID)
-        editingProviderID = providerID
+    private var preferredInitialTarget: ProviderEditorTarget? {
+        if providers.contains(where: { $0.id == container.settings.selectedProviderID }) {
+            return .existing(container.settings.selectedProviderID)
+        }
+        if let provider = providers.first {
+            return .existing(provider.id)
+        }
+        return nil
     }
 
-    private func startNewProviderDraft(type: ProviderType) {
-        loadDefaultsForNewProvider(type: type)
-        editingProviderID = "__new__"
+    private func makeSelectionRequest(
+        target: ProviderEditorTarget,
+        reloadIfSame: Bool = false
+    ) -> ProviderEditorSelectionRequest {
+        ProviderEditorSelectionRequest(target: target, reloadIfSame: reloadIfSame)
     }
 
-    // MARK: - Provider List
-
-    private var providerListPane: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: HushSpacing.lg) {
-                HStack {
-                    Text("Providers")
-                        .font(HushTypography.pageTitle)
-                    Spacer()
-
-                    Button {
-                        startNewProviderDraft(type: .openAI)
-                    } label: {
-                        Label("New", systemImage: "plus")
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-
-                Text("Set the app default here after a provider has an API key and a default model.")
-                    .font(HushTypography.footnote)
-                    .foregroundStyle(palette.secondaryText)
-
-                VStack(spacing: HushSpacing.sm) {
-                    ForEach(providers) { provider in
-                        providerListRow(provider)
-                    }
-                }
+    private func snapshotForTarget(_ target: ProviderEditorTarget) -> ProviderEditorSnapshot? {
+        switch target {
+        case .new:
+            return ProviderEditorSnapshot(
+                name: defaultNewProviderName(for: .openAI),
+                type: .openAI,
+                endpoint: defaultEndpointPlaceholder(for: .openAI),
+                defaultModelID: "",
+                pinnedModelIDs: [],
+                isEnabled: true,
+                hasStoredCredential: false
+            )
+        case let .existing(providerID):
+            if providerID == OpenAISettingsInput.providerID {
+                let snapshot = container.openAISettingsSnapshot()
+                let config = container.settings.providerConfigurations.first(where: { $0.id == providerID })
+                return ProviderEditorSnapshot(
+                    name: config?.name ?? "OpenAI",
+                    type: .openAI,
+                    endpoint: snapshot.endpoint,
+                    defaultModelID: snapshot.defaultModelID,
+                    pinnedModelIDs: config?.pinnedModelIDs ?? [],
+                    isEnabled: snapshot.isEnabled,
+                    hasStoredCredential: snapshot.hasCredential
+                )
             }
-            .settingsCenteredContentColumn()
+
+            guard let config = container.settings.providerConfigurations.first(where: { $0.id == providerID }) else {
+                return nil
+            }
+            return ProviderEditorSnapshot(
+                name: config.name,
+                type: config.type,
+                endpoint: config.endpoint,
+                defaultModelID: config.defaultModelID,
+                pinnedModelIDs: config.pinnedModelIDs,
+                isEnabled: config.isEnabled,
+                hasStoredCredential: config.hasPersistedAPIKey
+            )
         }
     }
 
-    private func providerListRow(_ provider: ProviderConfiguration) -> some View {
-        ProviderListRowView(
-            provider: provider,
-            isDefault: container.settings.selectedProviderID == provider.id,
-            isBuiltIn: provider.id == OpenAISettingsInput.providerID,
-            subtitle: providerStatusText(provider),
-            badgeText: providerBadgeText(provider),
-            canSetDefault: canSetProviderAsDefault(provider),
-            icon: providerIcon(for: provider.type),
-            accent: providerAccent(for: provider.type)
-        ) {
-            openProviderSettings(providerID: provider.id)
-        } onSetDefault: {
-            container.setDefaultProvider(id: provider.id)
+    private func baseline(for snapshot: ProviderEditorSnapshot, target: ProviderEditorTarget) -> ProviderEditorBaseline {
+        ProviderEditorBaseline(
+            target: target,
+            name: snapshot.name,
+            type: snapshot.type,
+            endpoint: snapshot.endpoint,
+            defaultModelID: snapshot.defaultModelID,
+            pinnedModelIDs: snapshot.pinnedModelIDs,
+            isEnabled: snapshot.isEnabled,
+            hasStoredCredential: snapshot.hasStoredCredential
+        )
+    }
+
+    private func applySnapshot(
+        _ snapshot: ProviderEditorSnapshot,
+        target: ProviderEditorTarget,
+        preserveFeedback: Bool = false
+    ) {
+        selectedTarget = target
+        providerName = snapshot.name
+        providerType = snapshot.type
+        endpoint = snapshot.endpoint
+        defaultModelID = snapshot.defaultModelID
+        pinnedModelIDs = snapshot.pinnedModelIDs
+        isEnabled = snapshot.isEnabled
+        hasStoredCredential = snapshot.hasStoredCredential
+        editorBaseline = baseline(for: snapshot, target: target)
+        modelSearchText = ""
+        isAdvancedSectionExpanded = false
+        resetEditState(preserveFeedback: preserveFeedback)
+    }
+
+    private func forceApplySelection(
+        _ request: ProviderEditorSelectionRequest,
+        preserveFeedback: Bool = false
+    ) {
+        guard request.reloadIfSame || request.target != selectedTarget || editorBaseline == nil else {
+            return
+        }
+        guard let snapshot = snapshotForTarget(request.target) else {
+            clearSelection()
+            return
+        }
+        applySnapshot(snapshot, target: request.target, preserveFeedback: preserveFeedback)
+    }
+
+    private func requestSelection(_ request: ProviderEditorSelectionRequest) {
+        guard request.reloadIfSame || request.target != selectedTarget else {
+            return
+        }
+
+        if hasUnsavedChanges {
+            pendingSelectionRequest = request
+            showDiscardChangesConfirmation = true
+            return
+        }
+
+        forceApplySelection(request)
+    }
+
+    private func ensureInitialSelection() {
+        guard selectedTarget == nil else { return }
+        guard let preferredInitialTarget else { return }
+        forceApplySelection(makeSelectionRequest(target: preferredInitialTarget))
+    }
+
+    private func reconcileSelectionAfterProviderListChange() {
+        guard let selectedTarget else {
+            ensureInitialSelection()
+            return
+        }
+
+        switch selectedTarget {
+        case .new:
+            return
+        case let .existing(providerID):
+            guard providers.contains(where: { $0.id == providerID }) else {
+                if let preferredInitialTarget {
+                    forceApplySelection(makeSelectionRequest(target: preferredInitialTarget))
+                } else {
+                    clearSelection()
+                }
+                return
+            }
         }
     }
 
-    // MARK: - Provider Detail Sheet
+    private func clearSelection() {
+        selectedTarget = nil
+        editorBaseline = nil
+        providerName = ""
+        providerType = .openAI
+        endpoint = OpenAIProvider.defaultEndpoint
+        defaultModelID = ""
+        pinnedModelIDs = []
+        isEnabled = false
+        hasStoredCredential = false
+        modelSearchText = ""
+        isAdvancedSectionExpanded = false
+        resetEditState()
+    }
 
-    private func providerDetailSheet(providerID: String) -> some View {
-        let config: ProviderConfiguration = isCreatingNew
-            ? ProviderConfiguration(
-                id: "__new__",
+    private var currentBaseline: ProviderEditorBaseline? {
+        guard let selectedTarget else { return nil }
+        return ProviderEditorBaseline(
+            target: selectedTarget,
+            name: providerName,
+            type: providerType,
+            endpoint: endpoint,
+            defaultModelID: defaultModelID,
+            pinnedModelIDs: pinnedModelIDs,
+            isEnabled: isEnabled,
+            hasStoredCredential: hasStoredCredential
+        )
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let currentBaseline, let editorBaseline else { return false }
+        guard currentBaseline == editorBaseline else { return true }
+        return !apiKeyToSave.isEmpty || setAsDefault
+    }
+
+    private func discardUnsavedChangesAndContinue() {
+        guard let pendingSelectionRequest else { return }
+        forceApplySelection(pendingSelectionRequest)
+        self.pendingSelectionRequest = nil
+    }
+
+    private func currentEditingConfiguration(for target: ProviderEditorTarget) -> ProviderConfiguration {
+        switch target {
+        case .new:
+            return ProviderConfiguration(
+                id: editorProviderID(for: target),
                 name: providerName,
                 type: providerType,
                 endpoint: endpoint,
@@ -330,27 +702,118 @@ struct ProviderSettingsView: View {
                 isEnabled: isEnabled,
                 pinnedModelIDs: pinnedModelIDs
             )
-            : providers.first(where: { $0.id == providerID })
-            ?? ProviderConfiguration(
-                id: providerID,
-                name: "",
-                type: .openAI,
-                endpoint: "",
-                apiKeyEnvironmentVariable: "",
-                defaultModelID: "",
-                isEnabled: false
-            )
+        case let .existing(providerID):
+            return providers.first(where: { $0.id == providerID })
+                ?? ProviderConfiguration(
+                    id: providerID,
+                    name: providerName,
+                    type: providerType,
+                    endpoint: endpoint,
+                    apiKeyEnvironmentVariable: "",
+                    defaultModelID: defaultModelID,
+                    isEnabled: isEnabled,
+                    pinnedModelIDs: pinnedModelIDs
+                )
+        }
+    }
+
+    // MARK: - Layout
+
+    private var providerListPanel: some View {
+        VStack(alignment: .leading, spacing: HushSpacing.md) {
+            HStack {
+                Text("Providers")
+                    .font(HushTypography.pageTitle)
+
+                Spacer()
+
+                Button {
+                    requestSelection(makeSelectionRequest(target: .new, reloadIfSame: true))
+                } label: {
+                    Label("New", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            Text("Set the app default here after a provider has an API key and a default model.")
+                .font(HushTypography.footnote)
+                .foregroundStyle(palette.secondaryText)
+
+            ScrollView {
+                VStack(spacing: HushSpacing.sm) {
+                    ForEach(providers) { provider in
+                        providerListRow(provider)
+                    }
+                }
+            }
+        }
+        .padding(HushSpacing.lg)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .cardStyle(
+            background: palette.cardBackground,
+            stroke: palette.subtleStroke
+        )
+    }
+
+    private func providerListRow(_ provider: ProviderConfiguration) -> some View {
+        ProviderListRowView(
+            provider: provider,
+            isSelected: selectedTarget == .existing(provider.id),
+            isDefault: container.settings.selectedProviderID == provider.id,
+            isBuiltIn: provider.id == OpenAISettingsInput.providerID,
+            subtitle: providerStatusText(provider),
+            badgeText: providerBadgeText(provider),
+            canSetDefault: canSetProviderAsDefault(provider),
+            icon: providerIcon(for: provider.type),
+            accent: providerAccent(for: provider.type)
+        ) {
+            requestSelection(makeSelectionRequest(target: .existing(provider.id)))
+        } onSetDefault: {
+            container.setDefaultProvider(id: provider.id)
+        }
+    }
+
+    private var detailPane: some View {
+        Group {
+            if let selectedTarget {
+                providerDetailPane(target: selectedTarget)
+            } else {
+                emptyDetailPane
+            }
+        }
+    }
+
+    private var emptyDetailPane: some View {
+        VStack(alignment: .leading, spacing: HushSpacing.md) {
+            Text("Select a provider")
+                .font(HushTypography.heading)
+                .foregroundStyle(palette.primaryText)
+
+            Text("Choose a provider from the list or create a new one to configure credentials, models, and defaults.")
+                .font(HushTypography.body)
+                .foregroundStyle(palette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(HushSpacing.xl)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(detailPaneBackground)
+    }
+
+    private func providerDetailPane(target: ProviderEditorTarget) -> some View {
+        let config = currentEditingConfiguration(for: target)
+        let providerID = editorProviderID(for: target)
 
         return VStack(spacing: 0) {
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: HushSpacing.lg) {
                     providerHeader(config)
-                    connectionSection(config)
-                    catalogRefreshSection(providerID: providerID)
+                    basicsSection(config)
+                    modelsSection(providerID: providerID)
+                    advancedSection
                 }
                 .padding(.horizontal, HushSpacing.xl)
             }
-            .contentMargins(.vertical, 40)
+            .contentMargins(.vertical, 32)
             .scrollBounceBehavior(.basedOnSize)
 
             Divider()
@@ -368,68 +831,103 @@ struct ProviderSettingsView: View {
             .padding(.horizontal, HushSpacing.xl)
             .padding(.vertical, HushSpacing.md)
         }
-        .frame(width: 580, height: 600)
-        .background(palette.rootBackground)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(detailPaneBackground)
+        .alert(Text(deleteConfirmationTitle), isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                deleteCurrentProvider()
+            }
+        } message: {
+            Text("This provider and its cached models will be removed.")
+        }
+    }
+
+    private var detailPaneBackground: some View {
+        RoundedRectangle(cornerRadius: ProviderSettingsLayout.paneCornerRadius, style: .continuous)
+            .fill(palette.rootBackground)
+            .overlay(
+                RoundedRectangle(cornerRadius: ProviderSettingsLayout.paneCornerRadius, style: .continuous)
+                    .stroke(palette.subtleStroke, lineWidth: 1)
+            )
     }
 
     private var isBuiltInProvider: Bool {
-        editingProviderID == OpenAISettingsInput.providerID
+        selectedProviderID == OpenAISettingsInput.providerID
     }
 
     private func providerHeader(_ config: ProviderConfiguration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: HushSpacing.sm) {
+        HStack(alignment: .center, spacing: HushSpacing.md) {
             Image(systemName: providerIcon(for: config.type))
                 .font(.system(size: 22))
                 .foregroundStyle(providerAccent(for: config.type))
 
-            if isBuiltInProvider {
-                Text("OpenAI")
+            VStack(alignment: .leading, spacing: 6) {
+                Text(isBuiltInProvider ? "OpenAI" : (providerName.isEmpty ? "New Provider" : providerName))
                     .font(HushTypography.pageTitle)
 
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(palette.secondaryText)
-                    .help("Built-in provider")
-            } else {
-                TextField("Provider Name", text: $providerName)
-                    .font(HushTypography.pageTitle)
-                    .textFieldStyle(.plain)
+                HStack(spacing: HushSpacing.xs) {
+                    if isBuiltInProvider {
+                        Label("Built-in", systemImage: "lock.fill")
+                            .font(HushTypography.caption)
+                            .foregroundStyle(palette.secondaryText)
+                    }
+
+                    if isCurrentDefault {
+                        Text("Default")
+                            .font(HushTypography.caption)
+                            .foregroundStyle(palette.accent)
+                            .padding(.horizontal, HushSpacing.sm)
+                            .padding(.vertical, 3)
+                            .background(palette.accentMutedBackground, in: Capsule())
+                    }
+                }
             }
+
+            Spacer()
         }
     }
 
-    private func connectionSection(_ config: ProviderConfiguration) -> some View {
+    private func basicsSection(_ config: ProviderConfiguration) -> some View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
-            Text("Connection")
-                .font(HushTypography.heading)
-                .foregroundStyle(palette.secondaryText)
+            HStack(alignment: .center) {
+                Text("Basics")
+                    .font(HushTypography.heading)
+                    .foregroundStyle(palette.secondaryText)
+
+                Spacer()
+
+                Toggle("Enabled", isOn: $isEnabled)
+                    .toggleStyle(.switch)
+            }
 
             VStack(alignment: .leading, spacing: HushSpacing.xs) {
-                Text("Protocol")
+                Text("Title")
                     .font(HushTypography.captionBold)
                     .foregroundStyle(palette.secondaryText)
 
-                Picker("Protocol", selection: $providerType) {
-                    ForEach(ProviderType.allCases) { type in
-                        Text(type.displayName).tag(type)
-                    }
+                if isBuiltInProvider {
+                    Text(config.name)
+                        .font(HushTypography.body)
+                        .foregroundStyle(palette.primaryText)
+                        .padding(.horizontal, HushSpacing.md)
+                        .padding(.vertical, HushSpacing.sm)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(palette.softFill)
+                        )
+                } else {
+                    TextField("Provider name", text: $providerName)
+                        .textFieldStyle(.roundedBorder)
                 }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .disabled(!isCreatingNew)
-
-                Text("Supports any OpenAI-compatible API endpoint.")
-                    .font(HushTypography.footnote)
-                    .foregroundStyle(palette.secondaryText)
             }
-
-            Toggle("Enabled", isOn: $isEnabled)
 
             VStack(alignment: .leading, spacing: HushSpacing.xs) {
                 Text("Endpoint")
                     .font(HushTypography.captionBold)
                     .foregroundStyle(palette.secondaryText)
+
                 TextField(defaultEndpointPlaceholder(for: config.type), text: $endpoint)
                     .textFieldStyle(.roundedBorder)
             }
@@ -438,6 +936,7 @@ struct ProviderSettingsView: View {
                 Text("API Key")
                     .font(HushTypography.captionBold)
                     .foregroundStyle(palette.secondaryText)
+
                 HStack(spacing: HushSpacing.xs) {
                     if isAPIKeyRevealed {
                         TextField("sk-...", text: $apiKey)
@@ -463,19 +962,6 @@ struct ProviderSettingsView: View {
                         .foregroundStyle(palette.secondaryText)
                 }
             }
-
-            HStack(alignment: .top, spacing: HushSpacing.sm) {
-                Image(systemName: "rectangle.stack.badge.person.crop")
-                    .foregroundStyle(palette.secondaryText)
-                Text(
-                    container.settings.selectedProviderID == config.id
-                        ? "This provider is currently the default. Change the default provider from the list on the left."
-                        : "Choose the default provider from the list after this provider has an API key and a default model."
-                )
-                .font(HushTypography.footnote)
-                .foregroundStyle(palette.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .padding(HushSpacing.lg)
         .cardStyle(
@@ -484,18 +970,26 @@ struct ProviderSettingsView: View {
         )
     }
 
-    // MARK: - Catalog Refresh
+    // MARK: - Models
 
-    private func catalogRefreshSection(providerID: String) -> some View {
+    private func modelsSection(providerID: String) -> some View {
         let hasPersistedProfile = persistedConfig(for: providerID) != nil
         let allModels = visibleCatalogModels(for: providerID)
+        let filteredModels = filteredCatalogModels(allModels)
+        let selectedModelIDs = selectedCatalogModelIDs(for: allModels)
         let isRefreshing = isCatalogRefreshing(for: providerID)
         let refreshError = visibleCatalogRefreshError(for: providerID)
         let isDraftSource = shouldDisplayDraftCatalog()
+        let hasFilteredModels = !filteredModels.isEmpty
+        let areAllFilteredModelsSelected = !filteredModels.isEmpty
+            && Set(filteredModels.map(\.id)).isSubset(of: Set(selectedModelIDs))
+        let defaultModelSelection = catalogDefaultSelection(for: allModels)
+        let usingManualDefaultModelID = isUsingManualDefaultModelID(for: allModels)
+        let selectedSummary = "\(selectedModelIDs.count) selected / \(allModels.count) available"
 
         return VStack(alignment: .leading, spacing: HushSpacing.md) {
             HStack {
-                Text("Model Catalog")
+                Text("Models")
                     .font(HushTypography.heading)
                     .foregroundStyle(palette.secondaryText)
 
@@ -515,32 +1009,70 @@ struct ProviderSettingsView: View {
                 .disabled(isRefreshing)
             }
 
-            HStack(spacing: HushSpacing.sm) {
-                Image(systemName: defaultModelID.isEmpty ? "target" : "checkmark.circle.fill")
-                    .foregroundStyle(defaultModelID.isEmpty ? palette.secondaryText : palette.successText)
+            VStack(alignment: .leading, spacing: HushSpacing.sm) {
+                HStack {
+                    Text("Default Model")
+                        .font(HushTypography.captionBold)
+                        .foregroundStyle(palette.secondaryText)
 
-                Text(
-                    defaultModelID.isEmpty
-                        ? "Choose one default model here before making this provider the app default."
-                        : "Default model: \(defaultModelID)"
-                )
-                .font(HushTypography.body)
-                .foregroundStyle(defaultModelID.isEmpty ? palette.secondaryText : .white)
-                .lineLimit(1)
+                    Spacer()
 
-                Spacer()
+                    Text(selectedSummary)
+                        .font(HushTypography.footnote)
+                        .foregroundStyle(palette.secondaryText)
+                }
 
-                if !defaultModelID.isEmpty {
-                    Button("Clear") {
-                        defaultModelID = ""
+                Picker(
+                    selectedModelIDs.isEmpty
+                        ? "Select models below first"
+                        : "Choose a default model",
+                    selection: Binding(
+                        get: { defaultModelSelection },
+                        set: { defaultModelID = $0 }
+                    )
+                ) {
+                    Text(selectedModelIDs.isEmpty ? "Select models below first" : "Choose a default model")
+                        .tag("")
+
+                    ForEach(selectedModelIDs, id: \.self) { modelID in
+                        Text(modelID).tag(modelID)
                     }
-                    .buttonStyle(.plain)
-                    .font(HushTypography.footnote)
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .disabled(selectedModelIDs.isEmpty)
+
+                if defaultModelSelection.isEmpty, !normalizedDraftDefaultModelID.isEmpty, usingManualDefaultModelID {
+                    HStack(spacing: HushSpacing.xs) {
+                        Image(systemName: "number.square")
+                            .foregroundStyle(palette.secondaryText)
+                        Text("Manual default model ID: \(normalizedDraftDefaultModelID)")
+                            .font(HushTypography.footnote)
+                            .foregroundStyle(palette.secondaryText)
+                    }
+                } else if normalizedDraftDefaultModelID.isEmpty {
+                    HStack(spacing: HushSpacing.xs) {
+                        Image(systemName: isEnabled ? "exclamationmark.triangle.fill" : "info.circle")
+                            .foregroundStyle(isEnabled ? palette.errorText : palette.secondaryText)
+                        Text(
+                            isEnabled
+                                ? "Enabled providers need a default model."
+                                : "Pick a default model from the selected models or enter one manually in Advanced."
+                        )
+                        .font(HushTypography.footnote)
+                        .foregroundStyle(isEnabled ? palette.errorText : palette.secondaryText)
+                    }
+                } else {
+                    HStack(spacing: HushSpacing.xs) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(palette.successText)
+                        Text("Default model: \(normalizedDraftDefaultModelID)")
+                            .font(HushTypography.footnote)
+                            .foregroundStyle(palette.secondaryText)
+                    }
                 }
             }
-            .padding(.horizontal, HushSpacing.md)
-            .padding(.vertical, HushSpacing.sm)
-            .background(palette.rootBackground.opacity(0.65), in: RoundedRectangle(cornerRadius: 10))
 
             if let refreshError {
                 HStack(spacing: HushSpacing.sm) {
@@ -553,38 +1085,26 @@ struct ProviderSettingsView: View {
                 .padding(.vertical, HushSpacing.xs)
             }
 
-            if prefersManualDefaultModelEntry {
-                VStack(alignment: .leading, spacing: HushSpacing.xs) {
-                    HStack {
-                        Text("Default Model ID")
-                            .font(HushTypography.captionBold)
-                            .foregroundStyle(palette.secondaryText)
-                        Spacer()
-                        Button("Use Catalog") {
-                            prefersManualDefaultModelEntry = false
-                        }
-                        .buttonStyle(.plain)
-                        .font(HushTypography.footnote)
-                    }
+            VStack(alignment: .leading, spacing: HushSpacing.sm) {
+                Text("Model Catalog")
+                    .font(HushTypography.captionBold)
+                    .foregroundStyle(palette.secondaryText)
 
-                    TextField("model-id", text: $defaultModelID)
-                        .textFieldStyle(.roundedBorder)
+                TextField("Search models...", text: $modelSearchText)
+                    .textFieldStyle(.roundedBorder)
 
-                    Text("Use manual entry only when the provider does not expose the model in the catalog.")
-                        .font(HushTypography.footnote)
-                        .foregroundStyle(palette.secondaryText)
-                }
-            } else {
-                HStack {
-                    Text("Select the default model directly in the catalog list.")
-                        .font(HushTypography.footnote)
-                        .foregroundStyle(palette.secondaryText)
-                    Spacer()
-                    Button("Model Missing? Enter ID") {
-                        prefersManualDefaultModelEntry = true
+                HStack(spacing: HushSpacing.sm) {
+                    Button(modelSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Select All" : "Select All Filtered") {
+                        selectAllFilteredCatalogModels(filteredModels: filteredModels, allModels: allModels)
                     }
-                    .buttonStyle(.plain)
-                    .font(HushTypography.footnote)
+                    .buttonStyle(.bordered)
+                    .disabled(!hasFilteredModels || areAllFilteredModelsSelected)
+
+                    Button("Clear Selection") {
+                        clearSelectedCatalogModels(allModels)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(selectedModelIDs.isEmpty)
                 }
             }
 
@@ -594,9 +1114,9 @@ struct ProviderSettingsView: View {
                         .foregroundStyle(palette.secondaryText)
                     Text(
                         isRefreshing
-                            ? "Fetching models…"
+                            ? "Fetching models..."
                             : (isDraftSource
-                                ? "No models returned for the current draft. Adjust API key or endpoint and refresh again."
+                                ? "No models returned for the current draft. Adjust the basics and refresh again."
                                 : (hasPersistedProfile
                                     ? "No models cached. Tap Refresh to fetch."
                                     : "Refresh to fetch models for this draft before saving."))
@@ -607,26 +1127,18 @@ struct ProviderSettingsView: View {
                 .padding(.vertical, HushSpacing.sm)
             } else {
                 VStack(alignment: .leading, spacing: HushSpacing.xs) {
-                    TextField("Filter models…", text: $modelSearchText)
-                        .textFieldStyle(.roundedBorder)
-
-                    let filtered = modelSearchText.isEmpty
-                        ? allModels
-                        : allModels.filter { $0.id.localizedCaseInsensitiveContains(modelSearchText) }
-
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(filtered) { model in
-                                let isPinned = pinnedModelIDs.contains(model.id)
-                                let isDefault = model.id == defaultModelID
+                            ForEach(filteredModels) { model in
+                                let isSelected = selectedModelIDs.contains(model.id)
 
                                 HStack(spacing: HushSpacing.md) {
                                     Button {
-                                        setDefaultModel(model.id)
+                                        toggleSelectedCatalogModel(model.id, allModels: allModels)
                                     } label: {
                                         HStack(spacing: HushSpacing.md) {
-                                            Image(systemName: isDefault ? "largecircle.fill.circle" : "circle")
-                                                .foregroundStyle(isDefault ? palette.successText : palette.secondaryText)
+                                            Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                                                .foregroundStyle(isSelected ? palette.successText : palette.secondaryText)
                                                 .frame(width: 20)
 
                                             Text(model.id)
@@ -647,25 +1159,16 @@ struct ProviderSettingsView: View {
                                         }
                                     }
                                     .buttonStyle(.plain)
-                                    .help(isDefault ? "Default model" : "Set as default model")
-
-                                    Button {
-                                        togglePinnedModel(model.id)
-                                    } label: {
-                                        Image(systemName: isPinned ? "pin.fill" : "pin")
-                                            .foregroundStyle(isPinned ? palette.successText : palette.secondaryText)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help(isPinned ? "Unpin" : "Pin")
+                                    .help(isSelected ? "Remove from selected models" : "Add to selected models")
                                 }
                                 .padding(.horizontal, HushSpacing.sm)
                                 .padding(.vertical, HushSpacing.xs)
                                 .background(
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(isDefault ? palette.selectionFill : .clear)
+                                        .fill(isSelected ? palette.selectionFill : .clear)
                                 )
 
-                                if model.id != filtered.last?.id {
+                                if model.id != filteredModels.last?.id {
                                     Divider()
                                         .foregroundStyle(palette.subtleStroke)
                                 }
@@ -674,7 +1177,14 @@ struct ProviderSettingsView: View {
                     }
                     .frame(maxHeight: 280)
 
-                    Text("\(allModels.count) models · \(pinnedModelIDs.count) pinned · tap a row to set the default")
+                    if filteredModels.isEmpty {
+                        Text("No models match the current search.")
+                            .font(HushTypography.footnote)
+                            .foregroundStyle(palette.secondaryText)
+                            .padding(.vertical, HushSpacing.xs)
+                    }
+
+                    Text("\(selectedModelIDs.count) selected models · search does not change saved selection")
                         .font(HushTypography.footnote)
                         .foregroundStyle(palette.secondaryText)
                 }
@@ -687,29 +1197,49 @@ struct ProviderSettingsView: View {
         )
     }
 
-    private func togglePinnedModel(_ modelID: String) {
-        if pinnedModelIDs.contains(modelID) {
-            pinnedModelIDs.removeAll { $0 == modelID }
-            if defaultModelID == modelID {
-                defaultModelID = ""
-            }
-        } else {
-            pinnedModelIDs.append(modelID)
-        }
-    }
+    private var advancedSection: some View {
+        DisclosureGroup(isExpanded: $isAdvancedSectionExpanded) {
+            VStack(alignment: .leading, spacing: HushSpacing.md) {
+                VStack(alignment: .leading, spacing: HushSpacing.xs) {
+                    Text("Manual Model ID")
+                        .font(HushTypography.captionBold)
+                        .foregroundStyle(palette.secondaryText)
 
-    private func setDefaultModel(_ modelID: String) {
-        defaultModelID = modelID
-        prefersManualDefaultModelEntry = false
-        if !pinnedModelIDs.contains(modelID) {
-            pinnedModelIDs.append(modelID)
+                    TextField("model-id", text: $defaultModelID)
+                        .textFieldStyle(.roundedBorder)
+
+                    Text("Use this only when the provider does not expose the default model in the catalog. Typing here overrides the catalog picker.")
+                        .font(HushTypography.footnote)
+                        .foregroundStyle(palette.secondaryText)
+                }
+            }
+            .padding(.top, HushSpacing.md)
+        } label: {
+            HStack {
+                Text("Advanced")
+                    .font(HushTypography.heading)
+                    .foregroundStyle(palette.secondaryText)
+
+                Spacer()
+
+                if isUsingManualDefaultModelID(for: visibleCatalogModels(for: editorProviderID(for: selectedTarget ?? .new))) {
+                    Text("Manual Default")
+                        .font(HushTypography.caption)
+                        .foregroundStyle(palette.secondaryText)
+                }
+            }
         }
+        .padding(HushSpacing.lg)
+        .cardStyle(
+            background: palette.cardBackground,
+            stroke: palette.subtleStroke
+        )
     }
 
     // MARK: - Action Bar
 
     private var isCurrentDefault: Bool {
-        guard let providerID = editingProviderID else { return false }
+        guard let providerID = selectedProviderID else { return false }
         return container.settings.selectedProviderID == providerID
     }
 
@@ -717,7 +1247,14 @@ struct ProviderSettingsView: View {
         isEnabled && !defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private func actionBar(_ config: ProviderConfiguration) -> some View {
+    private var deleteConfirmationTitle: String {
+        if providerName.isEmpty, let selectedProviderID {
+            return "Delete \(selectedProviderID)?"
+        }
+        return "Delete \(providerName.isEmpty ? "Provider" : providerName)?"
+    }
+
+    private func actionBar(_: ProviderConfiguration) -> some View {
         HStack {
             if isBuiltInProvider {
                 HStack(spacing: HushSpacing.xs) {
@@ -736,15 +1273,6 @@ struct ProviderSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(.red)
-                .alert(Text("Delete \(providerName.isEmpty ? config.name : providerName)?"), isPresented: $showDeleteConfirmation) {
-                    Button("Cancel", role: .cancel) {}
-                    Button("Delete", role: .destructive) {
-                        container.removeProviderProfile(id: config.id)
-                        editingProviderID = nil
-                    }
-                } message: {
-                    Text("This provider and its cached models will be removed.")
-                }
             }
 
             Spacer()
@@ -798,9 +1326,6 @@ struct ProviderSettingsView: View {
                     draftCatalogModels = result.models
                     draftCatalogError = result.error
                     isDraftCatalogRefreshing = false
-                    if !result.models.contains(where: { $0.id == defaultModelID }), !prefersManualDefaultModelEntry {
-                        defaultModelID = ""
-                    }
                 }
             }
             return
@@ -810,71 +1335,61 @@ struct ProviderSettingsView: View {
         container.refreshCatalog(forProviderID: providerID)
     }
 
-    private func loadDefaultsForNewProvider(type: ProviderType) {
-        providerType = type
-        providerName = defaultNewProviderName(for: type)
-        endpoint = defaultEndpointPlaceholder(for: type)
-        defaultModelID = ""
-        pinnedModelIDs = []
-        isEnabled = true
-        hasStoredCredential = false
-        modelSearchText = ""
-        prefersManualDefaultModelEntry = false
-        resetEditState()
-    }
-
-    private func loadSnapshotForProvider(_ providerID: String) {
-        if providerID == OpenAISettingsInput.providerID {
-            let snapshot = container.openAISettingsSnapshot()
-            let config = container.settings.providerConfigurations.first(where: { $0.id == providerID })
-            providerName = config?.name ?? "OpenAI"
-            providerType = .openAI
-            endpoint = snapshot.endpoint
-            defaultModelID = snapshot.defaultModelID
-            isEnabled = snapshot.isEnabled
-            pinnedModelIDs = config?.pinnedModelIDs ?? []
-            hasStoredCredential = snapshot.hasCredential
-        } else if let config = container.settings.providerConfigurations.first(where: { $0.id == providerID }) {
-            providerName = config.name
-            providerType = config.type
-            endpoint = config.endpoint
-            defaultModelID = config.defaultModelID
-            isEnabled = config.isEnabled
-            pinnedModelIDs = config.pinnedModelIDs
-            hasStoredCredential = config.hasPersistedAPIKey
-        } else {
-            providerName = ""
-            providerType = .openAI
-            endpoint = ""
-            defaultModelID = ""
-            pinnedModelIDs = []
-            isEnabled = false
-            hasStoredCredential = false
-        }
-        modelSearchText = ""
-        prefersManualDefaultModelEntry = false
-        resetEditState()
-    }
-
-    private func resetEditState() {
+    private func resetEditState(preserveFeedback: Bool = false) {
         apiKey = ""
         isAPIKeyRevealed = false
         showDeleteConfirmation = false
         setAsDefault = false
-        saveMessage = ""
-        saveFailed = false
+        if !preserveFeedback {
+            saveMessage = ""
+            saveFailed = false
+        }
         resetDraftCatalogState()
     }
 
-    private func applyPostSave(providerID: String) {
-        if setAsDefault {
+    private func completeSave(selecting target: ProviderEditorTarget) {
+        if let providerID = target.providerID, setAsDefault {
             container.setDefaultProvider(id: providerID)
         }
-        apiKey = ""
-        isAPIKeyRevealed = false
+
+        forceApplySelection(
+            makeSelectionRequest(target: target, reloadIfSame: true),
+            preserveFeedback: true
+        )
         saveMessage = "Saved."
         saveFailed = false
-        editingProviderID = nil
+    }
+
+    private func nextTargetAfterDeleting(providerID: String) -> ProviderEditorTarget? {
+        let ids = providers.map(\.id)
+        guard let currentIndex = ids.firstIndex(of: providerID) else {
+            return preferredInitialTarget
+        }
+
+        if let nextID = ids[(currentIndex + 1)...].first(where: { $0 != providerID }) {
+            return .existing(nextID)
+        }
+
+        if currentIndex > 0,
+           let previousID = ids[..<currentIndex].last(where: { $0 != providerID })
+        {
+            return .existing(previousID)
+        }
+
+        return nil
+    }
+
+    private func deleteCurrentProvider() {
+        guard let providerID = selectedProviderID, providerID != OpenAISettingsInput.providerID else { return }
+
+        let nextTarget = nextTargetAfterDeleting(providerID: providerID)
+        container.removeProviderProfile(id: providerID)
+
+        if let nextTarget {
+            forceApplySelection(makeSelectionRequest(target: nextTarget))
+        } else {
+            clearSelection()
+        }
     }
 
     private var apiKeyToSave: String {
@@ -911,7 +1426,7 @@ struct ProviderSettingsView: View {
             }
 
             hasStoredCredential = snapshot.hasCredential
-            applyPostSave(providerID: providerID)
+            completeSave(selecting: .existing(providerID))
         } catch let error as OpenAISettingsSaveError {
             saveMessage = error.errorDescription ?? "Failed to save provider settings."
             saveFailed = true
@@ -922,7 +1437,7 @@ struct ProviderSettingsView: View {
     }
 
     private func saveCustomProviderSettings(
-        providerID: String,
+        providerID: String?,
         normalizedDefaultModelID: String,
         normalizedPinnedModelIDs: [String]
     ) {
@@ -940,7 +1455,9 @@ struct ProviderSettingsView: View {
                 pinnedModelIDs: normalizedPinnedModelIDs
             )
         } else {
-            guard var existing = container.settings.providerConfigurations.first(where: { $0.id == providerID }) else {
+            guard let providerID,
+                  var existing = container.settings.providerConfigurations.first(where: { $0.id == providerID })
+            else {
                 saveMessage = "Provider not found."
                 saveFailed = true
                 return
@@ -960,7 +1477,7 @@ struct ProviderSettingsView: View {
 
         container.saveProviderProfile(config)
         hasStoredCredential = config.hasPersistedAPIKey
-        applyPostSave(providerID: config.id)
+        completeSave(selecting: .existing(config.id))
 
         if config.isEnabled, hasStoredCredential {
             container.refreshCatalog(forProviderID: config.id)
@@ -968,7 +1485,7 @@ struct ProviderSettingsView: View {
     }
 
     private func saveSettings() {
-        guard let providerID = editingProviderID else { return }
+        guard let selectedTarget else { return }
 
         let normalizedDefaultModelID = defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedPinnedModelIDs = normalizedModelIDs(
@@ -980,15 +1497,22 @@ struct ProviderSettingsView: View {
         defaultModelID = normalizedDefaultModelID
         pinnedModelIDs = normalizedPinnedModelIDs
 
-        if providerID == OpenAISettingsInput.providerID {
+        switch selectedTarget {
+        case let .existing(providerID) where providerID == OpenAISettingsInput.providerID:
             saveOpenAIProviderSettings(
                 providerID: providerID,
                 normalizedDefaultModelID: normalizedDefaultModelID,
                 normalizedPinnedModelIDs: normalizedPinnedModelIDs
             )
-        } else {
+        case let .existing(providerID):
             saveCustomProviderSettings(
                 providerID: providerID,
+                normalizedDefaultModelID: normalizedDefaultModelID,
+                normalizedPinnedModelIDs: normalizedPinnedModelIDs
+            )
+        case .new:
+            saveCustomProviderSettings(
+                providerID: nil,
                 normalizedDefaultModelID: normalizedDefaultModelID,
                 normalizedPinnedModelIDs: normalizedPinnedModelIDs
             )
@@ -1003,6 +1527,7 @@ struct ProviderSettingsView: View {
 private struct ProviderListRowView: View {
     @Environment(\.hushThemePalette) private var palette
     let provider: ProviderConfiguration
+    let isSelected: Bool
     let isDefault: Bool
     let isBuiltIn: Bool
     let subtitle: String
@@ -1015,12 +1540,69 @@ private struct ProviderListRowView: View {
 
     @State private var isHovered: Bool = false
 
+    private var backgroundFill: Color {
+        if isSelected {
+            return palette.selectionFill
+        }
+        if isHovered {
+            return palette.hoverFill
+        }
+        return palette.cardBackground
+    }
+
+    private var borderColor: Color {
+        if isSelected {
+            return palette.selectionStroke
+        }
+        if isHovered {
+            return palette.hoverStroke
+        }
+        return palette.subtleStroke
+    }
+
+    @ViewBuilder
+    private var builtInMarker: some View {
+        if isBuiltIn {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(palette.secondaryText)
+                .padding(6)
+                .background(palette.softFill, in: Circle())
+                .help("Built-in provider")
+        }
+    }
+
+    @ViewBuilder
+    private var statusRow: some View {
+        if isDefault {
+            Text("Default")
+                .font(HushTypography.caption)
+                .foregroundStyle(palette.accent)
+                .padding(.horizontal, HushSpacing.sm)
+                .padding(.vertical, 3)
+                .background(palette.accentMutedBackground, in: Capsule())
+        } else if canSetDefault {
+            Button("Set Default") {
+                onSetDefault()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        } else if let badgeText {
+            Text(badgeText)
+                .font(HushTypography.caption)
+                .foregroundStyle(palette.secondaryText)
+                .padding(.horizontal, HushSpacing.sm)
+                .padding(.vertical, 3)
+                .background(palette.softFill, in: Capsule())
+        }
+    }
+
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: HushSpacing.md) {
+            HStack(alignment: .top, spacing: HushSpacing.md) {
                 ZStack {
                     Circle()
-                        .fill(accent.opacity(isHovered ? 0.20 : 0.12))
+                        .fill(accent.opacity(isSelected ? 0.22 : (isHovered ? 0.20 : 0.12)))
                         .frame(width: 36, height: 36)
 
                     Image(systemName: icon)
@@ -1028,80 +1610,49 @@ private struct ProviderListRowView: View {
                         .foregroundStyle(accent)
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: HushSpacing.xs) {
                     HStack(spacing: HushSpacing.xs) {
                         Text(provider.name)
                             .font(HushTypography.body)
                             .foregroundStyle(palette.primaryText)
                             .lineLimit(1)
+                            .truncationMode(.tail)
 
-                        if isBuiltIn {
-                            Text("Built-in")
-                                .font(HushTypography.caption)
-                                .foregroundStyle(palette.secondaryText)
-                                .padding(.horizontal, HushSpacing.xs)
-                                .padding(.vertical, 2)
-                                .background(palette.softFill, in: Capsule())
-                        }
+                        builtInMarker
+
+                        Spacer(minLength: 0)
                     }
 
                     Text(subtitle)
                         .font(HushTypography.caption)
                         .foregroundStyle(palette.secondaryText)
                         .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    statusRow
+                        .padding(.top, 2)
                 }
-
-                Spacer()
-
-                if isDefault {
-                    Text("Default")
-                        .font(HushTypography.caption)
-                        .foregroundStyle(palette.accent)
-                        .padding(.horizontal, HushSpacing.sm)
-                        .padding(.vertical, 3)
-                        .background(palette.accentMutedBackground, in: Capsule())
-                } else if canSetDefault {
-                    Button("Make Default") {
-                        onSetDefault()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                } else if let badgeText {
-                    Text(badgeText)
-                        .font(HushTypography.caption)
-                        .foregroundStyle(palette.secondaryText)
-                        .padding(.horizontal, HushSpacing.sm)
-                        .padding(.vertical, 3)
-                        .background(palette.softFill, in: Capsule())
-                }
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(
-                        palette.secondaryText.opacity(isHovered ? 1.0 : 0.6)
-                    )
             }
             .padding(.horizontal, HushSpacing.lg)
             .padding(.vertical, HushSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
-                    .fill(isHovered ? palette.hoverFill : palette.cardBackground)
+                    .fill(backgroundFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous)
-                            .stroke(
-                                isHovered ? palette.hoverStroke : palette.subtleStroke,
-                                lineWidth: 1
-                            )
+                            .stroke(borderColor, lineWidth: 1)
                     )
             )
             .animation(.easeInOut(duration: 0.15), value: isHovered)
+            .animation(.easeInOut(duration: 0.15), value: isSelected)
         }
         .buttonStyle(.plain)
         .contentShape(RoundedRectangle(cornerRadius: HushSpacing.cardCornerRadius, style: .continuous))
         .onHover { hovering in
             isHovered = hovering
         }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -1128,6 +1679,7 @@ private struct ProviderListRowView: View {
         container.settings.providerConfigurations = [ProviderConfiguration.mockDefault(), openAIConfig]
         return ProviderSettingsView()
             .environmentObject(container)
+            .frame(width: 960, height: 640)
     }
 
     #Preview("ProviderListRowView") {
@@ -1142,6 +1694,7 @@ private struct ProviderListRowView: View {
                     defaultModelID: "gpt-4o",
                     isEnabled: true
                 ),
+                isSelected: true,
                 isDefault: true,
                 isBuiltIn: true,
                 subtitle: "gpt-4o",
@@ -1162,6 +1715,7 @@ private struct ProviderListRowView: View {
                     defaultModelID: "model-1",
                     isEnabled: true
                 ),
+                isSelected: false,
                 isDefault: false,
                 isBuiltIn: false,
                 subtitle: "Choose a default model in the catalog",
