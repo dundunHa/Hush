@@ -79,35 +79,16 @@ struct ComposerDock: View {
                     shell
                         .stroke(palette.composerShellStroke, lineWidth: 1)
                 )
-                .overlay {
-                    shell
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    palette.sidebarGlassHighlight.opacity(0.12),
-                                    .clear
-                                ],
-                                startPoint: .top,
-                                endPoint: .center
-                            )
-                        )
-                }
                 .shadow(
-                    color: palette.splitPaneShadow.opacity(0.18),
-                    radius: 18,
+                    color: palette.splitPaneShadow.opacity(0.10),
+                    radius: 8,
                     x: 0,
-                    y: 12
-                )
-                .shadow(
-                    color: palette.splitPaneShadow.opacity(0.34),
-                    radius: 4,
-                    x: 0,
-                    y: 3
+                    y: 4
                 )
         }
         .frame(maxWidth: HushSpacing.chatContentMaxWidth)
         .padding(.horizontal, HushSpacing.xl)
-        .padding(.top, HushSpacing.sm)
+        .padding(.top, HushSpacing.xs)
         .padding(.bottom, HushSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .center)
         .task(id: container.settings.selectedProviderID) {
@@ -124,27 +105,6 @@ struct ComposerDock: View {
             .scrollContentBackground(.hidden)
             .padding(.horizontal, HushSpacing.md)
             .padding(.vertical, HushSpacing.xs + 1)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(palette.composerEditorBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(palette.subtleStroke.opacity(0.70), lineWidth: 1)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        palette.sidebarGlassHighlight.opacity(0.06),
-                                        .clear
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                    }
-            )
             .onKeyPress(.return, phases: .down) { press in
                 if press.modifiers.contains(.shift) {
                     return .ignored

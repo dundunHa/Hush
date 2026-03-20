@@ -269,12 +269,6 @@ private struct ThemeOptionCard: View {
                                                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                                                     .stroke(previewPalette.composerShellStroke, lineWidth: 1)
                                             )
-                                            .overlay {
-                                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                    .fill(previewPalette.composerEditorBackground)
-                                                    .padding(.horizontal, 9)
-                                                    .padding(.vertical, 6)
-                                            }
                                             .frame(height: 20)
                                     }
                                 }

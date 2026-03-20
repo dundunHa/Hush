@@ -86,7 +86,7 @@ enum HushColors {
         workspaceChromeBackground: Color(hex: 0x11161E),
         cardBackground: Color(hex: 0x171C26),
         composerBackground: Color(hex: 0x121720),
-        composerEditorBackground: Color(hex: 0x0A0D12, opacity: 0.58),
+        composerEditorBackground: Color(hex: 0x363634),
         separator: Color(hex: 0x323A47, opacity: 0.65),
         subtleStroke: Color(hex: 0x445063, opacity: 0.58),
         splitPaneEdgeStroke: Color(hex: 0x5A667B, opacity: 0.58),
@@ -141,8 +141,8 @@ enum HushColors {
         codeBlockBackground: Color(hex: 0x1A2230),
         codeBlockBorder: Color(hex: 0x3E495B),
         codeBlockSeparator: Color(hex: 0x455165),
-        composerShellTop: Color(hex: 0x1A202B),
-        composerShellBottom: Color(hex: 0x131923),
+        composerShellTop: Color(hex: 0x363634),
+        composerShellBottom: Color(hex: 0x363634),
         composerShellStroke: Color(hex: 0xFFFFFF, opacity: 0.14)
     )
 
@@ -152,7 +152,7 @@ enum HushColors {
         workspaceChromeBackground: Color(hex: 0x37383B),
         cardBackground: Color(hex: 0x252A32),
         composerBackground: Color(hex: 0x313741),
-        composerEditorBackground: Color(hex: 0x111722, opacity: 0.34),
+        composerEditorBackground: Color(hex: 0x363634),
         separator: Color(hex: 0x6C7179, opacity: 0.20),
         subtleStroke: Color(hex: 0x7A8591, opacity: 0.22),
         splitPaneEdgeStroke: Color(hex: 0xFFFFFF, opacity: 0.06),
@@ -207,8 +207,8 @@ enum HushColors {
         codeBlockBackground: Color(hex: 0x3E3E3B),
         codeBlockBorder: Color(hex: 0x556272),
         codeBlockSeparator: Color(hex: 0x647282),
-        composerShellTop: Color(hex: 0x3A4048),
-        composerShellBottom: Color(hex: 0x2B3038),
+        composerShellTop: Color(hex: 0x363634),
+        composerShellBottom: Color(hex: 0x363634),
         composerShellStroke: Color(hex: 0xFFFFFF, opacity: 0.14)
     )
 
