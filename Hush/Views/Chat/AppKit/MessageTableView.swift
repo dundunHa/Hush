@@ -300,7 +300,8 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         scrollView.hasHorizontalScroller = false
         scrollView.drawsBackground = false
         scrollView.automaticallyAdjustsContentInsets = false
-        scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: HushSpacing.lg, right: 0)
+        // Keep the final message visually clear of the composer chrome.
+        scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: HushSpacing.xl + HushSpacing.sm, right: 0)
         scrollView.horizontalScrollElasticity = .none
         scrollView.verticalScrollElasticity = .none
         scrollView.borderType = .noBorder
