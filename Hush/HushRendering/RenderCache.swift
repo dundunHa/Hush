@@ -160,10 +160,6 @@ final class RenderCache {
         store.count
     }
 
-    var isEmpty: Bool {
-        store.isEmpty
-    }
-
     func clear() {
         let existingKeys = Array(store.keys)
         store.removeAll()

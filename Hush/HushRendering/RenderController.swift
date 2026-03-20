@@ -98,6 +98,9 @@ final class RenderController: ObservableObject {
 
     // MARK: - Init
 
+    /// Test-only convenience initializer. Creates an independent scheduler
+    /// not shared with the singleton `MessageRenderRuntime`.
+    /// Production code should use `MessageRenderRuntime.makeRenderController()`.
     convenience init(
         renderer: MessageContentRenderer,
         coalesceInterval: TimeInterval? = nil

@@ -11,7 +11,7 @@ MarkdownToAttributed.swift            # Markdown AST → NSAttributedString conv
 MathSegmenter.swift                   # Extracts LaTeX segments from markdown text
 MathRenderer.swift                    # Renders LaTeX → images via SwiftMath
 MathRenderCache.swift                 # 128-entry LRU cache for rendered math
-TableRenderer.swift                   # Markdown table → TableScrollAttachment
+TableRenderer.swift                   # Markdown table → monospace NSAttributedString
 RenderCache.swift                     # 256-entry LRU cache for rendered attributed strings
 RenderTypes.swift                     # RenderPhase, RenderPriority, RenderOutput types
 CodeBlockHighlighter.swift            # Syntax highlighting for fenced code blocks
@@ -26,7 +26,7 @@ CodeBlockHighlighter.swift            # Syntax highlighting for fenced code bloc
 | Adjust streaming coalescing | `RenderController.swift` |
 | Add new LaTeX handling | `MathSegmenter.swift` + `MathRenderer.swift` |
 | Cache tuning | `RenderCache.swift` (256 entries) or `MathRenderCache.swift` (128 entries) |
-| Table rendering | `TableRenderer.swift` → `TableScrollAttachment` |
+| Table rendering | `TableRenderer.swift` |
 
 ## Conventions
 

@@ -58,10 +58,6 @@ final class MathRenderCache {
         return entry.image
     }
 
-    func peek(_ key: CacheKey) -> NSImage? {
-        store[key]?.image
-    }
-
     func set(_ key: CacheKey, image: NSImage) {
         if let existing = store[key] {
             existing.image = image
@@ -155,3 +151,11 @@ final class MathRenderCache {
         node.next = nil
     }
 }
+
+#if DEBUG
+    extension MathRenderCache {
+        func peek(_ key: CacheKey) -> NSImage? {
+            store[key]?.image
+        }
+    }
+#endif
