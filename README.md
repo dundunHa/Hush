@@ -32,12 +32,14 @@ make test    # 跑单元测试（Swift Testing）
 ## Release（DMG）
 
 ```bash
+make version   # 查看当前版本号与构建号
 make release
 ls build/release
 ```
 
 说明：
 - 本项目默认生成面向外部分发的 ad-hoc 签名 `.app`，并在 `make release` 时关闭 `App Sandbox`，以避免“本机可运行、别的 Mac 直接无法打开”的兼容性问题。
+- 版本号现在集中维护在 `Config/Versions.xcconfig`：`MARKETING_VERSION` 控制用户可见版本号，`CURRENT_PROJECT_VERSION` 控制构建号；`make release` 产物会命名为 `Hush-<marketing>-<build>.dmg`。
 - 从互联网下载的 DMG 在 macOS 上仍可能被 Gatekeeper 标记为未验证应用；预期路径是用户可通过“右键打开”或“系统设置 → Privacy & Security → Open Anyway”继续。
 - 若希望用户下载后直接正常打开、不出现风险提示，仍需要 Developer ID 签名 + notarization。
 
