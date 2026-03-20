@@ -3,6 +3,7 @@ import SwiftUI
 struct HushThemePalette {
     let rootBackground: Color
     let sidebarBackground: Color
+    let workspaceChromeBackground: Color
     let cardBackground: Color
     let composerBackground: Color
     let composerEditorBackground: Color
@@ -10,6 +11,10 @@ struct HushThemePalette {
     let subtleStroke: Color
     let splitPaneEdgeStroke: Color
     let splitPaneShadow: Color
+    let sidebarGlassTint: Color
+    let sidebarGlassStroke: Color
+    let sidebarGlassHighlight: Color
+    let sidebarGlassShadow: Color
     let primaryText: Color
     let secondaryText: Color
     let tertiaryText: Color
@@ -66,6 +71,8 @@ enum HushColors {
         switch theme {
         case .dark:
             return darkPalette
+        case .graphiteGlass:
+            return graphiteGlassPalette
         case .light:
             return lightPalette
         case .readPaper:
@@ -76,6 +83,7 @@ enum HushColors {
     private static let darkPalette = HushThemePalette(
         rootBackground: Color(hex: 0x0B0D12),
         sidebarBackground: Color(hex: 0x10141B),
+        workspaceChromeBackground: Color(hex: 0x11161E),
         cardBackground: Color(hex: 0x171C26),
         composerBackground: Color(hex: 0x121720),
         composerEditorBackground: Color(hex: 0x0A0D12, opacity: 0.58),
@@ -83,6 +91,10 @@ enum HushColors {
         subtleStroke: Color(hex: 0x445063, opacity: 0.58),
         splitPaneEdgeStroke: Color(hex: 0x5A667B, opacity: 0.58),
         splitPaneShadow: Color(hex: 0x000000, opacity: 0.30),
+        sidebarGlassTint: Color(hex: 0x183459, opacity: 0.22),
+        sidebarGlassStroke: Color(hex: 0xFFFFFF, opacity: 0.10),
+        sidebarGlassHighlight: Color(hex: 0xFFFFFF, opacity: 0.12),
+        sidebarGlassShadow: Color(hex: 0x000000, opacity: 0.28),
         primaryText: Color(hex: 0xF5F7FB),
         secondaryText: Color(hex: 0xC0C8D6),
         tertiaryText: Color(hex: 0x8893A5),
@@ -134,9 +146,76 @@ enum HushColors {
         composerShellStroke: Color(hex: 0xFFFFFF, opacity: 0.14)
     )
 
+    private static let graphiteGlassPalette = HushThemePalette(
+        rootBackground: Color(hex: 0x2E2F31),
+        sidebarBackground: Color(hex: 0x1F252D, opacity: 0.28),
+        workspaceChromeBackground: Color(hex: 0x37383B),
+        cardBackground: Color(hex: 0x252A32),
+        composerBackground: Color(hex: 0x313741),
+        composerEditorBackground: Color(hex: 0x111722, opacity: 0.34),
+        separator: Color(hex: 0x6C7179, opacity: 0.20),
+        subtleStroke: Color(hex: 0x7A8591, opacity: 0.22),
+        splitPaneEdgeStroke: Color(hex: 0xFFFFFF, opacity: 0.06),
+        splitPaneShadow: Color(hex: 0x04060A, opacity: 0.28),
+        sidebarGlassTint: Color(hex: 0x5E6A77, opacity: 0.06),
+        sidebarGlassStroke: Color(hex: 0xFFFFFF, opacity: 0.12),
+        sidebarGlassHighlight: Color(hex: 0xFFFFFF, opacity: 0.14),
+        sidebarGlassShadow: Color(hex: 0x04060A, opacity: 0.20),
+        primaryText: Color(hex: 0xF4F6F8),
+        secondaryText: Color(hex: 0xB7BFC8),
+        tertiaryText: Color(hex: 0x8C95A0),
+        accent: Color(hex: 0x7EAEEA),
+        accentMutedBackground: Color(hex: 0x415262, opacity: 0.46),
+        accentMutedStroke: Color(hex: 0x9FBCDE, opacity: 0.30),
+        hoverFill: Color(hex: 0xFFFFFF, opacity: 0.06),
+        hoverStroke: Color(hex: 0xFFFFFF, opacity: 0.12),
+        selectionFill: Color(hex: 0xFFFFFF, opacity: 0.10),
+        selectionStroke: Color(hex: 0xFFFFFF, opacity: 0.22),
+        softFill: Color(hex: 0xFFFFFF, opacity: 0.025),
+        softFillStrong: Color(hex: 0xFFFFFF, opacity: 0.055),
+        primaryActionBackground: Color(hex: 0x7EAEEA),
+        primaryActionForeground: Color(hex: 0x101924),
+        disabledActionBackground: Color(hex: 0xFFFFFF, opacity: 0.12),
+        disabledActionForeground: Color(hex: 0x0C1016, opacity: 0.35),
+        destructiveActionBackground: Color(hex: 0xD66F6A),
+        destructiveActionForeground: Color(hex: 0xFFFFFF),
+        controlForeground: Color(hex: 0xF0F4F8),
+        controlForegroundMuted: Color(hex: 0xD0D7DE, opacity: 0.70),
+        debugOverlayBackground: Color(hex: 0x11161E, opacity: 0.70),
+        debugOverlayForeground: Color(hex: 0xF4F6F8),
+        errorText: Color(hex: 0xF2A39E),
+        successText: Color(hex: 0x82D9A1),
+        badgeRunning: Color(hex: 0x82D9A1),
+        badgeQueued: Color(hex: 0xE1B56A),
+        badgeUnread: Color(hex: 0x7EAEEA),
+        userBubble: Color(hex: 0x35495D, opacity: 0.50),
+        userBubbleStroke: Color(hex: 0x8AAEDB, opacity: 0.18),
+        toolBubble: Color(hex: 0x403730, opacity: 0.32),
+        toolBubbleStroke: Color(hex: 0xA98D6B, opacity: 0.20),
+        systemBubble: Color(hex: 0xFFFFFF, opacity: 0.045),
+        systemBubbleStroke: Color(hex: 0xFFFFFF, opacity: 0.08),
+        markdownBody: Color(hex: 0xE6EAEE),
+        markdownHeading: Color(hex: 0xF8FAFC),
+        markdownCode: Color(hex: 0xDDE5EF),
+        markdownCodeBackground: Color(hex: 0x232C37),
+        markdownLink: Color(hex: 0xB3CBE5),
+        markdownBlockquote: Color(hex: 0xB8C0C8),
+        markdownBlockquoteBar: Color(hex: 0x5B6775),
+        markdownMathFallback: Color(hex: 0xB3CBE5),
+        markdownTableHeader: Color(hex: 0xF0F4F8),
+        markdownTableBorder: Color(hex: 0x596573),
+        codeBlockBackground: Color(hex: 0x3E3E3B),
+        codeBlockBorder: Color(hex: 0x556272),
+        codeBlockSeparator: Color(hex: 0x647282),
+        composerShellTop: Color(hex: 0x3A4048),
+        composerShellBottom: Color(hex: 0x2B3038),
+        composerShellStroke: Color(hex: 0xFFFFFF, opacity: 0.14)
+    )
+
     private static let lightPalette = HushThemePalette(
         rootBackground: Color(hex: 0xF5F7FB),
         sidebarBackground: Color(hex: 0xEDF2F7),
+        workspaceChromeBackground: Color(hex: 0xF7FAFD),
         cardBackground: Color(hex: 0xFFFFFF),
         composerBackground: Color(hex: 0xFFFFFF),
         composerEditorBackground: Color(hex: 0xF6F9FC),
@@ -144,6 +223,10 @@ enum HushColors {
         subtleStroke: Color(hex: 0xD2DAE6),
         splitPaneEdgeStroke: Color(hex: 0xC6D1DE),
         splitPaneShadow: Color(hex: 0x081120, opacity: 0.08),
+        sidebarGlassTint: Color(hex: 0xFFFFFF, opacity: 0.00),
+        sidebarGlassStroke: Color(hex: 0xD7E0EB),
+        sidebarGlassHighlight: Color(hex: 0xFFFFFF, opacity: 0.48),
+        sidebarGlassShadow: Color(hex: 0x081120, opacity: 0.08),
         primaryText: Color(hex: 0x172033),
         secondaryText: Color(hex: 0x5B677B),
         tertiaryText: Color(hex: 0x8B96A8),
@@ -198,6 +281,7 @@ enum HushColors {
     private static let readPaperPalette = HushThemePalette(
         rootBackground: Color(hex: 0xF4EFE6),
         sidebarBackground: Color(hex: 0xECE4D7),
+        workspaceChromeBackground: Color(hex: 0xF2EBDD),
         cardBackground: Color(hex: 0xFAF5EC),
         composerBackground: Color(hex: 0xF8F1E5),
         composerEditorBackground: Color(hex: 0xFFFDF8),
@@ -205,6 +289,10 @@ enum HushColors {
         subtleStroke: Color(hex: 0xD1C5B1),
         splitPaneEdgeStroke: Color(hex: 0xC5B8A3),
         splitPaneShadow: Color(hex: 0x6A543A, opacity: 0.10),
+        sidebarGlassTint: Color(hex: 0xFFFFFF, opacity: 0.00),
+        sidebarGlassStroke: Color(hex: 0xE2D7C8),
+        sidebarGlassHighlight: Color(hex: 0xFFF9F0, opacity: 0.42),
+        sidebarGlassShadow: Color(hex: 0x6A543A, opacity: 0.10),
         primaryText: Color(hex: 0x2D2822),
         secondaryText: Color(hex: 0x6A6156),
         tertiaryText: Color(hex: 0x94897C),

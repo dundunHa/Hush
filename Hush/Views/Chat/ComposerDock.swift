@@ -14,7 +14,7 @@ struct ComposerDock: View {
     @State private var isOpenSettingsHovered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: HushSpacing.md) {
+        VStack(alignment: .leading, spacing: HushSpacing.sm) {
             if container.hasConfiguredProvider {
                 composerEditor
 
@@ -62,7 +62,9 @@ struct ComposerDock: View {
         .padding(.horizontal, HushSpacing.xl)
         .padding(.vertical, HushSpacing.md)
         .background {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
+            let shell = RoundedRectangle(cornerRadius: 30, style: .continuous)
+
+            shell
                 .fill(
                     LinearGradient(
                         colors: [
@@ -74,8 +76,33 @@ struct ComposerDock: View {
                     )
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    shell
                         .stroke(palette.composerShellStroke, lineWidth: 1)
+                )
+                .overlay {
+                    shell
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    palette.sidebarGlassHighlight.opacity(0.12),
+                                    .clear
+                                ],
+                                startPoint: .top,
+                                endPoint: .center
+                            )
+                        )
+                }
+                .shadow(
+                    color: palette.splitPaneShadow.opacity(0.18),
+                    radius: 18,
+                    x: 0,
+                    y: 12
+                )
+                .shadow(
+                    color: palette.splitPaneShadow.opacity(0.34),
+                    radius: 4,
+                    x: 0,
+                    y: 3
                 )
         }
         .frame(maxWidth: HushSpacing.chatContentMaxWidth)
@@ -93,9 +120,31 @@ struct ComposerDock: View {
         TextEditor(text: $draft)
             .font(HushTypography.body)
             .foregroundStyle(palette.primaryText)
-            .frame(minHeight: 28, maxHeight: 44)
+            .frame(minHeight: 30, maxHeight: 44)
             .scrollContentBackground(.hidden)
-            .background(Color.clear)
+            .padding(.horizontal, HushSpacing.md)
+            .padding(.vertical, HushSpacing.xs + 1)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(palette.composerEditorBackground)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(palette.subtleStroke.opacity(0.70), lineWidth: 1)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        palette.sidebarGlassHighlight.opacity(0.06),
+                                        .clear
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                    }
+            )
             .onKeyPress(.return, phases: .down) { press in
                 if press.modifiers.contains(.shift) {
                     return .ignored
@@ -201,7 +250,7 @@ struct ComposerDock: View {
             .foregroundStyle(configButtonForeground)
             .padding(.leading, HushSpacing.sm)
             .padding(.trailing, HushSpacing.sm)
-            .padding(.vertical, HushSpacing.xs + 2)
+            .padding(.vertical, HushSpacing.xs + 1)
             .background(
                 Capsule(style: .continuous)
                     .fill(configButtonFill)
@@ -248,13 +297,13 @@ struct ComposerDock: View {
         .font(HushTypography.scaled(14, weight: .medium))
         .foregroundStyle(palette.controlForeground)
         .padding(.horizontal, HushSpacing.sm)
-        .padding(.vertical, HushSpacing.xs + 2)
+        .padding(.vertical, HushSpacing.xs + 1)
         .background(
             Capsule()
-                .fill(isHovered ? palette.hoverFill : .clear)
-                .overlay(Capsule().stroke(isHovered ? palette.hoverStroke : .clear, lineWidth: 1))
+                .fill(isHovered ? palette.softFillStrong : .clear)
+                .overlay(Capsule().stroke(isHovered ? palette.subtleStroke : .clear, lineWidth: 1))
         )
-        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .animation(.easeInOut(duration: 0.18), value: isHovered)
     }
 
     private var canSendDraft: Bool {
@@ -331,9 +380,9 @@ struct ComposerDock: View {
             return palette.selectionFill
         }
         if isConfigHovered {
-            return palette.hoverFill
+            return palette.softFillStrong
         }
-        return palette.softFill
+        return .clear
     }
 
     private var configButtonStroke: Color {

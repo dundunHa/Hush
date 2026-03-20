@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsWorkspaceView: View {
     @Binding var showSettings: Bool
+    @Environment(\.hushTheme) private var theme
     @Environment(\.hushThemePalette) private var themePalette
 
     @State private var selectedTab: SettingsTab = .general
@@ -14,6 +15,10 @@ struct SettingsWorkspaceView: View {
         HushSpacing.splitPaneCornerRadius
     }
 
+    private var sidebarRevealWidth: CGFloat {
+        max(detailPaneTopCornerRadius, detailPaneBottomCornerRadius) + 1
+    }
+
     private enum SettingsTab: String, CaseIterable {
         case general
         case provider
@@ -24,36 +29,37 @@ struct SettingsWorkspaceView: View {
     }
 
     var body: some View {
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: detailPaneTopCornerRadius,
+            bottomLeadingRadius: detailPaneBottomCornerRadius,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: 0,
+            style: .continuous
+        )
+
         HStack(spacing: 0) {
             sidebar
 
-            ZStack {
-                Rectangle()
-                    .fill(themePalette.sidebarBackground)
-
-                let shape = UnevenRoundedRectangle(
-                    topLeadingRadius: detailPaneTopCornerRadius,
-                    bottomLeadingRadius: detailPaneBottomCornerRadius,
-                    bottomTrailingRadius: 0,
-                    topTrailingRadius: 0,
-                    style: .continuous
-                )
-
-                settingsDetailPane
-                    .background(themePalette.rootBackground)
-                    .clipShape(shape)
-                    .overlay {
-                        shape
-                            .strokeBorder(themePalette.splitPaneEdgeStroke, lineWidth: 1)
-                            .mask(alignment: .leading) {
-                                Rectangle()
-                                    .frame(width: max(detailPaneTopCornerRadius, detailPaneBottomCornerRadius) + 2)
-                            }
-                    }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            settingsDetailPane
+                .background(themePalette.rootBackground)
+                .clipShape(shape)
+                .overlay {
+                    LeadingPaneBorder(
+                        topRadius: detailPaneTopCornerRadius,
+                        bottomRadius: detailPaneBottomCornerRadius,
+                        color: themePalette.splitPaneEdgeStroke
+                    )
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(themePalette.sidebarBackground)
+        .background(alignment: .leading) {
+            SplitPaneSidebarSurface(
+                theme: theme,
+                palette: themePalette,
+                sidebarWidth: HushSpacing.sidebarWidth,
+                revealWidth: sidebarRevealWidth
+            )
+        }
     }
 
     // MARK: - Sidebar
@@ -144,7 +150,6 @@ struct SettingsWorkspaceView: View {
         .padding(.bottom, HushSpacing.lg)
         .frame(width: HushSpacing.sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(themePalette.sidebarBackground)
         .background(alignment: .top) {
             WindowDragArea()
                 .frame(height: HushSpacing.topBarHeight)
@@ -255,7 +260,7 @@ private struct SettingsSidebarItem: View {
         }
         .padding()
         .frame(width: 200)
-        .background(HushColors.palette(for: .dark).sidebarBackground)
+        .background(HushColors.palette(for: .graphiteGlass).sidebarBackground)
     }
 
 #endif

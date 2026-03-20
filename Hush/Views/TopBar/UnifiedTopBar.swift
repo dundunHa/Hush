@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SplitTopBar: View {
+    @Environment(\.hushTheme) private var theme
     @Environment(\.hushThemePalette) private var palette
     @Binding var showSidebar: Bool
     let isSettingsMode: Bool
@@ -14,63 +15,57 @@ struct SplitTopBar: View {
         showSidebar || isSettingsMode
     }
 
+    private var splitRevealWidth: CGFloat {
+        (showSidebar && !isSettingsMode) ? rightPaneCornerRadius + 1 : 0
+    }
+
     var body: some View {
         HStack(spacing: 0) {
-            splitBackground
+            Color.clear
                 .frame(width: showsSplit ? HushSpacing.sidebarWidth : 0, height: barHeight)
 
-            ZStack {
-                Rectangle()
-                    .fill(
-                        (showSidebar && !isSettingsMode)
-                            ? palette.sidebarBackground : palette.rootBackground
-                    )
+            let shape = UnevenRoundedRectangle(
+                topLeadingRadius: rightPaneCornerRadius,
+                bottomLeadingRadius: 0,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 0,
+                style: .continuous
+            )
 
-                let shape = UnevenRoundedRectangle(
-                    topLeadingRadius: rightPaneCornerRadius,
-                    bottomLeadingRadius: 0,
-                    bottomTrailingRadius: 0,
-                    topTrailingRadius: 0,
-                    style: .continuous
-                )
-
+            Group {
+                if !isSettingsMode {
+                    ChatTopBar(showSidebar: $showSidebar)
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: barHeight)
+            .background {
+                WorkspaceChromeBackground(theme: theme, palette: palette)
+            }
+            .clipShape(shape)
+            .overlay {
                 if showSidebar && !isSettingsMode {
-                    shape
-                        .fill(palette.rootBackground)
-                }
-
-                Group {
-                    if !isSettingsMode {
-                        ChatTopBar(showSidebar: $showSidebar)
-                    } else {
-                        Color.clear
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(height: barHeight)
-                .background(palette.rootBackground)
-                .clipShape(shape)
-                .overlay {
-                    if showSidebar && !isSettingsMode {
-                        shape
-                            .strokeBorder(palette.splitPaneEdgeStroke, lineWidth: 1)
-                            .mask(
-                                ZStack(alignment: .topLeading) {
-                                    Rectangle()
-                                        .frame(width: 2)
-
-                                    Rectangle()
-                                        .frame(width: rightPaneCornerRadius + 2)
-                                        .padding(.bottom, 1)
-                                }
-                            )
-                    }
+                    LeadingPaneBorder(
+                        topRadius: rightPaneCornerRadius,
+                        bottomRadius: 0,
+                        color: palette.splitPaneEdgeStroke
+                    )
                 }
             }
             .frame(maxWidth: .infinity)
             .frame(height: barHeight)
         }
         .frame(height: barHeight)
+        .background(alignment: .leading) {
+            SplitPaneSidebarSurface(
+                theme: theme,
+                palette: palette,
+                sidebarWidth: showsSplit ? HushSpacing.sidebarWidth : 0,
+                revealWidth: splitRevealWidth
+            )
+        }
         .overlay(alignment: .topLeading) {
             if !isSettingsMode {
                 Button {
@@ -87,11 +82,6 @@ struct SplitTopBar: View {
             }
         }
         .background(WindowDragArea())
-    }
-
-    private var splitBackground: some View {
-        Rectangle()
-            .fill(palette.sidebarBackground)
     }
 }
 

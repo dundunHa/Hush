@@ -42,8 +42,8 @@ struct GeneralSettingsView: View {
             }
 
             Text(
-                "Dark keeps the app contrasty, Light is neutral for daily work, " +
-                    "and ReadPaper uses a warmer canvas inspired by Claude's reading surface."
+                "Dark stays familiar, Graphite Glass adds a liquid sidebar with a calmer workspace, " +
+                    "Light is neutral for daily work, and ReadPaper uses a warmer reading surface."
             )
             .font(HushTypography.caption)
             .foregroundStyle(themePalette.secondaryText)
@@ -225,44 +225,61 @@ private struct ThemeOptionCard: View {
                         .frame(height: 120)
                         .overlay(alignment: .topLeading) {
                             HStack(spacing: 0) {
-                                Rectangle()
-                                    .fill(previewPalette.sidebarBackground)
+                                SidebarMaterialBackground(theme: theme, palette: previewPalette)
                                     .frame(width: 52)
 
                                 VStack(alignment: .leading, spacing: 8) {
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .fill(previewPalette.cardBackground)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                .stroke(previewPalette.subtleStroke, lineWidth: 1)
-                                        )
-                                        .frame(height: 36)
+                                    WorkspaceChromeBackground(theme: theme, palette: previewPalette)
+                                        .frame(height: 12)
 
-                                    HStack(spacing: 6) {
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(previewPalette.accentMutedBackground)
-                                            .frame(width: 58, height: 18)
-
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(previewPalette.softFillStrong)
-                                            .frame(width: 40, height: 18)
-                                    }
-
-                                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                        .fill(
-                                            LinearGradient(
-                                                colors: [previewPalette.composerShellTop, previewPalette.composerShellBottom],
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .fill(previewPalette.cardBackground)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                                    .stroke(previewPalette.subtleStroke, lineWidth: 1)
                                             )
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                                .stroke(previewPalette.composerShellStroke, lineWidth: 1)
-                                        )
-                                        .frame(height: 22)
+                                            .frame(height: 22)
+
+                                        HStack(spacing: 6) {
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .fill(previewPalette.accentMutedBackground)
+                                                .frame(width: 46, height: 16)
+
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .fill(previewPalette.codeBlockBackground)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                        .stroke(previewPalette.codeBlockBorder, lineWidth: 1)
+                                                )
+                                                .frame(width: 54, height: 16)
+                                        }
+
+                                        Spacer(minLength: 0)
+
+                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [previewPalette.composerShellTop, previewPalette.composerShellBottom],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                )
+                                            )
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                                    .stroke(previewPalette.composerShellStroke, lineWidth: 1)
+                                            )
+                                            .overlay {
+                                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                                    .fill(previewPalette.composerEditorBackground)
+                                                    .padding(.horizontal, 9)
+                                                    .padding(.vertical, 6)
+                                            }
+                                            .frame(height: 20)
+                                    }
                                 }
                                 .padding(10)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             }
                             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
