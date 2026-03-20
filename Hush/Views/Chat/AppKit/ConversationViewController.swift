@@ -4,6 +4,7 @@ import AppKit
 final class ConversationViewController: NSViewController {
     private var container: AppContainer
     private var theme: AppTheme
+    private var bottomReservedHeight: CGFloat
     private let messageTableView = MessageTableView()
     private var lastLayoutReadyGeneration: UInt64?
     var needsReload: Bool = false
@@ -14,9 +15,14 @@ final class ConversationViewController: NSViewController {
         private(set) var lastStreamingPushContentForTesting: String?
     #endif
 
-    init(container: AppContainer, theme: AppTheme) {
+    init(
+        container: AppContainer,
+        theme: AppTheme,
+        bottomReservedHeight: CGFloat = HushSpacing.xl + HushSpacing.sm
+    ) {
         self.container = container
         self.theme = theme
+        self.bottomReservedHeight = bottomReservedHeight
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -39,14 +45,27 @@ final class ConversationViewController: NSViewController {
             messageTableView.bottomAnchor.constraint(equalTo: rootView.bottomAnchor)
         ])
 
+        messageTableView.setBottomReservedHeight(bottomReservedHeight)
         view = rootView
         renderConversationState()
     }
 
-    func update(container: AppContainer, theme: AppTheme) {
+    func update(
+        container: AppContainer,
+        theme: AppTheme,
+        bottomReservedHeight: CGFloat = HushSpacing.xl + HushSpacing.sm
+    ) {
         self.container = container
         self.theme = theme
+        self.bottomReservedHeight = bottomReservedHeight
+        messageTableView.setBottomReservedHeight(bottomReservedHeight)
         renderConversationState()
+    }
+
+    func updateBottomReservedHeight(_ bottomReservedHeight: CGFloat) {
+        guard abs(self.bottomReservedHeight - bottomReservedHeight) > 0.5 else { return }
+        self.bottomReservedHeight = bottomReservedHeight
+        messageTableView.setBottomReservedHeight(bottomReservedHeight)
     }
 
     func applyConversationState(

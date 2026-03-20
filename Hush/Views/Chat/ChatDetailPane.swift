@@ -1,9 +1,18 @@
 import SwiftUI
 
+private struct ComposerDockHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = HushSpacing.xl + HushSpacing.sm
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct ChatDetailPane: View {
     @EnvironmentObject private var container: AppContainer
     @Environment(\.hushThemePalette) private var palette
     @State private var isConfigDrawerPresented = false
+    @State private var composerDockHeight: CGFloat = HushSpacing.xl + HushSpacing.sm
 
     private enum SwitchOverlayDebug {
         static var isEnabled: Bool {
@@ -22,39 +31,57 @@ struct ChatDetailPane: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ZStack(alignment: .trailing) {
-                HotScenePoolRepresentable()
-                    .environmentObject(container)
-                    .frame(maxHeight: .infinity)
-                    .clipped()
-
-                if container.isActiveConversationLoading, container.messages.isEmpty {
-                    loadingOverlay
-                } else if let error = container.activeConversationLoadError {
-                    errorOverlay(message: error)
-                }
-
-                if isConfigDrawerPresented {
-                    drawerDismissLayer
-                        .zIndex(1)
-                }
-
-                if SwitchOverlayDebug.isEnabled {
-                    switchDebugOverlay
-                }
-
-                if isConfigDrawerPresented {
-                    configDrawer
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                        .zIndex(2)
-                }
-            }
-            .frame(maxHeight: .infinity)
+        ZStack(alignment: .bottom) {
+            conversationLayer
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             ComposerDock(isConfigDrawerPresented: $isConfigDrawerPresented)
+                .background(composerDockHeightReader)
+                .zIndex(3)
+        }
+        .onPreferenceChange(ComposerDockHeightPreferenceKey.self) { newHeight in
+            let normalizedHeight = max(HushSpacing.xl + HushSpacing.sm, ceil(newHeight))
+            guard abs(composerDockHeight - normalizedHeight) > 0.5 else { return }
+            composerDockHeight = normalizedHeight
         }
         .animation(.spring(response: 0.24, dampingFraction: 0.9), value: isConfigDrawerPresented)
+    }
+
+    private var conversationLayer: some View {
+        ZStack(alignment: .trailing) {
+            HotScenePoolRepresentable(bottomReservedHeight: composerDockHeight)
+                .environmentObject(container)
+                .frame(maxHeight: .infinity)
+                .clipped()
+
+            if container.isActiveConversationLoading, container.messages.isEmpty {
+                loadingOverlay
+            } else if let error = container.activeConversationLoadError {
+                errorOverlay(message: error)
+            }
+
+            if isConfigDrawerPresented {
+                drawerDismissLayer
+                    .zIndex(1)
+            }
+
+            if SwitchOverlayDebug.isEnabled {
+                switchDebugOverlay
+            }
+
+            if isConfigDrawerPresented {
+                configDrawer
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .zIndex(2)
+            }
+        }
+    }
+
+    private var composerDockHeightReader: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .preference(key: ComposerDockHeightPreferenceKey.self, value: proxy.size.height)
+        }
     }
 
     private var switchDebugOverlay: some View {
