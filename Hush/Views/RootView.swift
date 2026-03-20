@@ -17,6 +17,10 @@ struct RootView: View {
         showSidebar ? HushSpacing.splitPaneCornerRadius : 0
     }
 
+    private var sidebarRevealWidth: CGFloat {
+        showSidebar ? max(rightPaneTopCornerRadius, rightPaneBottomCornerRadius) + 1 : 0
+    }
+
     var body: some View {
         Group {
             if showSettings {
@@ -25,53 +29,57 @@ struct RootView: View {
             } else {
                 HStack(spacing: 0) {
                     ConversationSidebarView(
-                        showSettings: $showSettings
+                        showSettings: $showSettings,
+                        showsMaterialBackground: false
                     )
                     .frame(width: HushSpacing.sidebarWidth)
                     .frame(width: showSidebar ? HushSpacing.sidebarWidth : 0, alignment: .leading)
                     .clipped()
                     .allowsHitTesting(showSidebar)
 
-                    ZStack {
-                        Rectangle()
-                            .fill(showSidebar ? themePalette.sidebarBackground : themePalette.rootBackground)
+                    let shape = UnevenRoundedRectangle(
+                        topLeadingRadius: rightPaneTopCornerRadius,
+                        bottomLeadingRadius: rightPaneBottomCornerRadius,
+                        bottomTrailingRadius: 0,
+                        topTrailingRadius: 0,
+                        style: .continuous
+                    )
 
-                        let shape = UnevenRoundedRectangle(
-                            topLeadingRadius: rightPaneTopCornerRadius,
-                            bottomLeadingRadius: rightPaneBottomCornerRadius,
-                            bottomTrailingRadius: 0,
-                            topTrailingRadius: 0,
-                            style: .continuous
-                        )
-
-                        if showSidebar {
-                            shape
-                                .fill(themePalette.rootBackground)
-                        }
-
-                        VStack(spacing: 0) {
-                            ChatTopBar(showSidebar: $showSidebar)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .frame(height: HushSpacing.topBarHeight)
-                                .background(WindowDragArea())
-
-                            ChatDetailPane()
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        }
-                        .background(themePalette.rootBackground)
-                        .clipShape(shape)
-                        .overlay {
-                            if showSidebar {
-                                shape
-                                    .strokeBorder(themePalette.splitPaneEdgeStroke, lineWidth: 1)
-                                    .mask(alignment: .leading) {
-                                        Rectangle()
-                                            .frame(width: max(rightPaneTopCornerRadius, rightPaneBottomCornerRadius) + 2)
-                                    }
+                    VStack(spacing: 0) {
+                        ChatTopBar(showSidebar: $showSidebar)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(height: HushSpacing.topBarHeight)
+                            .background {
+                                WorkspaceChromeBackground(
+                                    theme: container.settings.theme,
+                                    palette: themePalette
+                                )
+                                WindowDragArea()
                             }
+
+                        ChatDetailPane()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .background(themePalette.rootBackground)
+                    .clipShape(shape)
+                    .overlay {
+                        if showSidebar {
+                            LeadingPaneBorder(
+                                topRadius: rightPaneTopCornerRadius,
+                                bottomRadius: rightPaneBottomCornerRadius,
+                                color: themePalette.splitPaneEdgeStroke
+                            )
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .background(alignment: .leading) {
+                    SplitPaneSidebarSurface(
+                        theme: container.settings.theme,
+                        palette: themePalette,
+                        sidebarWidth: showSidebar ? HushSpacing.sidebarWidth : 0,
+                        revealWidth: sidebarRevealWidth
+                    )
                 }
                 .overlay(alignment: .topLeading) {
                     Button {
@@ -99,7 +107,7 @@ struct RootView: View {
 
     private func preferredScheme(forTheme theme: AppTheme) -> ColorScheme {
         switch theme {
-        case .dark:
+        case .dark, .graphiteGlass:
             return .dark
         case .light, .readPaper:
             return .light

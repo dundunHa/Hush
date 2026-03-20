@@ -2,8 +2,16 @@ import SwiftUI
 
 struct ConversationSidebarView: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.hushTheme) private var theme
     @Environment(\.hushThemePalette) private var palette
     @Binding var showSettings: Bool
+    let showsMaterialBackground: Bool
+    @State private var isNewThreadHovered: Bool = false
+
+    init(showSettings: Binding<Bool>, showsMaterialBackground: Bool = true) {
+        _showSettings = showSettings
+        self.showsMaterialBackground = showsMaterialBackground
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,7 +21,11 @@ struct ConversationSidebarView: View {
             settingsButton
         }
         .padding(.top, HushSpacing.topBarHeight)
-        .background(palette.sidebarBackground)
+        .background {
+            if showsMaterialBackground {
+                SidebarMaterialBackground(theme: theme, palette: palette)
+            }
+        }
         .background(alignment: .top) {
             WindowDragArea()
                 .frame(height: HushSpacing.topBarHeight)
@@ -25,6 +37,7 @@ struct ConversationSidebarView: View {
         HStack(spacing: HushSpacing.sm) {
             Label("Chats", systemImage: "bubble.left.and.bubble.right")
                 .font(HushTypography.heading)
+                .foregroundStyle(palette.primaryText)
 
             Spacer(minLength: 0)
         }
@@ -38,12 +51,17 @@ struct ConversationSidebarView: View {
                 container.resetConversation()
             } label: {
                 Label("New thread", systemImage: "square.and.pencil")
+                    .foregroundStyle(palette.primaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, HushSpacing.sm)
                     .padding(.vertical, 6)
+                    .background(sidebarControlBackground(isHovered: isNewThreadHovered))
             }
             .buttonStyle(.plain)
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onHover { hovering in
+                isNewThreadHovered = hovering
+            }
         }
         .padding(.horizontal, HushSpacing.sm)
         .padding(.vertical, HushSpacing.sm)
@@ -60,7 +78,7 @@ struct ConversationSidebarView: View {
 
             if container.sidebarThreads.isEmpty {
                 Text("No conversation yet")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(palette.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
                     .padding(.vertical, HushSpacing.sm)
@@ -141,21 +159,11 @@ struct ConversationSidebarView: View {
             showSettings = true
         } label: {
             Label("Settings", systemImage: "gearshape")
+                .foregroundStyle(palette.primaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, HushSpacing.sm)
                 .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isSettingsHovered ? palette.hoverFill : .clear)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(
-                                    isSettingsHovered ? palette.hoverStroke : .clear,
-                                    lineWidth: 1
-                                )
-                        )
-                        .animation(.easeInOut(duration: 0.15), value: isSettingsHovered)
-                )
+                .background(sidebarControlBackground(isHovered: isSettingsHovered))
         }
         .buttonStyle(.plain)
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -164,6 +172,31 @@ struct ConversationSidebarView: View {
         }
         .padding(.horizontal, HushSpacing.sm)
         .padding(.bottom, HushSpacing.md)
+    }
+
+    private func sidebarControlBackground(isHovered: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(
+                theme == .graphiteGlass
+                    ? (isHovered ? palette.softFillStrong : .clear)
+                    : (isHovered ? palette.hoverFill : palette.softFill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(
+                        isHovered
+                            ? palette.hoverStroke
+                            : (theme == .graphiteGlass ? palette.subtleStroke.opacity(0.72) : palette.subtleStroke),
+                        lineWidth: 1
+                    )
+            )
+            .shadow(
+                color: theme == .graphiteGlass && isHovered ? palette.sidebarGlassShadow.opacity(0.18) : .clear,
+                radius: 6,
+                x: 0,
+                y: 2
+            )
+            .animation(.easeInOut(duration: 0.18), value: isHovered)
     }
 }
 
@@ -175,6 +208,7 @@ enum SidebarActivityState: Equatable {
 }
 
 private struct SidebarThreadRow: View {
+    @Environment(\.hushTheme) private var theme
     @Environment(\.hushThemePalette) private var palette
     let thread: ConversationSidebarThread
     let isActive: Bool
@@ -199,11 +233,13 @@ private struct SidebarThreadRow: View {
             HStack(spacing: HushSpacing.sm) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(thread.title)
+                        .font(isActive ? HushTypography.body.weight(.semibold) : HushTypography.body)
+                        .foregroundStyle(palette.primaryText)
                         .lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(thread.lastActivityAt, style: .time)
                         .font(HushTypography.caption)
-                        .foregroundStyle(palette.secondaryText)
+                        .foregroundStyle(metadataColor)
                 }
 
                 trailingAccessory
@@ -336,17 +372,48 @@ private struct SidebarThreadRow: View {
         }
     }
 
+    private var metadataColor: Color {
+        if isActive || activityState != .idle {
+            return palette.secondaryText
+        }
+        return palette.tertiaryText
+    }
+
     private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+
+        return shape
             .fill(isActive ? palette.selectionFill : (isHovered ? palette.hoverFill : .clear))
+            .overlay {
+                if theme == .graphiteGlass && (isActive || isHovered) {
+                    shape
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    palette.sidebarGlassHighlight.opacity(isActive ? 0.18 : 0.09),
+                                    .clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+            }
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                shape
                     .stroke(
                         isActive ? palette.selectionStroke : (isHovered ? palette.hoverStroke : .clear),
                         lineWidth: 1
                     )
             )
-            .animation(.easeInOut(duration: 0.15), value: isHovered)
+            .shadow(
+                color: theme == .graphiteGlass && (isActive || isHovered)
+                    ? palette.sidebarGlassShadow.opacity(isActive ? 0.16 : 0.10) : .clear,
+                radius: isActive ? 8 : 6,
+                x: 0,
+                y: 3
+            )
+            .animation(.easeInOut(duration: 0.18), value: isHovered)
     }
 }
 

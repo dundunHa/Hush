@@ -2,6 +2,7 @@ import Foundation
 
 public enum AppTheme: String, Codable, CaseIterable, Sendable {
     case dark
+    case graphiteGlass
     case light
     case readPaper
 
@@ -9,6 +10,8 @@ public enum AppTheme: String, Codable, CaseIterable, Sendable {
         switch self {
         case .dark:
             return "Dark"
+        case .graphiteGlass:
+            return "Graphite Glass"
         case .light:
             return "Light"
         case .readPaper:
@@ -20,6 +23,8 @@ public enum AppTheme: String, Codable, CaseIterable, Sendable {
         switch self {
         case .dark:
             return "Slate contrast for focused work"
+        case .graphiteGlass:
+            return "Liquid sidebar with a calm graphite workspace"
         case .light:
             return "Clean daylight canvas"
         case .readPaper:
