@@ -19,6 +19,7 @@ final class HotScenePoolController: NSViewController {
 
     private var lastKnownContentWidth: Int?
     private var resizeDebounceTask: Task<Void, Never>?
+    private var bottomReservedHeight: CGFloat = HushSpacing.xl + HushSpacing.sm
 
     convenience init() {
         self.init(pool: HotScenePool())
@@ -63,9 +64,17 @@ final class HotScenePoolController: NSViewController {
         scheduleResizeCleanup(expectedContentWidth: quantized)
     }
 
-    func update(container: AppContainer, theme: AppTheme) {
+    func update(
+        container: AppContainer,
+        theme: AppTheme,
+        bottomReservedHeight: CGFloat = HushSpacing.xl + HushSpacing.sm
+    ) {
         self.container = container
         container.registerHotScenePool(pool)
+
+        let normalizedBottomReservedHeight = max(HushSpacing.xl + HushSpacing.sm, ceil(bottomReservedHeight))
+        let bottomReservedHeightChanged = abs(self.bottomReservedHeight - normalizedBottomReservedHeight) > 0.5
+        self.bottomReservedHeight = normalizedBottomReservedHeight
 
         let themeChanged = lastAppliedTheme != theme
         lastAppliedTheme = theme
@@ -79,6 +88,9 @@ final class HotScenePoolController: NSViewController {
             switchToActiveConversation(container: container, theme: theme, forceFullReload: appearanceChanged)
             lastActiveConversationID = activeConversationID
         } else {
+            if bottomReservedHeightChanged {
+                pool.sceneFor(conversationID: activeConversationID)?.updateBottomReservedHeight(self.bottomReservedHeight)
+            }
             forwardUpdateToActiveScene(container: container, theme: theme, forceFullReload: appearanceChanged)
         }
 
@@ -105,7 +117,13 @@ final class HotScenePoolController: NSViewController {
             conversationID: activeConversationID,
             messageCount: messages.count,
             generation: generation,
-            makeScene: { ConversationViewController(container: container, theme: theme) }
+            makeScene: {
+                ConversationViewController(
+                    container: container,
+                    theme: theme,
+                    bottomReservedHeight: bottomReservedHeight
+                )
+            }
         )
         let requiresReload = result.scene.needsReload || forceFullReload
         let isHotHitWithoutReload = !result.didCreate && !requiresReload
@@ -113,6 +131,8 @@ final class HotScenePoolController: NSViewController {
         if let evicted = result.evicted {
             evictScene(conversationID: evicted.conversationID, scene: evicted.scene, container: container)
         }
+
+        result.scene.updateBottomReservedHeight(bottomReservedHeight)
 
         if result.didCreate {
             attachSceneIfNeeded(result.scene)
@@ -243,6 +263,7 @@ final class HotScenePoolController: NSViewController {
             guard let generation = pool.generationForConversation(conversationID: conversationID) else { continue }
 
             scene.needsReload = false
+            scene.updateBottomReservedHeight(bottomReservedHeight)
             scene.applyConversationState(
                 conversationId: conversationID,
                 messages: container.messagesForConversation(conversationID),

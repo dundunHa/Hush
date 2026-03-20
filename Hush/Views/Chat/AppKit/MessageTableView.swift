@@ -243,6 +243,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     var lastStreamingHeight: CGFloat = 0
     var lastStreamingHeightMeasureAt: Date = .distantPast
     private var lastLayoutHeight: CGFloat = 0
+    private var bottomReservedHeight: CGFloat = HushSpacing.xl + HushSpacing.sm
     private var pendingShrinkScroll = false
     private let olderLoadThrottleInterval: TimeInterval = 0.3
     private let lookaheadPrewarmWindow = 6
@@ -267,6 +268,12 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
 
     private var renderStyle: RenderStyle {
         RenderStyle.fromPalette(palette, fontSettings: fontSettings)
+    }
+
+    private var maxScrollableOriginY: CGFloat {
+        let documentHeight = scrollView.documentView?.frame.height ?? tableView.frame.height
+        let insetHeight = scrollView.contentInsets.top + scrollView.contentInsets.bottom
+        return max(0, documentHeight + insetHeight - scrollView.contentView.bounds.height)
     }
 
     var userHasScrolledUp: Bool {
@@ -301,7 +308,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         scrollView.drawsBackground = false
         scrollView.automaticallyAdjustsContentInsets = false
         // Keep the final message visually clear of the composer chrome.
-        scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: HushSpacing.xl + HushSpacing.sm, right: 0)
+        scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottomReservedHeight, right: 0)
         scrollView.horizontalScrollElasticity = .none
         scrollView.verticalScrollElasticity = .none
         scrollView.borderType = .noBorder
@@ -382,6 +389,21 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         tableView.dataSource = nil
         tableView.delegate = nil
         scrollView.documentView = nil
+    }
+
+    func setBottomReservedHeight(_ height: CGFloat) {
+        let normalizedHeight = max(HushSpacing.xl + HushSpacing.sm, ceil(height))
+        guard abs(bottomReservedHeight - normalizedHeight) > 0.5 else { return }
+
+        bottomReservedHeight = normalizedHeight
+        var contentInsets = scrollView.contentInsets
+        contentInsets.bottom = normalizedHeight
+        scrollView.contentInsets = contentInsets
+
+        if !userHasScrolledUp, !rows.isEmpty {
+            scrollToBottom()
+        }
+        updatePinnedState()
     }
 
     override func layout() {
@@ -784,9 +806,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
 
     private func updatePinnedState() {
         let clipView = scrollView.contentView
-        let docHeight = scrollView.documentView?.frame.height ?? 0
-        let visibleMaxY = clipView.bounds.origin.y + clipView.bounds.height
-        let distanceFromBottom = max(0, docHeight - visibleMaxY)
+        let distanceFromBottom = max(0, maxScrollableOriginY - clipView.bounds.origin.y)
 
         let action = TailFollow.reduce(
             state: &tailFollowState,
@@ -1029,9 +1049,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         layoutSubtreeIfNeeded()
         tableView.layoutSubtreeIfNeeded()
         scrollView.layoutSubtreeIfNeeded()
-        let documentHeight = scrollView.documentView?.frame.height ?? tableView.frame.height
-        let targetY = max(0, documentHeight - scrollView.contentView.bounds.height)
-        setScrollOriginY(targetY)
+        setScrollOriginY(maxScrollableOriginY)
         scheduleBottomPinSettleCheckIfNeeded()
     }
 
@@ -1085,22 +1103,19 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
             self.tableView.layoutSubtreeIfNeeded()
             self.scrollView.layoutSubtreeIfNeeded()
 
-            let documentHeight = self.scrollView.documentView?.frame.height ?? self.tableView.frame.height
-            let maxY = max(0, documentHeight - self.scrollView.contentView.bounds.height)
             let currentY = self.scrollView.contentView.bounds.origin.y
-            guard abs(currentY - maxY) > 1.0 else { return }
+            guard abs(currentY - self.maxScrollableOriginY) > 1.0 else { return }
 
-            self.setScrollOriginY(maxY)
+            self.setScrollOriginY(self.maxScrollableOriginY)
             self.scheduleBottomPinSettleCheckIfNeeded()
         }
     }
 
     private func setScrollOriginY(_ y: CGFloat) {
-        guard let documentView = scrollView.documentView else { return }
-        let maxY = max(0, documentView.frame.height - scrollView.contentView.bounds.height)
+        guard scrollView.documentView != nil else { return }
         let target = NSPoint(
             x: 0,
-            y: min(max(0, y), maxY)
+            y: min(max(0, y), maxScrollableOriginY)
         )
         scrollView.contentView.scroll(to: target)
         scrollView.reflectScrolledClipView(scrollView.contentView)
@@ -3391,8 +3406,7 @@ private final class MessageAttachmentPreviewView: NSView {
         }
 
         var maxScrollOriginYForTesting: CGFloat {
-            let documentHeight = scrollView.documentView?.frame.height ?? tableView.frame.height
-            return max(0, documentHeight - scrollView.contentView.bounds.height)
+            maxScrollableOriginY
         }
 
         var isLiveScrollingForTesting: Bool {
@@ -3403,10 +3417,13 @@ private final class MessageAttachmentPreviewView: NSView {
             pendingPinnedRowHeightInvalidations.count
         }
 
+        var bottomReservedHeightForTesting: CGFloat {
+            bottomReservedHeight
+        }
+
         func setScrollOriginYForTesting(_ y: CGFloat) {
-            guard let documentView = scrollView.documentView else { return }
-            let maxY = max(0, documentView.frame.height - scrollView.contentView.bounds.height)
-            let target = NSPoint(x: 0, y: min(max(0, y), maxY))
+            guard scrollView.documentView != nil else { return }
+            let target = NSPoint(x: 0, y: min(max(0, y), maxScrollableOriginY))
             scrollView.contentView.scroll(to: target)
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
