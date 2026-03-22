@@ -120,15 +120,11 @@ struct ChatConfigDrawer: View {
             summaryStrip
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: HushSpacing.md) {
-                    configSection(
-                        title: "History & Budget",
-                        subtitle: "Carry enough context without letting each request sprawl."
-                    ) {
+                    configSection(title: "History & Budget") {
                         parameterRow(
                             icon: "text.bubble",
                             title: "Context Messages",
-                            value: contextMessagesText,
-                            description: "How many earlier turns travel with the next prompt."
+                            value: contextMessagesText
                         ) {
                             HStack(spacing: HushSpacing.md) {
                                 Slider(
@@ -151,8 +147,7 @@ struct ChatConfigDrawer: View {
                         parameterRow(
                             icon: "text.alignleft",
                             title: "Max Tokens",
-                            value: maxTokensText,
-                            description: "Output budget cap for the next assistant reply."
+                            value: maxTokensText
                         ) {
                             HStack(spacing: HushSpacing.md) {
                                 Slider(
@@ -171,15 +166,11 @@ struct ChatConfigDrawer: View {
                         }
                     }
 
-                    configSection(
-                        title: "Sampling",
-                        subtitle: "Shape whether the next replies feel steady, broad, or exploratory."
-                    ) {
+                    configSection(title: "Sampling") {
                         parameterRow(
                             icon: "dial.medium",
                             title: "Temperature",
-                            value: temperatureText,
-                            description: "Lower is steadier. Higher allows more variation."
+                            value: temperatureText
                         ) {
                             Slider(value: temperatureBinding, in: 0 ... 2, step: 0.05)
                                 .accessibilityLabel("Temperature")
@@ -190,8 +181,7 @@ struct ChatConfigDrawer: View {
                         parameterRow(
                             icon: "circle.lefthalf.filled",
                             title: "Top P",
-                            value: topPText,
-                            description: "Keep only the most likely probability mass."
+                            value: topPText
                         ) {
                             Slider(value: topPBinding, in: 0 ... 1, step: 0.05)
                                 .accessibilityLabel("Top P")
@@ -202,15 +192,12 @@ struct ChatConfigDrawer: View {
                         parameterRow(
                             icon: "line.3.horizontal.decrease.circle",
                             title: "Top K",
-                            value: topKText,
-                            description: "Candidate cap. Set to 0 when you want it off."
+                            value: topKText
                         ) {
                             Slider(value: topKBinding, in: 0 ... 100, step: 1)
                                 .accessibilityLabel("Top K")
                         }
                     }
-
-                    footerView
                 }
                 .padding(.vertical, HushSpacing.xs)
             }
@@ -225,16 +212,11 @@ struct ChatConfigDrawer: View {
 
 private extension ChatConfigDrawer {
     private var headerView: some View {
-        HStack(alignment: .top, spacing: HushSpacing.md) {
-            VStack(alignment: .leading, spacing: HushSpacing.xs) {
+        HStack(alignment: .center, spacing: HushSpacing.md) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text("Chat Tuning")
                     .font(HushTypography.heading)
                     .foregroundStyle(palette.primaryText)
-
-                Text("Low-frequency controls for history and sampling, moved out of the composer.")
-                    .font(HushTypography.footnote)
-                    .foregroundStyle(palette.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: 0)
@@ -288,19 +270,6 @@ private extension ChatConfigDrawer {
             summaryChip(title: "Temp", value: temperatureText)
             summaryChip(title: "Budget", value: maxTokensValueBinding.wrappedValue == 0 ? "∞" : compactTokenCount(maxTokensValueBinding.wrappedValue))
         }
-    }
-
-    private var footerView: some View {
-        HStack(alignment: .center, spacing: HushSpacing.sm) {
-            Image(systemName: "info.circle")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(palette.tertiaryText)
-
-            Text("These controls affect upcoming requests. Model and reasoning stay in the composer.")
-                .font(HushTypography.caption)
-                .foregroundStyle(palette.secondaryText)
-        }
-        .padding(.top, HushSpacing.xs)
     }
 
     private var popoverBackground: some View {
@@ -388,7 +357,7 @@ private extension ChatConfigDrawer {
 
     private func configSection<Content: View>(
         title: String,
-        subtitle: String,
+        subtitle: String? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
@@ -397,9 +366,11 @@ private extension ChatConfigDrawer {
                     .font(HushTypography.captionBold)
                     .foregroundStyle(palette.primaryText)
 
-                Text(subtitle)
-                    .font(HushTypography.caption)
-                    .foregroundStyle(palette.secondaryText)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(HushTypography.caption)
+                        .foregroundStyle(palette.secondaryText)
+                }
             }
 
             VStack(alignment: .leading, spacing: HushSpacing.sm) {
@@ -421,7 +392,7 @@ private extension ChatConfigDrawer {
         icon: String,
         title: String,
         value: String,
-        description: String,
+        description: String? = nil,
         @ViewBuilder control: () -> Control
     ) -> some View {
         VStack(alignment: .leading, spacing: HushSpacing.sm) {
@@ -440,15 +411,17 @@ private extension ChatConfigDrawer {
                 }
                 .frame(width: Layout.iconSize, height: Layout.iconSize)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: description == nil ? 0 : 3) {
                     Text(title)
                         .font(HushTypography.body.weight(.medium))
                         .foregroundStyle(palette.primaryText)
 
-                    Text(description)
-                        .font(HushTypography.caption)
-                        .foregroundStyle(palette.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if let description, !description.isEmpty {
+                        Text(description)
+                            .font(HushTypography.caption)
+                            .foregroundStyle(palette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 Spacer(minLength: HushSpacing.md)
