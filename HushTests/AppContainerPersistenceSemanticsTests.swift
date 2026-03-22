@@ -510,6 +510,7 @@ private actor TrackingMessageAssetStore: MessageAssetStore {
     }
 }
 
+@MainActor
 private func waitForRequestToSettle(
     _ container: AppContainer,
     timeout: Duration = .seconds(2)
@@ -523,6 +524,7 @@ private func waitForRequestToSettle(
     }
 }
 
+@MainActor
 private func waitForConversationReady(
     _ container: AppContainer,
     conversationId: String,
