@@ -6,8 +6,7 @@ on:
       - main
     tags:
       - "*"
-    tags-ignore:
-      - main-latest
+      - "!main-latest"
 
 permissions:
   contents: write
