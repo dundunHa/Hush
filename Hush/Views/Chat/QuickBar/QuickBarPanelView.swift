@@ -4,6 +4,7 @@ struct QuickBarPanelView: View {
     @EnvironmentObject private var container: AppContainer
     @State private var isOverflowHovered = false
     @State private var isCloseHovered = false
+    @Namespace private var glassNamespace
 
     private var palette: HushThemePalette {
         HushColors.palette(for: container.settings.theme)
@@ -21,11 +22,14 @@ struct QuickBarPanelView: View {
     }
 
     private var compactBody: some View {
-        QuickBarComposer()
-            .environmentObject(container)
-            .padding(.horizontal, HushSpacing.sm)
-            .padding(.vertical, HushSpacing.sm)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        QuickBarComposer(
+            glassNamespace: activeGlassNamespace,
+            prefersNativeGlass: usesNativeGlass
+        )
+        .environmentObject(container)
+        .padding(.horizontal, HushSpacing.sm)
+        .padding(.vertical, HushSpacing.sm)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     private var expandedBody: some View {
@@ -44,8 +48,11 @@ struct QuickBarPanelView: View {
                 .background(transcriptSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
 
-                QuickBarComposer()
-                    .environmentObject(container)
+                QuickBarComposer(
+                    glassNamespace: activeGlassNamespace,
+                    prefersNativeGlass: usesNativeGlass
+                )
+                .environmentObject(container)
             }
             .padding(.horizontal, HushSpacing.lg + 2)
             .padding(.top, HushSpacing.sm + 2)
@@ -89,7 +96,14 @@ struct QuickBarPanelView: View {
                     .disabled(container.isQuickBarSending)
                 }
             } label: {
-                toolbarOrb(systemName: "ellipsis", isHovered: isOverflowHovered)
+                toolbarOrb(
+                    systemName: "ellipsis",
+                    isHovered: isOverflowHovered,
+                    registration: QuickBarNativeGlassRegistration(
+                        id: .overflowButton,
+                        transition: .materialize
+                    )
+                )
             }
             .menuStyle(.borderlessButton)
             .onHover { isOverflowHovered = $0 }
@@ -97,7 +111,14 @@ struct QuickBarPanelView: View {
             Button {
                 container.closeQuickBar()
             } label: {
-                toolbarOrb(systemName: "xmark", isHovered: isCloseHovered)
+                toolbarOrb(
+                    systemName: "xmark",
+                    isHovered: isCloseHovered,
+                    registration: QuickBarNativeGlassRegistration(
+                        id: .closeButton,
+                        transition: .materialize
+                    )
+                )
             }
             .buttonStyle(.plain)
             .onHover { isCloseHovered = $0 }
@@ -107,13 +128,17 @@ struct QuickBarPanelView: View {
 
     private var transcriptSurface: some View {
         let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
+        let topOpacity = container.settings.theme.usesDarkAppearance ? 0.72 : 0.62
+        let bottomOpacity = container.settings.theme.usesDarkAppearance ? 0.64 : 0.56
+        let highlightOpacity = container.settings.theme.usesDarkAppearance ? 0.08 : 0.06
+        let strokeOpacity = container.settings.theme.usesDarkAppearance ? 0.44 : 0.36
 
         return shape
             .fill(
                 LinearGradient(
                     colors: [
-                        palette.quickBarSurface.opacity(0.76),
-                        palette.quickBarSurface.opacity(0.68)
+                        palette.quickBarSurface.opacity(topOpacity),
+                        palette.quickBarSurface.opacity(bottomOpacity)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -124,7 +149,7 @@ struct QuickBarPanelView: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                palette.quickBarSurfaceStroke.opacity(0.10),
+                                palette.quickBarSurfaceStroke.opacity(highlightOpacity),
                                 .clear
                             ],
                             startPoint: .top,
@@ -134,7 +159,7 @@ struct QuickBarPanelView: View {
             )
             .overlay(
                 shape
-                    .stroke(palette.quickBarSurfaceStroke.opacity(0.50), lineWidth: 0.5)
+                    .stroke(palette.quickBarSurfaceStroke.opacity(strokeOpacity), lineWidth: 0.5)
             )
     }
 
@@ -152,20 +177,58 @@ struct QuickBarPanelView: View {
         palette.quickBarSurfaceStroke.opacity(0.68)
     }
 
-    private func toolbarOrb(systemName: String, isHovered: Bool) -> some View {
+    private func toolbarOrb(
+        systemName: String,
+        isHovered: Bool,
+        registration: QuickBarNativeGlassRegistration
+    ) -> some View {
         Image(systemName: systemName)
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(palette.quickBarControlMuted)
             .frame(width: 30, height: 30)
             .background {
-                QuickBarLiquidGlassSurface(
+                QuickBarGlassSurface(
                     shape: Circle(),
-                    baseTint: isHovered ? palette.quickBarControlFillHover : palette.quickBarControlFill,
-                    highlightTint: palette.quickBarSurfaceStroke,
-                    shadowColor: palette.splitPaneShadow,
-                    style: .control(isHovered: isHovered)
+                    registration: registration,
+                    namespace: activeGlassNamespace,
+                    nativeStyle: nativeToolbarOrbStyle(isHovered: isHovered),
+                    fallbackBaseTint: isHovered ? palette.quickBarControlFillHover : palette.quickBarControlFill,
+                    fallbackHighlightTint: palette.quickBarSurfaceStroke,
+                    fallbackShadowColor: palette.splitPaneShadow,
+                    fallbackStyle: .control(isHovered: isHovered)
                 )
             }
+    }
+
+    private var usesNativeGlass: Bool {
+        if #available(macOS 26.0, *) {
+            return true
+        }
+        return false
+    }
+
+    private var activeGlassNamespace: Namespace.ID? {
+        usesNativeGlass ? glassNamespace : nil
+    }
+
+    private func nativeToolbarOrbStyle(isHovered: Bool) -> QuickBarNativeGlassStyle {
+        let tint: Color? = if isHovered {
+            palette.quickBarControlFillHover.opacity(
+                container.settings.theme.usesDarkAppearance ? 0.22 : 0.12
+            )
+        } else {
+            nil
+        }
+
+        return QuickBarNativeGlassStyle(
+            tint: tint,
+            isInteractive: true,
+            strokeColor: palette.quickBarSurfaceStroke.opacity(isHovered ? 0.26 : 0.18),
+            shadowColor: palette.splitPaneShadow,
+            shadowOpacity: 0.04,
+            shadowRadius: 5,
+            shadowYOffset: 1
+        )
     }
 
     private func preferredScheme(for theme: AppTheme) -> ColorScheme {

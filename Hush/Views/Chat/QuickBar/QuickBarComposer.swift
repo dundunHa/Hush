@@ -3,12 +3,23 @@ import SwiftUI
 struct QuickBarComposer: View {
     @EnvironmentObject private var container: AppContainer
 
+    private let glassNamespace: Namespace.ID?
+    private let prefersNativeGlass: Bool
+
     @State private var availableModels: [ModelDescriptor] = []
     @State private var catalogStateMessage: String?
     @State private var isModelHovered = false
     @State private var isOpenSettingsHovered = false
     @State private var isSendHovered = false
     @FocusState private var isEditorFocused: Bool
+
+    init(
+        glassNamespace: Namespace.ID? = nil,
+        prefersNativeGlass: Bool = false
+    ) {
+        self.glassNamespace = glassNamespace
+        self.prefersNativeGlass = prefersNativeGlass
+    }
 
     private var palette: HushThemePalette {
         HushColors.palette(for: container.settings.theme)
@@ -59,7 +70,11 @@ struct QuickBarComposer: View {
                     .background {
                         controlGlassSurface(
                             shape: Capsule(style: .continuous),
-                            isHovered: isOpenSettingsHovered
+                            isHovered: isOpenSettingsHovered,
+                            registration: QuickBarNativeGlassRegistration(
+                                id: .openSettingsControl,
+                                transition: .matchedGeometry
+                            )
                         )
                     }
                     .onHover { isOpenSettingsHovered = $0 }
@@ -169,7 +184,11 @@ struct QuickBarComposer: View {
             .background {
                 controlGlassSurface(
                     shape: RoundedRectangle(cornerRadius: 12, style: .continuous),
-                    isHovered: isModelHovered
+                    isHovered: isModelHovered,
+                    registration: QuickBarNativeGlassRegistration(
+                        id: .modelControl,
+                        transition: .matchedGeometry
+                    )
                 )
             }
         }
@@ -206,7 +225,7 @@ struct QuickBarComposer: View {
 
     @ViewBuilder
     private var sendButtonSurface: some View {
-        if container.isQuickBarSending {
+        if container.isQuickBarSending && !usesNativeGlass {
             Circle()
                 .fill(palette.destructiveActionBackground.opacity(0.58))
                 .overlay(
@@ -217,7 +236,12 @@ struct QuickBarComposer: View {
             actionGlassSurface(
                 shape: Circle(),
                 isHovered: isSendHovered,
-                isEnabled: canSendDraft
+                isEnabled: canSendDraft,
+                isSending: container.isQuickBarSending,
+                registration: QuickBarNativeGlassRegistration(
+                    id: .sendAction,
+                    transition: .matchedGeometry
+                )
             )
         }
     }
@@ -242,28 +266,156 @@ struct QuickBarComposer: View {
         )
     }
 
-    private func controlGlassSurface<S: InsettableShape>(shape: S, isHovered: Bool) -> some View {
-        QuickBarLiquidGlassSurface(
+    private func controlGlassSurface<S: InsettableShape>(
+        shape: S,
+        isHovered: Bool,
+        registration: QuickBarNativeGlassRegistration
+    ) -> some View {
+        QuickBarGlassSurface(
             shape: shape,
-            baseTint: isHovered ? palette.quickBarControlFillHover : palette.quickBarControlFill,
-            highlightTint: palette.quickBarSurfaceStroke,
-            shadowColor: palette.splitPaneShadow,
-            style: .control(isHovered: isHovered)
+            registration: registration,
+            namespace: activeGlassNamespace,
+            nativeStyle: nativeControlStyle(isHovered: isHovered),
+            fallbackBaseTint: isHovered ? palette.quickBarControlFillHover : palette.quickBarControlFill,
+            fallbackHighlightTint: palette.quickBarSurfaceStroke,
+            fallbackShadowColor: palette.splitPaneShadow,
+            fallbackStyle: .control(isHovered: isHovered)
         )
     }
 
     private func actionGlassSurface<S: InsettableShape>(
         shape: S,
         isHovered: Bool,
-        isEnabled: Bool
+        isEnabled: Bool,
+        isSending: Bool,
+        registration: QuickBarNativeGlassRegistration
     ) -> some View {
-        QuickBarLiquidGlassSurface(
+        QuickBarGlassSurface(
             shape: shape,
-            baseTint: isEnabled ? palette.quickBarButtonFill : palette.quickBarDisabledButtonFill,
-            highlightTint: isEnabled ? palette.quickBarButtonFill : palette.quickBarSurfaceStroke,
-            shadowColor: palette.splitPaneShadow,
-            style: .actionButton(isHovered: isHovered && isEnabled)
+            registration: registration,
+            namespace: activeGlassNamespace,
+            nativeStyle: nativeActionStyle(
+                isHovered: isHovered,
+                isEnabled: isEnabled,
+                isSending: isSending
+            ),
+            fallbackBaseTint: fallbackActionBaseTint(
+                isEnabled: isEnabled,
+                isSending: isSending
+            ),
+            fallbackHighlightTint: fallbackActionHighlightTint(
+                isEnabled: isEnabled,
+                isSending: isSending
+            ),
+            fallbackShadowColor: palette.splitPaneShadow,
+            fallbackStyle: fallbackActionStyle(
+                isHovered: isHovered,
+                isEnabled: isEnabled,
+                isSending: isSending
+            )
         )
+    }
+
+    private var usesNativeGlass: Bool {
+        if #available(macOS 26.0, *) {
+            return prefersNativeGlass && glassNamespace != nil
+        }
+        return false
+    }
+
+    private var activeGlassNamespace: Namespace.ID? {
+        usesNativeGlass ? glassNamespace : nil
+    }
+
+    private func nativeControlStyle(isHovered: Bool) -> QuickBarNativeGlassStyle {
+        let tint: Color? = if isHovered {
+            palette.quickBarControlFillHover.opacity(
+                container.settings.theme.usesDarkAppearance ? 0.22 : 0.12
+            )
+        } else {
+            nil
+        }
+
+        return QuickBarNativeGlassStyle(
+            tint: tint,
+            isInteractive: true,
+            strokeColor: palette.quickBarSurfaceStroke.opacity(isHovered ? 0.26 : 0.18),
+            shadowColor: palette.splitPaneShadow,
+            shadowOpacity: 0.04,
+            shadowRadius: 5,
+            shadowYOffset: 1
+        )
+    }
+
+    private func nativeActionStyle(
+        isHovered: Bool,
+        isEnabled: Bool,
+        isSending: Bool
+    ) -> QuickBarNativeGlassStyle {
+        let tint: Color? = if isSending {
+            palette.destructiveActionBackground.opacity(
+                container.settings.theme.usesDarkAppearance
+                    ? (isHovered ? 0.26 : 0.20)
+                    : (isHovered ? 0.18 : 0.14)
+            )
+        } else if isEnabled {
+            palette.quickBarButtonFill.opacity(
+                container.settings.theme.usesDarkAppearance
+                    ? (isHovered ? 0.24 : 0.18)
+                    : (isHovered ? 0.18 : 0.14)
+            )
+        } else {
+            nil
+        }
+
+        let stroke: Color = if isSending {
+            palette.destructiveActionBackground.opacity(isHovered ? 0.36 : 0.28)
+        } else if isEnabled {
+            palette.quickBarButtonFill.opacity(isHovered ? 0.32 : 0.24)
+        } else {
+            palette.quickBarSurfaceStroke.opacity(0.16)
+        }
+
+        return QuickBarNativeGlassStyle(
+            tint: tint,
+            isInteractive: true,
+            strokeColor: stroke,
+            shadowColor: palette.splitPaneShadow,
+            shadowOpacity: 0.05,
+            shadowRadius: 5,
+            shadowYOffset: 1
+        )
+    }
+
+    private func fallbackActionBaseTint(
+        isEnabled: Bool,
+        isSending: Bool
+    ) -> Color {
+        if isSending {
+            return palette.destructiveActionBackground
+        }
+        return isEnabled ? palette.quickBarButtonFill : palette.quickBarDisabledButtonFill
+    }
+
+    private func fallbackActionHighlightTint(
+        isEnabled: Bool,
+        isSending: Bool
+    ) -> Color {
+        if isSending {
+            return palette.destructiveActionForeground
+        }
+        return isEnabled ? palette.quickBarButtonFill : palette.quickBarSurfaceStroke
+    }
+
+    private func fallbackActionStyle(
+        isHovered: Bool,
+        isEnabled: Bool,
+        isSending: Bool
+    ) -> QuickBarLiquidGlassStyle {
+        if isSending {
+            return .actionButton(isHovered: isHovered)
+        }
+        return .actionButton(isHovered: isHovered && isEnabled)
     }
 
     @MainActor

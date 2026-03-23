@@ -21,6 +21,119 @@ struct BehindWindowVibrancyHost: NSViewRepresentable {
     }
 }
 
+enum QuickBarNativeGlassID: String, Hashable, Sendable {
+    case modelControl
+    case openSettingsControl
+    case sendAction
+    case overflowButton
+    case closeButton
+}
+
+enum QuickBarNativeGlassTransitionKind: Sendable {
+    case matchedGeometry
+    case materialize
+    case identity
+}
+
+struct QuickBarNativeGlassRegistration: Sendable {
+    let id: QuickBarNativeGlassID
+    let transition: QuickBarNativeGlassTransitionKind
+
+    init(
+        id: QuickBarNativeGlassID,
+        transition: QuickBarNativeGlassTransitionKind = .identity
+    ) {
+        self.id = id
+        self.transition = transition
+    }
+}
+
+struct QuickBarNativeGlassStyle: Sendable {
+    let tint: Color?
+    let isInteractive: Bool
+    let strokeColor: Color
+    let shadowColor: Color
+    let shadowOpacity: Double
+    let shadowRadius: CGFloat
+    let shadowYOffset: CGFloat
+
+    init(
+        tint: Color? = nil,
+        isInteractive: Bool,
+        strokeColor: Color,
+        shadowColor: Color,
+        shadowOpacity: Double,
+        shadowRadius: CGFloat,
+        shadowYOffset: CGFloat
+    ) {
+        self.tint = tint
+        self.isInteractive = isInteractive
+        self.strokeColor = strokeColor
+        self.shadowColor = shadowColor
+        self.shadowOpacity = shadowOpacity
+        self.shadowRadius = shadowRadius
+        self.shadowYOffset = shadowYOffset
+    }
+}
+
+@available(macOS 26.0, *)
+private extension View {
+    @ViewBuilder
+    func quickBarNativeGlassTransition(
+        _ transition: QuickBarNativeGlassTransitionKind
+    ) -> some View {
+        switch transition {
+        case .matchedGeometry:
+            glassEffectTransition(.matchedGeometry)
+        case .materialize:
+            glassEffectTransition(.materialize)
+        case .identity:
+            self
+        }
+    }
+
+    func quickBarNativeGlassRegistration(
+        _ registration: QuickBarNativeGlassRegistration,
+        namespace: Namespace.ID
+    ) -> some View {
+        glassEffectID(registration.id.rawValue, in: namespace)
+            .quickBarNativeGlassTransition(registration.transition)
+    }
+}
+
+@available(macOS 26.0, *)
+struct QuickBarNativeGlassSurface<S: InsettableShape>: View {
+    let shape: S
+    let style: QuickBarNativeGlassStyle
+    let registration: QuickBarNativeGlassRegistration
+    let namespace: Namespace.ID
+
+    private var resolvedGlass: Glass {
+        let interactiveGlass = Glass.regular.interactive(style.isInteractive)
+        if let tint = style.tint {
+            return interactiveGlass.tint(tint)
+        }
+        return interactiveGlass
+    }
+
+    var body: some View {
+        shape
+            .fill(.clear)
+            .glassEffect(resolvedGlass, in: shape)
+            .quickBarNativeGlassRegistration(registration, namespace: namespace)
+            .overlay(
+                shape
+                    .stroke(style.strokeColor, lineWidth: 0.5)
+            )
+            .shadow(
+                color: style.shadowColor.opacity(style.shadowOpacity),
+                radius: style.shadowRadius,
+                x: 0,
+                y: style.shadowYOffset
+            )
+    }
+}
+
 struct QuickBarLiquidGlassStyle {
     let tintTopOpacity: Double
     let tintBottomOpacity: Double
@@ -244,6 +357,36 @@ struct QuickBarLiquidGlassSurface<S: InsettableShape>: View {
                 x: 0,
                 y: style.shadowYOffset
             )
+    }
+}
+
+struct QuickBarGlassSurface<S: InsettableShape>: View {
+    let shape: S
+    let registration: QuickBarNativeGlassRegistration
+    let namespace: Namespace.ID?
+    let nativeStyle: QuickBarNativeGlassStyle
+    let fallbackBaseTint: Color
+    let fallbackHighlightTint: Color
+    let fallbackShadowColor: Color
+    let fallbackStyle: QuickBarLiquidGlassStyle
+
+    var body: some View {
+        if #available(macOS 26.0, *), let namespace {
+            QuickBarNativeGlassSurface(
+                shape: shape,
+                style: nativeStyle,
+                registration: registration,
+                namespace: namespace
+            )
+        } else {
+            QuickBarLiquidGlassSurface(
+                shape: shape,
+                baseTint: fallbackBaseTint,
+                highlightTint: fallbackHighlightTint,
+                shadowColor: fallbackShadowColor,
+                style: fallbackStyle
+            )
+        }
     }
 }
 

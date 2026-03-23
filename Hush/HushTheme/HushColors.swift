@@ -250,9 +250,9 @@ enum HushColors {
     )
 
     private static let ivoryGlassPalette = HushThemePalette(
-        rootBackground: Color(hex: 0xF4EEE3),
+        rootBackground: Color(hex: 0xFAF9F5),
         sidebarBackground: Color(hex: 0xFBF4E9, opacity: 0.46),
-        workspaceChromeBackground: Color(hex: 0xF7F0E4),
+        workspaceChromeBackground: Color(hex: 0xFAF9F5),
         cardBackground: Color(hex: 0xFFF9F0, opacity: 0.88),
         composerBackground: Color(hex: 0xFCF5EA, opacity: 0.82),
         composerEditorBackground: Color(hex: 0xFFFDF8),
