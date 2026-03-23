@@ -154,6 +154,7 @@ struct GeneralSettingsView: View {
 
             Text(
                 "Quick Bar uses a system-wide hotkey. Click the shortcut field and press the new shortcut. " +
+                    "The preview updates as you hold it and saves when you release. " +
                     "Press Esc to cancel, and keep at least one modifier. Default: \(QuickBarConfiguration.standard.displayString)."
             )
             .font(HushTypography.caption)

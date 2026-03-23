@@ -102,6 +102,7 @@ struct QuickBarComposer: View {
                 .font(HushTypography.scaled(16))
                 .foregroundStyle(palette.quickBarPrimaryText)
                 .frame(minHeight: 52, maxHeight: 88)
+                .scrollIndicators(.never, axes: .vertical)
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, HushSpacing.sm)
                 .padding(.vertical, HushSpacing.xs)

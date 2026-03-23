@@ -152,18 +152,30 @@ final class QuickBarHotkeyController {
     }
 
     static func configuration(for event: NSEvent) -> QuickBarConfiguration? {
-        guard let key = keysByKeyCode[event.keyCode] else { return nil }
+        configuration(
+            forKeyCode: event.keyCode,
+            modifierFlags: event.modifierFlags
+        )
+    }
+
+    static func configuration(
+        forKeyCode keyCode: UInt16,
+        modifierFlags: NSEvent.ModifierFlags
+    ) -> QuickBarConfiguration? {
+        guard let key = keysByKeyCode[keyCode] else { return nil }
+
+        let normalizedFlags = modifierFlags.intersection(.deviceIndependentFlagsMask)
 
         let modifiers = QuickBarConfiguration.supportedModifiers.filter { modifier in
             switch modifier {
             case "command":
-                return event.modifierFlags.contains(.command)
+                return normalizedFlags.contains(.command)
             case "option":
-                return event.modifierFlags.contains(.option)
+                return normalizedFlags.contains(.option)
             case "shift":
-                return event.modifierFlags.contains(.shift)
+                return normalizedFlags.contains(.shift)
             case "control":
-                return event.modifierFlags.contains(.control)
+                return normalizedFlags.contains(.control)
             default:
                 return false
             }
