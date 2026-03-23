@@ -7,11 +7,13 @@ struct QuickConversationSurface: NSViewControllerRepresentable {
     let messages: [ChatMessage]
     let isSending: Bool
     let generation: UInt64
+    let surfaceStyle: ConversationSurfaceStyle = .quickBar
 
     func makeNSViewController(context _: Context) -> ConversationViewController {
         ConversationViewController(
             container: container,
             theme: container.settings.theme,
+            surfaceStyle: surfaceStyle,
             bottomReservedHeight: 0
         )
     }
@@ -19,6 +21,7 @@ struct QuickConversationSurface: NSViewControllerRepresentable {
     func updateNSViewController(_ controller: ConversationViewController, context _: Context) {
         controller.updatePresentation(
             theme: container.settings.theme,
+            surfaceStyle: surfaceStyle,
             bottomReservedHeight: 0
         )
         controller.applyConversationState(

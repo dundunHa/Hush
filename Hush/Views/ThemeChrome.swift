@@ -151,18 +151,18 @@ struct QuickBarLiquidGlassStyle {
     static func composerShell(isExpanded: Bool) -> Self {
         if isExpanded {
             return Self(
-                tintTopOpacity: 0.09,
-                tintBottomOpacity: 0.05,
-                specularOpacity: 0.17,
-                specularTailOpacity: 0.04,
-                topGlowOpacity: 0.11,
-                innerRimOpacity: 0.08,
-                hotspotOpacity: 0.05,
-                hotspotRadius: 170,
-                strokeOpacity: 0.48,
-                shadowOpacity: 0.03,
-                shadowRadius: 6,
-                shadowYOffset: 2
+                tintTopOpacity: 0.028,
+                tintBottomOpacity: 0.018,
+                specularOpacity: 0.045,
+                specularTailOpacity: 0.012,
+                topGlowOpacity: 0.03,
+                innerRimOpacity: 0.02,
+                hotspotOpacity: 0.012,
+                hotspotRadius: 120,
+                strokeOpacity: 0.16,
+                shadowOpacity: 0.0,
+                shadowRadius: 0,
+                shadowYOffset: 0
             )
         }
 
@@ -195,6 +195,21 @@ struct QuickBarLiquidGlassStyle {
         shadowOpacity: 0.03,
         shadowRadius: 6,
         shadowYOffset: 2
+    )
+
+    static let transcriptInset = Self(
+        tintTopOpacity: 0.024,
+        tintBottomOpacity: 0.014,
+        specularOpacity: 0.036,
+        specularTailOpacity: 0.01,
+        topGlowOpacity: 0.024,
+        innerRimOpacity: 0.016,
+        hotspotOpacity: 0.01,
+        hotspotRadius: 132,
+        strokeOpacity: 0.13,
+        shadowOpacity: 0.0,
+        shadowRadius: 0,
+        shadowYOffset: 0
     )
 
     static func control(isHovered: Bool) -> Self {
@@ -262,6 +277,40 @@ struct QuickBarLiquidGlassStyle {
             shadowOpacity: 0.03,
             shadowRadius: 4,
             shadowYOffset: 1
+        )
+    }
+
+    static func toolbarOrb(isHovered: Bool) -> Self {
+        if isHovered {
+            return Self(
+                tintTopOpacity: 0.10,
+                tintBottomOpacity: 0.06,
+                specularOpacity: 0.10,
+                specularTailOpacity: 0.03,
+                topGlowOpacity: 0.06,
+                innerRimOpacity: 0.04,
+                hotspotOpacity: 0.03,
+                hotspotRadius: 64,
+                strokeOpacity: 0.18,
+                shadowOpacity: 0.01,
+                shadowRadius: 2,
+                shadowYOffset: 0
+            )
+        }
+
+        return Self(
+            tintTopOpacity: 0.045,
+            tintBottomOpacity: 0.028,
+            specularOpacity: 0.05,
+            specularTailOpacity: 0.012,
+            topGlowOpacity: 0.03,
+            innerRimOpacity: 0.02,
+            hotspotOpacity: 0.015,
+            hotspotRadius: 56,
+            strokeOpacity: 0.12,
+            shadowOpacity: 0.0,
+            shadowRadius: 0,
+            shadowYOffset: 0
         )
     }
 }

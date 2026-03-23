@@ -10,6 +10,19 @@ struct QuickBarPanelView: View {
         HushColors.palette(for: container.settings.theme)
     }
 
+    private enum Layout {
+        static let shellCornerRadius: CGFloat = 38
+        static let outerTopPadding: CGFloat = HushSpacing.xs + 6
+        static let outerBottomPadding: CGFloat = HushSpacing.sm + 2
+        static let contentHorizontalInset: CGFloat = HushSpacing.sm
+        static let headerHorizontalInset: CGFloat = HushSpacing.sm + 2
+        static let headerHeight: CGFloat = 28
+        static let transcriptTopPadding: CGFloat = HushSpacing.xs
+        static let transcriptBottomPadding: CGFloat = HushSpacing.sm + 1
+        static let dividerHorizontalInset: CGFloat = HushSpacing.sm + 2
+        static let composerTopPadding: CGFloat = HushSpacing.xs + 2
+    }
+
     var body: some View {
         Group {
             if container.quickBarState.isExpanded {
@@ -24,7 +37,8 @@ struct QuickBarPanelView: View {
     private var compactBody: some View {
         QuickBarComposer(
             glassNamespace: activeGlassNamespace,
-            prefersNativeGlass: usesNativeGlass
+            prefersNativeGlass: usesNativeGlass,
+            layoutStyle: .compact
         )
         .environmentObject(container)
         .padding(.horizontal, HushSpacing.sm)
@@ -33,45 +47,95 @@ struct QuickBarPanelView: View {
     }
 
     private var expandedBody: some View {
-        ZStack(alignment: .topTrailing) {
-            VStack(alignment: .leading, spacing: HushSpacing.md) {
-                handle
+        VStack(alignment: .leading, spacing: 0) {
+            expandedHeader
+            transcriptRegion
+            composerDivider
 
-                QuickConversationSurface(
-                    conversationId: container.quickBarState.conversationId,
-                    messages: container.quickBarState.messages,
-                    isSending: container.isQuickBarSending,
-                    generation: container.quickBarState.generation
-                )
-                .environmentObject(container)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(transcriptSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-
-                QuickBarComposer(
-                    glassNamespace: activeGlassNamespace,
-                    prefersNativeGlass: usesNativeGlass
-                )
-                .environmentObject(container)
-            }
-            .padding(.horizontal, HushSpacing.lg + 2)
-            .padding(.top, HushSpacing.sm + 2)
-            .padding(.bottom, HushSpacing.lg)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-
-            controls
-                .padding(.top, HushSpacing.md)
-                .padding(.trailing, HushSpacing.md)
+            QuickBarComposer(
+                glassNamespace: activeGlassNamespace,
+                prefersNativeGlass: usesNativeGlass,
+                layoutStyle: .expanded
+            )
+            .environmentObject(container)
+            .padding(.horizontal, Layout.contentHorizontalInset)
+            .padding(.top, Layout.composerTopPadding)
         }
+        .padding(.top, Layout.outerTopPadding)
+        .padding(.bottom, Layout.outerBottomPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .background(backgroundShell)
+    }
+
+    private var expandedHeader: some View {
+        ZStack(alignment: .trailing) {
+            handle
+            controls
+        }
+        .padding(.horizontal, Layout.headerHorizontalInset)
+        .frame(height: Layout.headerHeight)
+    }
+
+    private var transcriptRegion: some View {
+        ZStack {
+            QuickConversationSurface(
+                conversationId: container.quickBarState.conversationId,
+                messages: container.quickBarState.messages,
+                isSending: container.isQuickBarSending,
+                generation: container.quickBarState.generation
+            )
+            .environmentObject(container)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if container.quickBarState.messages.isEmpty {
+                transcriptEmptyState
+            }
+        }
+        .padding(.horizontal, Layout.contentHorizontalInset)
+        .padding(.top, Layout.transcriptTopPadding)
+        .padding(.bottom, Layout.transcriptBottomPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var transcriptEmptyState: some View {
+        VStack(spacing: HushSpacing.xs) {
+            Text("Quick chat")
+                .font(HushTypography.captionBold)
+                .foregroundStyle(palette.quickBarPrimaryText.opacity(0.88))
+
+            Text("Responses will appear here after you send a message.")
+                .font(HushTypography.caption)
+                .foregroundStyle(palette.quickBarSecondaryText.opacity(0.84))
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, HushSpacing.xl)
+        .allowsHitTesting(false)
+    }
+
+    private var composerDivider: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        .clear,
+                        palette.quickBarSurfaceStroke.opacity(0.09),
+                        palette.quickBarSurfaceStroke.opacity(0.12),
+                        palette.quickBarSurfaceStroke.opacity(0.09),
+                        .clear
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(height: 0.5)
+            .padding(.horizontal, Layout.dividerHorizontalInset)
     }
 
     private var handle: some View {
         Capsule(style: .continuous)
             .fill(handleColor)
-            .frame(width: 132, height: 4)
+            .frame(width: 90, height: 4)
             .frame(maxWidth: .infinity)
-            .padding(.top, 2)
             .accessibilityHidden(true)
     }
 
@@ -79,8 +143,8 @@ struct QuickBarPanelView: View {
         HStack(spacing: HushSpacing.sm) {
             if container.isQuickBarSending {
                 Circle()
-                    .fill(palette.quickBarControlForeground.opacity(0.88))
-                    .frame(width: 7, height: 7)
+                    .fill(palette.quickBarButtonFill.opacity(0.88))
+                    .frame(width: 6, height: 6)
             }
 
             Menu {
@@ -126,46 +190,9 @@ struct QuickBarPanelView: View {
         }
     }
 
-    private var transcriptSurface: some View {
-        let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
-        let topOpacity = container.settings.theme.usesDarkAppearance ? 0.72 : 0.62
-        let bottomOpacity = container.settings.theme.usesDarkAppearance ? 0.64 : 0.56
-        let highlightOpacity = container.settings.theme.usesDarkAppearance ? 0.08 : 0.06
-        let strokeOpacity = container.settings.theme.usesDarkAppearance ? 0.44 : 0.36
-
-        return shape
-            .fill(
-                LinearGradient(
-                    colors: [
-                        palette.quickBarSurface.opacity(topOpacity),
-                        palette.quickBarSurface.opacity(bottomOpacity)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(
-                shape
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                palette.quickBarSurfaceStroke.opacity(highlightOpacity),
-                                .clear
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-            )
-            .overlay(
-                shape
-                    .stroke(palette.quickBarSurfaceStroke.opacity(strokeOpacity), lineWidth: 0.5)
-            )
-    }
-
     private var backgroundShell: some View {
         QuickBarLiquidGlassSurface(
-            shape: RoundedRectangle(cornerRadius: 38, style: .continuous),
+            shape: RoundedRectangle(cornerRadius: Layout.shellCornerRadius, style: .continuous),
             baseTint: palette.quickBarSurface,
             highlightTint: palette.quickBarSurfaceStroke,
             shadowColor: palette.splitPaneShadow,
@@ -174,7 +201,7 @@ struct QuickBarPanelView: View {
     }
 
     private var handleColor: Color {
-        palette.quickBarSurfaceStroke.opacity(0.68)
+        palette.quickBarSurfaceStroke.opacity(0.22)
     }
 
     private func toolbarOrb(
@@ -183,19 +210,19 @@ struct QuickBarPanelView: View {
         registration: QuickBarNativeGlassRegistration
     ) -> some View {
         Image(systemName: systemName)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(palette.quickBarControlMuted)
-            .frame(width: 30, height: 30)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(palette.quickBarControlMuted.opacity(isHovered ? 1 : 0.92))
+            .frame(width: 28, height: 28)
             .background {
                 QuickBarGlassSurface(
                     shape: Circle(),
                     registration: registration,
                     namespace: activeGlassNamespace,
                     nativeStyle: nativeToolbarOrbStyle(isHovered: isHovered),
-                    fallbackBaseTint: isHovered ? palette.quickBarControlFillHover : palette.quickBarControlFill,
+                    fallbackBaseTint: palette.quickBarSurface,
                     fallbackHighlightTint: palette.quickBarSurfaceStroke,
                     fallbackShadowColor: palette.splitPaneShadow,
-                    fallbackStyle: .control(isHovered: isHovered)
+                    fallbackStyle: .toolbarOrb(isHovered: isHovered)
                 )
             }
     }
@@ -213,8 +240,8 @@ struct QuickBarPanelView: View {
 
     private func nativeToolbarOrbStyle(isHovered: Bool) -> QuickBarNativeGlassStyle {
         let tint: Color? = if isHovered {
-            palette.quickBarControlFillHover.opacity(
-                container.settings.theme.usesDarkAppearance ? 0.22 : 0.12
+            palette.quickBarSurface.opacity(
+                container.settings.theme.usesDarkAppearance ? 0.18 : 0.12
             )
         } else {
             nil
@@ -223,11 +250,11 @@ struct QuickBarPanelView: View {
         return QuickBarNativeGlassStyle(
             tint: tint,
             isInteractive: true,
-            strokeColor: palette.quickBarSurfaceStroke.opacity(isHovered ? 0.26 : 0.18),
+            strokeColor: palette.quickBarSurfaceStroke.opacity(isHovered ? 0.16 : 0.10),
             shadowColor: palette.splitPaneShadow,
-            shadowOpacity: 0.04,
-            shadowRadius: 5,
-            shadowYOffset: 1
+            shadowOpacity: 0.01,
+            shadowRadius: 2,
+            shadowYOffset: 0
         )
     }
 
@@ -235,3 +262,59 @@ struct QuickBarPanelView: View {
         theme.usesDarkAppearance ? .dark : .light
     }
 }
+
+#if DEBUG
+    #Preview("QuickBar Panel — Compact") {
+        QuickBarPanelView()
+            .environmentObject(
+                AppContainer.makeQuickBarPreviewContainer(
+                    messages: [],
+                    draft: "",
+                    isExpanded: false
+                )
+            )
+            .frame(width: 708, height: 176)
+            .padding()
+    }
+
+    #Preview("QuickBar Panel — Expanded") {
+        QuickBarPanelView()
+            .environmentObject(
+                AppContainer.makeQuickBarPreviewContainer(
+                    messages: PreviewFixtures.sampleConversation,
+                    draft: "",
+                    isExpanded: true
+                )
+            )
+            .frame(width: 708, height: 552)
+            .padding()
+    }
+
+    #Preview("QuickBar Panel — Streaming") {
+        QuickBarPanelView()
+            .environmentObject(
+                AppContainer.makeQuickBarPreviewContainer(
+                    messages: [PreviewFixtures.userMessage(content: "Summarize the latest design changes.")],
+                    draft: "",
+                    isExpanded: true,
+                    isSending: true
+                )
+            )
+            .frame(width: 708, height: 552)
+            .padding()
+    }
+
+    #Preview("QuickBar Panel — No Provider") {
+        QuickBarPanelView()
+            .environmentObject(
+                AppContainer.makeQuickBarPreviewContainer(
+                    messages: [],
+                    draft: "",
+                    isExpanded: false,
+                    hasConfiguredProvider: false
+                )
+            )
+            .frame(width: 708, height: 176)
+            .padding()
+    }
+#endif

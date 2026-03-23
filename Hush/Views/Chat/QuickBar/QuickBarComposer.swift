@@ -1,10 +1,16 @@
 import SwiftUI
 
+enum QuickBarComposerLayoutStyle: Sendable {
+    case compact
+    case expanded
+}
+
 struct QuickBarComposer: View {
     @EnvironmentObject private var container: AppContainer
 
     private let glassNamespace: Namespace.ID?
     private let prefersNativeGlass: Bool
+    private let layoutStyle: QuickBarComposerLayoutStyle
 
     @State private var availableModels: [ModelDescriptor] = []
     @State private var catalogStateMessage: String?
@@ -15,14 +21,88 @@ struct QuickBarComposer: View {
 
     init(
         glassNamespace: Namespace.ID? = nil,
-        prefersNativeGlass: Bool = false
+        prefersNativeGlass: Bool = false,
+        layoutStyle: QuickBarComposerLayoutStyle = .compact
     ) {
         self.glassNamespace = glassNamespace
         self.prefersNativeGlass = prefersNativeGlass
+        self.layoutStyle = layoutStyle
     }
 
     private var palette: HushThemePalette {
         HushColors.palette(for: container.settings.theme)
+    }
+
+    private struct LayoutMetrics {
+        let outerHorizontalPadding: CGFloat
+        let outerTopPadding: CGFloat
+        let outerBottomPadding: CGFloat
+        let editorMinHeight: CGFloat
+        let editorMaxHeight: CGFloat
+        let editorHorizontalPadding: CGFloat
+        let editorVerticalPadding: CGFloat
+        let placeholderHorizontalInset: CGFloat
+        let placeholderTopInset: CGFloat
+        let placeholderFontSize: CGFloat
+        let bottomBarMinHeight: CGFloat
+        let bottomBarLeadingPadding: CGFloat
+        let bottomBarTopPadding: CGFloat
+        let controlVerticalPadding: CGFloat
+        let controlCornerRadius: CGFloat
+        let sendButtonSize: CGFloat
+        let sendIconSize: CGFloat
+        let composerCornerRadius: CGFloat
+    }
+
+    private var metrics: LayoutMetrics {
+        switch layoutStyle {
+        case .compact:
+            return LayoutMetrics(
+                outerHorizontalPadding: HushSpacing.md,
+                outerTopPadding: HushSpacing.sm + 2,
+                outerBottomPadding: HushSpacing.sm,
+                editorMinHeight: 52,
+                editorMaxHeight: 88,
+                editorHorizontalPadding: HushSpacing.sm,
+                editorVerticalPadding: HushSpacing.xs,
+                placeholderHorizontalInset: HushSpacing.md,
+                placeholderTopInset: HushSpacing.xs + 2,
+                placeholderFontSize: 17,
+                bottomBarMinHeight: 42,
+                bottomBarLeadingPadding: HushSpacing.xs,
+                bottomBarTopPadding: HushSpacing.xs,
+                controlVerticalPadding: HushSpacing.xs + 2,
+                controlCornerRadius: 12,
+                sendButtonSize: 42,
+                sendIconSize: 16,
+                composerCornerRadius: 28
+            )
+        case .expanded:
+            return LayoutMetrics(
+                outerHorizontalPadding: 0,
+                outerTopPadding: 0,
+                outerBottomPadding: 0,
+                editorMinHeight: 34,
+                editorMaxHeight: 56,
+                editorHorizontalPadding: 0,
+                editorVerticalPadding: 1,
+                placeholderHorizontalInset: HushSpacing.xs + 1,
+                placeholderTopInset: HushSpacing.xs,
+                placeholderFontSize: 15,
+                bottomBarMinHeight: 34,
+                bottomBarLeadingPadding: 0,
+                bottomBarTopPadding: HushSpacing.xs,
+                controlVerticalPadding: HushSpacing.xs,
+                controlCornerRadius: 10,
+                sendButtonSize: 34,
+                sendIconSize: 13,
+                composerCornerRadius: 22
+            )
+        }
+    }
+
+    private var isExpandedLayout: Bool {
+        layoutStyle == .expanded
     }
 
     private var draftBinding: Binding<String> {
@@ -39,9 +119,9 @@ struct QuickBarComposer: View {
                     editorSurface
                     bottomBar
                 }
-                .padding(.horizontal, HushSpacing.md)
-                .padding(.top, HushSpacing.sm + 2)
-                .padding(.bottom, HushSpacing.sm)
+                .padding(.horizontal, metrics.outerHorizontalPadding)
+                .padding(.top, metrics.outerTopPadding)
+                .padding(.bottom, metrics.outerBottomPadding)
                 .background(composerSurface)
                 .task(id: container.quickBarState.providerID) {
                     await refreshAvailableModels()
@@ -66,10 +146,10 @@ struct QuickBarComposer: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(palette.quickBarControlForeground)
                     .padding(.horizontal, HushSpacing.md)
-                    .padding(.vertical, HushSpacing.xs + 2)
+                    .padding(.vertical, metrics.controlVerticalPadding)
                     .background {
                         controlGlassSurface(
-                            shape: Capsule(style: .continuous),
+                            shape: RoundedRectangle(cornerRadius: metrics.controlCornerRadius, style: .continuous),
                             isHovered: isOpenSettingsHovered,
                             registration: QuickBarNativeGlassRegistration(
                                 id: .openSettingsControl,
@@ -80,7 +160,7 @@ struct QuickBarComposer: View {
                     .onHover { isOpenSettingsHovered = $0 }
                 }
                 .padding(.horizontal, HushSpacing.md)
-                .padding(.vertical, HushSpacing.sm)
+                .padding(.vertical, metrics.outerBottomPadding)
                 .background(providerEmptySurface)
             }
         }
@@ -90,22 +170,22 @@ struct QuickBarComposer: View {
         ZStack(alignment: .topLeading) {
             if container.quickBarState.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text("Ask anything")
-                    .font(HushTypography.scaled(17, weight: .medium))
+                    .font(HushTypography.scaled(metrics.placeholderFontSize, weight: .medium))
                     .foregroundStyle(palette.quickBarTertiaryText)
-                    .padding(.horizontal, HushSpacing.md)
-                    .padding(.top, HushSpacing.xs + 2)
+                    .padding(.horizontal, metrics.placeholderHorizontalInset)
+                    .padding(.top, metrics.placeholderTopInset)
                     .allowsHitTesting(false)
             }
 
             TextEditor(text: draftBinding)
                 .focused($isEditorFocused)
-                .font(HushTypography.scaled(16))
+                .font(HushTypography.scaled(isExpandedLayout ? 15 : 16))
                 .foregroundStyle(palette.quickBarPrimaryText)
-                .frame(minHeight: 52, maxHeight: 88)
+                .frame(minHeight: metrics.editorMinHeight, maxHeight: metrics.editorMaxHeight)
                 .scrollIndicators(.never, axes: .vertical)
                 .scrollContentBackground(.hidden)
-                .padding(.horizontal, HushSpacing.sm)
-                .padding(.vertical, HushSpacing.xs)
+                .padding(.horizontal, metrics.editorHorizontalPadding)
+                .padding(.vertical, metrics.editorVerticalPadding)
                 .background(Color.clear)
                 .onKeyPress(.return, phases: .down) { press in
                     if press.modifiers.contains(.shift) {
@@ -140,9 +220,9 @@ struct QuickBarComposer: View {
                 }
             } label: {
                 Image(systemName: container.isQuickBarSending ? "stop.fill" : "arrow.up")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: metrics.sendIconSize, weight: .semibold))
                     .foregroundStyle(sendButtonForeground)
-                    .frame(width: 42, height: 42)
+                    .frame(width: metrics.sendButtonSize, height: metrics.sendButtonSize)
                     .background {
                         sendButtonSurface
                     }
@@ -152,9 +232,9 @@ struct QuickBarComposer: View {
             .onHover { isSendHovered = $0 }
             .accessibilityLabel(container.isQuickBarSending ? "Stop generation" : "Send message")
         }
-        .frame(minHeight: 42)
-        .padding(.leading, HushSpacing.xs)
-        .padding(.top, HushSpacing.xs)
+        .frame(minHeight: metrics.bottomBarMinHeight)
+        .padding(.leading, metrics.bottomBarLeadingPadding)
+        .padding(.top, metrics.bottomBarTopPadding)
     }
 
     private var modelMenu: some View {
@@ -178,13 +258,13 @@ struct QuickBarComposer: View {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .semibold))
             }
-            .font(HushTypography.scaled(14, weight: .semibold))
+            .font(HushTypography.scaled(isExpandedLayout ? 13 : 14, weight: .semibold))
             .foregroundStyle(palette.quickBarControlForeground)
             .padding(.horizontal, HushSpacing.sm)
-            .padding(.vertical, HushSpacing.xs + 2)
+            .padding(.vertical, metrics.controlVerticalPadding)
             .background {
                 controlGlassSurface(
-                    shape: RoundedRectangle(cornerRadius: 12, style: .continuous),
+                    shape: RoundedRectangle(cornerRadius: metrics.controlCornerRadius, style: .continuous),
                     isHovered: isModelHovered,
                     registration: QuickBarNativeGlassRegistration(
                         id: .modelControl,
@@ -248,23 +328,35 @@ struct QuickBarComposer: View {
     }
 
     private var composerSurface: some View {
-        QuickBarLiquidGlassSurface(
-            shape: RoundedRectangle(cornerRadius: 28, style: .continuous),
-            baseTint: palette.quickBarSurface,
-            highlightTint: palette.quickBarSurfaceStroke,
-            shadowColor: palette.splitPaneShadow,
-            style: .composerShell(isExpanded: container.quickBarState.isExpanded)
-        )
+        Group {
+            if isExpandedLayout {
+                Color.clear
+            } else {
+                QuickBarLiquidGlassSurface(
+                    shape: RoundedRectangle(cornerRadius: metrics.composerCornerRadius, style: .continuous),
+                    baseTint: palette.quickBarSurface,
+                    highlightTint: palette.quickBarSurfaceStroke,
+                    shadowColor: palette.splitPaneShadow,
+                    style: .composerShell(isExpanded: false)
+                )
+            }
+        }
     }
 
     private var providerEmptySurface: some View {
-        QuickBarLiquidGlassSurface(
-            shape: RoundedRectangle(cornerRadius: 28, style: .continuous),
-            baseTint: palette.quickBarSurface,
-            highlightTint: palette.quickBarSurfaceStroke,
-            shadowColor: palette.splitPaneShadow,
-            style: .composerShell(isExpanded: false)
-        )
+        Group {
+            if isExpandedLayout {
+                Color.clear
+            } else {
+                QuickBarLiquidGlassSurface(
+                    shape: RoundedRectangle(cornerRadius: metrics.composerCornerRadius, style: .continuous),
+                    baseTint: palette.quickBarSurface,
+                    highlightTint: palette.quickBarSurfaceStroke,
+                    shadowColor: palette.splitPaneShadow,
+                    style: .composerShell(isExpanded: false)
+                )
+            }
+        }
     }
 
     private func controlGlassSurface<S: InsettableShape>(
@@ -277,10 +369,12 @@ struct QuickBarComposer: View {
             registration: registration,
             namespace: activeGlassNamespace,
             nativeStyle: nativeControlStyle(isHovered: isHovered),
-            fallbackBaseTint: isHovered ? palette.quickBarControlFillHover : palette.quickBarControlFill,
+            fallbackBaseTint: isExpandedLayout
+                ? palette.quickBarSurface
+                : (isHovered ? palette.quickBarControlFillHover : palette.quickBarControlFill),
             fallbackHighlightTint: palette.quickBarSurfaceStroke,
             fallbackShadowColor: palette.splitPaneShadow,
-            fallbackStyle: .control(isHovered: isHovered)
+            fallbackStyle: isExpandedLayout ? .toolbarOrb(isHovered: isHovered) : .control(isHovered: isHovered)
         )
     }
 
@@ -330,8 +424,10 @@ struct QuickBarComposer: View {
 
     private func nativeControlStyle(isHovered: Bool) -> QuickBarNativeGlassStyle {
         let tint: Color? = if isHovered {
-            palette.quickBarControlFillHover.opacity(
-                container.settings.theme.usesDarkAppearance ? 0.22 : 0.12
+            (isExpandedLayout ? palette.quickBarSurface : palette.quickBarControlFillHover).opacity(
+                container.settings.theme.usesDarkAppearance
+                    ? (isExpandedLayout ? 0.16 : 0.22)
+                    : 0.12
             )
         } else {
             nil
@@ -340,11 +436,15 @@ struct QuickBarComposer: View {
         return QuickBarNativeGlassStyle(
             tint: tint,
             isInteractive: true,
-            strokeColor: palette.quickBarSurfaceStroke.opacity(isHovered ? 0.26 : 0.18),
+            strokeColor: palette.quickBarSurfaceStroke.opacity(
+                isExpandedLayout
+                    ? (isHovered ? 0.14 : 0.10)
+                    : (isHovered ? 0.26 : 0.18)
+            ),
             shadowColor: palette.splitPaneShadow,
-            shadowOpacity: 0.04,
-            shadowRadius: 5,
-            shadowYOffset: 1
+            shadowOpacity: isExpandedLayout ? 0.0 : 0.04,
+            shadowRadius: isExpandedLayout ? 0 : 5,
+            shadowYOffset: isExpandedLayout ? 0 : 1
         )
     }
 

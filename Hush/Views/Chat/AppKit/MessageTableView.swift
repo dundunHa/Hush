@@ -202,8 +202,12 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     private var runtime: MessageRenderRuntime?
     private weak var container: AppContainer?
     private var theme: AppTheme = .graphiteGlass
+    private var surfaceStyle: ConversationSurfaceStyle = .main
     private var fontSettings: AppFontSettings = .default
     private var lastGeneration: UInt64?
+    private var lastAppliedTheme: AppTheme?
+    private var lastAppliedSurfaceStyle: ConversationSurfaceStyle?
+    private var lastAppliedFontSettings: AppFontSettings?
     private var tailFollowState = TailFollowState()
     private let tailFollowConfig = TailFollowConfig()
     private var boundsChangeObserver: NSObjectProtocol?
@@ -263,7 +267,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     #endif
 
     private var palette: HushThemePalette {
-        HushColors.palette(for: theme)
+        HushColors.palette(for: theme, surfaceStyle: surfaceStyle)
     }
 
     private var renderStyle: RenderStyle {
@@ -444,6 +448,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         isActiveConversationSending: Bool,
         switchGeneration: UInt64,
         theme: AppTheme,
+        surfaceStyle: ConversationSurfaceStyle = .main,
         runtime: MessageRenderRuntime,
         container: AppContainer,
         forceFullReload: Bool = false
@@ -451,7 +456,13 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         self.runtime = runtime
         self.container = container
         self.theme = theme
-        fontSettings = container.settings.fontSettings
+        self.surfaceStyle = surfaceStyle
+        let nextFontSettings = container.settings.fontSettings
+        let presentationChanged =
+            lastAppliedTheme != theme
+                || lastAppliedSurfaceStyle != surfaceStyle
+                || lastAppliedFontSettings != nextFontSettings
+        fontSettings = nextFontSettings
 
         let previousRows = rows
         let previousMessageCount = previousRows.filter { !$0.isWaitingPlaceholder }.count
@@ -521,9 +532,12 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
             newRows: newRows,
             generationChanged: generationChanged,
             didPrependOlder: didPrependOlder,
-            forceFullReload: forceFullReload
+            forceFullReload: forceFullReload || presentationChanged
         )
         rows = newRows
+        lastAppliedTheme = theme
+        lastAppliedSurfaceStyle = surfaceStyle
+        lastAppliedFontSettings = nextFontSettings
 
         PerfTrace.count(PerfTrace.Event.visibleRecompute)
         applyTableUpdate(mode: updateMode)
@@ -631,6 +645,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
                 runtime: runtime,
                 availableWidth: availableWidth,
                 theme: theme,
+                surfaceStyle: surfaceStyle,
                 container: container,
                 owningTableView: tableView,
                 rowIndex: row,
@@ -1988,12 +2003,14 @@ final class MessageTableCellView: NSTableCellView {
     private var currentContentWidth: CGFloat = 0
     private var isShowingStreamingRichOutput = false
     private var currentBodyPresentationMode: BodyPresentationMode = .fullWidth
+    private var surfaceStyle: ConversationSurfaceStyle = .main {
+        didSet {
+            applyPresentationPalette()
+        }
+    }
     private var theme: AppTheme = .graphiteGlass {
         didSet {
-            metaLabel.textColor = NSColor(palette.secondaryText)
-            bodyTextView.themePalette = palette
-            debugButton.themePalette = palette
-            copyButton.themePalette = palette
+            applyPresentationPalette()
         }
     }
 
@@ -2013,6 +2030,13 @@ final class MessageTableCellView: NSTableCellView {
 
     private var renderStyle: RenderStyle {
         RenderStyle.fromPalette(palette, fontSettings: fontSettings)
+    }
+
+    private func applyPresentationPalette() {
+        metaLabel.textColor = NSColor(palette.secondaryText)
+        bodyTextView.themePalette = palette
+        debugButton.themePalette = palette
+        copyButton.themePalette = palette
     }
 
     private func plainTextAttributes(
@@ -2861,6 +2885,7 @@ final class MessageTableCellView: NSTableCellView {
         runtime: MessageRenderRuntime,
         availableWidth: CGFloat,
         theme: AppTheme = .graphiteGlass,
+        surfaceStyle: ConversationSurfaceStyle = .main,
         container: AppContainer?,
         owningTableView: NSTableView? = nil,
         rowIndex: Int? = nil,
@@ -2871,6 +2896,7 @@ final class MessageTableCellView: NSTableCellView {
         currentRowIndex = rowIndex
         renderRuntime = runtime
         self.theme = theme
+        self.surfaceStyle = surfaceStyle
         fontSettings = container?.settings.fontSettings ?? .default
 
         let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
@@ -3421,6 +3447,10 @@ private final class MessageAttachmentPreviewView: NSView {
             bottomReservedHeight
         }
 
+        var surfaceStyleForTesting: ConversationSurfaceStyle {
+            surfaceStyle
+        }
+
         func setScrollOriginYForTesting(_ y: CGFloat) {
             guard scrollView.documentView != nil else { return }
             let target = NSPoint(x: 0, y: min(max(0, y), maxScrollableOriginY))
@@ -3466,6 +3496,7 @@ private final class MessageAttachmentPreviewView: NSView {
                 runtime: runtime,
                 availableWidth: effectiveAvailableWidth(),
                 theme: theme,
+                surfaceStyle: surfaceStyle,
                 container: container,
                 owningTableView: tableView,
                 rowIndex: row,
