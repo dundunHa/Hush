@@ -21,6 +21,232 @@ struct BehindWindowVibrancyHost: NSViewRepresentable {
     }
 }
 
+struct QuickBarLiquidGlassStyle {
+    let tintTopOpacity: Double
+    let tintBottomOpacity: Double
+    let specularOpacity: Double
+    let specularTailOpacity: Double
+    let topGlowOpacity: Double
+    let innerRimOpacity: Double
+    let hotspotOpacity: Double
+    let hotspotRadius: CGFloat
+    let strokeOpacity: Double
+    let shadowOpacity: Double
+    let shadowRadius: CGFloat
+    let shadowYOffset: CGFloat
+
+    static func composerShell(isExpanded: Bool) -> Self {
+        if isExpanded {
+            return Self(
+                tintTopOpacity: 0.09,
+                tintBottomOpacity: 0.05,
+                specularOpacity: 0.17,
+                specularTailOpacity: 0.04,
+                topGlowOpacity: 0.11,
+                innerRimOpacity: 0.08,
+                hotspotOpacity: 0.05,
+                hotspotRadius: 170,
+                strokeOpacity: 0.48,
+                shadowOpacity: 0.03,
+                shadowRadius: 6,
+                shadowYOffset: 2
+            )
+        }
+
+        return Self(
+            tintTopOpacity: 0.11,
+            tintBottomOpacity: 0.07,
+            specularOpacity: 0.20,
+            specularTailOpacity: 0.05,
+            topGlowOpacity: 0.13,
+            innerRimOpacity: 0.10,
+            hotspotOpacity: 0.07,
+            hotspotRadius: 145,
+            strokeOpacity: 0.54,
+            shadowOpacity: 0.04,
+            shadowRadius: 6,
+            shadowYOffset: 2
+        )
+    }
+
+    static let panelShell = Self(
+        tintTopOpacity: 0.08,
+        tintBottomOpacity: 0.05,
+        specularOpacity: 0.16,
+        specularTailOpacity: 0.04,
+        topGlowOpacity: 0.10,
+        innerRimOpacity: 0.08,
+        hotspotOpacity: 0.05,
+        hotspotRadius: 190,
+        strokeOpacity: 0.46,
+        shadowOpacity: 0.03,
+        shadowRadius: 6,
+        shadowYOffset: 2
+    )
+
+    static func control(isHovered: Bool) -> Self {
+        if isHovered {
+            return Self(
+                tintTopOpacity: 0.24,
+                tintBottomOpacity: 0.16,
+                specularOpacity: 0.24,
+                specularTailOpacity: 0.07,
+                topGlowOpacity: 0.18,
+                innerRimOpacity: 0.12,
+                hotspotOpacity: 0.10,
+                hotspotRadius: 82,
+                strokeOpacity: 0.34,
+                shadowOpacity: 0.03,
+                shadowRadius: 4,
+                shadowYOffset: 1
+            )
+        }
+
+        return Self(
+            tintTopOpacity: 0.18,
+            tintBottomOpacity: 0.11,
+            specularOpacity: 0.18,
+            specularTailOpacity: 0.05,
+            topGlowOpacity: 0.12,
+            innerRimOpacity: 0.09,
+            hotspotOpacity: 0.07,
+            hotspotRadius: 72,
+            strokeOpacity: 0.28,
+            shadowOpacity: 0.02,
+            shadowRadius: 4,
+            shadowYOffset: 1
+        )
+    }
+
+    static func actionButton(isHovered: Bool) -> Self {
+        if isHovered {
+            return Self(
+                tintTopOpacity: 0.28,
+                tintBottomOpacity: 0.18,
+                specularOpacity: 0.26,
+                specularTailOpacity: 0.08,
+                topGlowOpacity: 0.18,
+                innerRimOpacity: 0.14,
+                hotspotOpacity: 0.11,
+                hotspotRadius: 84,
+                strokeOpacity: 0.36,
+                shadowOpacity: 0.04,
+                shadowRadius: 5,
+                shadowYOffset: 1
+            )
+        }
+
+        return Self(
+            tintTopOpacity: 0.22,
+            tintBottomOpacity: 0.14,
+            specularOpacity: 0.20,
+            specularTailOpacity: 0.06,
+            topGlowOpacity: 0.14,
+            innerRimOpacity: 0.10,
+            hotspotOpacity: 0.08,
+            hotspotRadius: 76,
+            strokeOpacity: 0.30,
+            shadowOpacity: 0.03,
+            shadowRadius: 4,
+            shadowYOffset: 1
+        )
+    }
+}
+
+struct QuickBarLiquidGlassSurface<S: InsettableShape>: View {
+    let shape: S
+    let baseTint: Color
+    let highlightTint: Color
+    let shadowColor: Color
+    let style: QuickBarLiquidGlassStyle
+
+    var body: some View {
+        shape
+            .fill(.clear)
+            .background {
+                BehindWindowVibrancyHost(material: .hudWindow)
+                    .clipShape(shape)
+            }
+            .overlay(
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                baseTint.opacity(style.tintTopOpacity),
+                                baseTint.opacity(style.tintBottomOpacity)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                highlightTint.opacity(style.specularOpacity),
+                                highlightTint.opacity(style.specularTailOpacity),
+                                .clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                highlightTint.opacity(style.topGlowOpacity),
+                                .clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+            )
+            .overlay(
+                shape
+                    .inset(by: 1)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                highlightTint.opacity(style.innerRimOpacity),
+                                .clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
+            )
+            .overlay(
+                RadialGradient(
+                    colors: [
+                        highlightTint.opacity(style.hotspotOpacity),
+                        .clear
+                    ],
+                    center: .topLeading,
+                    startRadius: 6,
+                    endRadius: style.hotspotRadius
+                )
+                .clipShape(shape)
+            )
+            .overlay(
+                shape
+                    .stroke(highlightTint.opacity(style.strokeOpacity), lineWidth: 0.5)
+            )
+            .shadow(
+                color: shadowColor.opacity(style.shadowOpacity),
+                radius: style.shadowRadius,
+                x: 0,
+                y: style.shadowYOffset
+            )
+    }
+}
+
 private struct LeadingPaneBorderMask: View {
     let topRadius: CGFloat
     let bottomRadius: CGFloat

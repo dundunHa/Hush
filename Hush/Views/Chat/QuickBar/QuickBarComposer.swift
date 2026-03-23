@@ -6,6 +6,8 @@ struct QuickBarComposer: View {
     @State private var availableModels: [ModelDescriptor] = []
     @State private var catalogStateMessage: String?
     @State private var isModelHovered = false
+    @State private var isOpenSettingsHovered = false
+    @State private var isSendHovered = false
     @FocusState private var isEditorFocused: Bool
 
     private var palette: HushThemePalette {
@@ -54,14 +56,13 @@ struct QuickBarComposer: View {
                     .foregroundStyle(palette.quickBarControlForeground)
                     .padding(.horizontal, HushSpacing.md)
                     .padding(.vertical, HushSpacing.xs + 2)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(localControlFill)
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .stroke(localControlStroke, lineWidth: 0.5)
-                            )
-                    )
+                    .background {
+                        controlGlassSurface(
+                            shape: Capsule(style: .continuous),
+                            isHovered: isOpenSettingsHovered
+                        )
+                    }
+                    .onHover { isOpenSettingsHovered = $0 }
                 }
                 .padding(.horizontal, HushSpacing.md)
                 .padding(.vertical, HushSpacing.sm)
@@ -126,14 +127,13 @@ struct QuickBarComposer: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(sendButtonForeground)
                     .frame(width: 42, height: 42)
-                    .background(sendButtonBackground, in: Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(sendButtonStroke, lineWidth: 0.5)
-                    )
+                    .background {
+                        sendButtonSurface
+                    }
             }
             .buttonStyle(.plain)
             .disabled(!container.isQuickBarSending && !canSendDraft)
+            .onHover { isSendHovered = $0 }
             .accessibilityLabel(container.isQuickBarSending ? "Stop generation" : "Send message")
         }
         .frame(minHeight: 42)
@@ -166,17 +166,12 @@ struct QuickBarComposer: View {
             .foregroundStyle(palette.quickBarControlForeground)
             .padding(.horizontal, HushSpacing.sm)
             .padding(.vertical, HushSpacing.xs + 2)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isModelHovered ? localHoverFill : .clear)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(
-                                isModelHovered ? localControlStroke : .clear,
-                                lineWidth: 0.5
-                            )
-                    )
-            )
+            .background {
+                controlGlassSurface(
+                    shape: RoundedRectangle(cornerRadius: 12, style: .continuous),
+                    isHovered: isModelHovered
+                )
+            }
         }
         .buttonStyle(.plain)
         .onHover { isModelHovered = $0 }
@@ -202,16 +197,6 @@ struct QuickBarComposer: View {
             && !container.quickBarState.selectedModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var sendButtonBackground: Color {
-        if container.isQuickBarSending {
-            return palette.destructiveActionBackground.opacity(0.58)
-        }
-        if canSendDraft {
-            return palette.quickBarButtonFill.opacity(0.22)
-        }
-        return palette.quickBarDisabledButtonFill.opacity(0.46)
-    }
-
     private var sendButtonForeground: Color {
         if container.isQuickBarSending {
             return palette.destructiveActionForeground
@@ -219,122 +204,66 @@ struct QuickBarComposer: View {
         return canSendDraft ? palette.quickBarButtonForeground : palette.quickBarDisabledButtonForeground
     }
 
-    private var sendButtonStroke: Color {
+    @ViewBuilder
+    private var sendButtonSurface: some View {
         if container.isQuickBarSending {
-            return palette.destructiveActionForeground.opacity(0.20)
+            Circle()
+                .fill(palette.destructiveActionBackground.opacity(0.58))
+                .overlay(
+                    Circle()
+                        .stroke(palette.destructiveActionForeground.opacity(0.20), lineWidth: 0.5)
+                )
+        } else {
+            actionGlassSurface(
+                shape: Circle(),
+                isHovered: isSendHovered,
+                isEnabled: canSendDraft
+            )
         }
-        return canSendDraft ? palette.quickBarButtonFill.opacity(0.32) : palette.quickBarSurfaceStroke.opacity(0.18)
-    }
-
-    private var localControlFill: Color {
-        palette.quickBarControlFill
-    }
-
-    private var localHoverFill: Color {
-        palette.quickBarControlFillHover
-    }
-
-    private var localControlStroke: Color {
-        palette.quickBarSurfaceStroke.opacity(0.28)
     }
 
     private var composerSurface: some View {
-        glassShell(cornerRadius: 28, shadowOpacity: shellShadowOpacity)
+        QuickBarLiquidGlassSurface(
+            shape: RoundedRectangle(cornerRadius: 28, style: .continuous),
+            baseTint: palette.quickBarSurface,
+            highlightTint: palette.quickBarSurfaceStroke,
+            shadowColor: palette.splitPaneShadow,
+            style: .composerShell(isExpanded: container.quickBarState.isExpanded)
+        )
     }
 
     private var providerEmptySurface: some View {
-        glassShell(cornerRadius: 28, shadowOpacity: 0.05)
+        QuickBarLiquidGlassSurface(
+            shape: RoundedRectangle(cornerRadius: 28, style: .continuous),
+            baseTint: palette.quickBarSurface,
+            highlightTint: palette.quickBarSurfaceStroke,
+            shadowColor: palette.splitPaneShadow,
+            style: .composerShell(isExpanded: false)
+        )
     }
 
-    private func glassShell(cornerRadius: CGFloat, shadowOpacity: Double) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-
-        return shape
-            .fill(.clear)
-            .background {
-                BehindWindowVibrancyHost(material: .hudWindow)
-                    .clipShape(shape)
-            }
-            .overlay(
-                shape
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                palette.quickBarSurface.opacity(shellTintTopOpacity),
-                                palette.quickBarSurface.opacity(shellTintBottomOpacity)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            )
-            .overlay(
-                shape
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                palette.quickBarSurfaceStroke.opacity(shellHighlightOpacity),
-                                palette.quickBarSurfaceStroke.opacity(0.03),
-                                .clear
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            )
-            .overlay(
-                RadialGradient(
-                    colors: [
-                        palette.quickBarSurfaceStroke.opacity(shellRadialHighlightOpacity),
-                        .clear
-                    ],
-                    center: .topLeading,
-                    startRadius: 8,
-                    endRadius: shellRadialHighlightRadius
-                )
-                .clipShape(shape)
-            )
-            .overlay(
-                shape
-                    .stroke(
-                        palette.quickBarSurfaceStroke.opacity(shellStrokeOpacity),
-                        lineWidth: 0.5
-                    )
-            )
-            .shadow(
-                color: palette.splitPaneShadow.opacity(shadowOpacity),
-                radius: 6,
-                x: 0,
-                y: 2
-            )
+    private func controlGlassSurface<S: InsettableShape>(shape: S, isHovered: Bool) -> some View {
+        QuickBarLiquidGlassSurface(
+            shape: shape,
+            baseTint: isHovered ? palette.quickBarControlFillHover : palette.quickBarControlFill,
+            highlightTint: palette.quickBarSurfaceStroke,
+            shadowColor: palette.splitPaneShadow,
+            style: .control(isHovered: isHovered)
+        )
     }
 
-    private var shellTintTopOpacity: Double {
-        container.quickBarState.isExpanded ? 0.12 : 0.16
-    }
-
-    private var shellTintBottomOpacity: Double {
-        container.quickBarState.isExpanded ? 0.08 : 0.10
-    }
-
-    private var shellHighlightOpacity: Double {
-        container.quickBarState.isExpanded ? 0.10 : 0.13
-    }
-
-    private var shellRadialHighlightOpacity: Double {
-        container.quickBarState.isExpanded ? 0.05 : 0.07
-    }
-
-    private var shellRadialHighlightRadius: CGFloat {
-        container.quickBarState.isExpanded ? 160 : 140
-    }
-
-    private var shellStrokeOpacity: Double {
-        container.quickBarState.isExpanded ? 0.52 : 0.56
-    }
-
-    private var shellShadowOpacity: Double {
-        container.quickBarState.isExpanded ? 0.03 : 0.04
+    private func actionGlassSurface<S: InsettableShape>(
+        shape: S,
+        isHovered: Bool,
+        isEnabled: Bool
+    ) -> some View {
+        QuickBarLiquidGlassSurface(
+            shape: shape,
+            baseTint: isEnabled ? palette.quickBarButtonFill : palette.quickBarDisabledButtonFill,
+            highlightTint: isEnabled ? palette.quickBarButtonFill : palette.quickBarSurfaceStroke,
+            shadowColor: palette.splitPaneShadow,
+            style: .actionButton(isHovered: isHovered && isEnabled)
+        )
     }
 
     @MainActor

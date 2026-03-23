@@ -2,6 +2,8 @@ import SwiftUI
 
 struct QuickBarPanelView: View {
     @EnvironmentObject private var container: AppContainer
+    @State private var isOverflowHovered = false
+    @State private var isCloseHovered = false
 
     private var palette: HushThemePalette {
         HushColors.palette(for: container.settings.theme)
@@ -87,16 +89,18 @@ struct QuickBarPanelView: View {
                     .disabled(container.isQuickBarSending)
                 }
             } label: {
-                toolbarOrb(systemName: "ellipsis")
+                toolbarOrb(systemName: "ellipsis", isHovered: isOverflowHovered)
             }
             .menuStyle(.borderlessButton)
+            .onHover { isOverflowHovered = $0 }
 
             Button {
                 container.closeQuickBar()
             } label: {
-                toolbarOrb(systemName: "xmark")
+                toolbarOrb(systemName: "xmark", isHovered: isCloseHovered)
             }
             .buttonStyle(.plain)
+            .onHover { isCloseHovered = $0 }
             .keyboardShortcut("w", modifiers: [.option])
         }
     }
@@ -105,34 +109,15 @@ struct QuickBarPanelView: View {
         let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
 
         return shape
-            .fill(palette.quickBarSurface.opacity(0.72))
-            .overlay(
-                shape
-                    .stroke(palette.quickBarSurfaceStroke.opacity(0.54), lineWidth: 0.5)
-            )
-    }
-
-    private var backgroundShell: some View {
-        let shape = RoundedRectangle(cornerRadius: 38, style: .continuous)
-
-        return shape
-            .fill(.clear)
-            .background {
-                BehindWindowVibrancyHost(material: .hudWindow)
-                    .clipShape(shape)
-            }
-            .overlay(
-                shape
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                palette.quickBarSurface.opacity(0.12),
-                                palette.quickBarSurface.opacity(0.07)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+            .fill(
+                LinearGradient(
+                    colors: [
+                        palette.quickBarSurface.opacity(0.76),
+                        palette.quickBarSurface.opacity(0.68)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
             )
             .overlay(
                 shape
@@ -140,55 +125,47 @@ struct QuickBarPanelView: View {
                         LinearGradient(
                             colors: [
                                 palette.quickBarSurfaceStroke.opacity(0.10),
-                                palette.quickBarSurfaceStroke.opacity(0.03),
                                 .clear
                             ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                            startPoint: .top,
+                            endPoint: .bottom
                         )
                     )
             )
             .overlay(
-                RadialGradient(
-                    colors: [
-                        palette.quickBarSurfaceStroke.opacity(0.05),
-                        .clear
-                    ],
-                    center: .topLeading,
-                    startRadius: 8,
-                    endRadius: 180
-                )
-                .clipShape(shape)
-            )
-            .overlay(
                 shape
-                    .stroke(palette.quickBarSurfaceStroke.opacity(0.52), lineWidth: 0.5)
+                    .stroke(palette.quickBarSurfaceStroke.opacity(0.50), lineWidth: 0.5)
             )
-            .shadow(
-                color: palette.splitPaneShadow.opacity(0.03),
-                radius: 6,
-                x: 0,
-                y: 2
-            )
+    }
+
+    private var backgroundShell: some View {
+        QuickBarLiquidGlassSurface(
+            shape: RoundedRectangle(cornerRadius: 38, style: .continuous),
+            baseTint: palette.quickBarSurface,
+            highlightTint: palette.quickBarSurfaceStroke,
+            shadowColor: palette.splitPaneShadow,
+            style: .panelShell
+        )
     }
 
     private var handleColor: Color {
         palette.quickBarSurfaceStroke.opacity(0.68)
     }
 
-    private func toolbarOrb(systemName: String) -> some View {
+    private func toolbarOrb(systemName: String, isHovered: Bool) -> some View {
         Image(systemName: systemName)
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(palette.quickBarControlMuted)
             .frame(width: 30, height: 30)
-            .background(
-                Circle()
-                    .fill(palette.quickBarSurfaceStroke.opacity(0.08))
-                    .overlay(
-                        Circle()
-                            .stroke(palette.quickBarSurfaceStroke.opacity(0.28), lineWidth: 0.5)
-                    )
-            )
+            .background {
+                QuickBarLiquidGlassSurface(
+                    shape: Circle(),
+                    baseTint: isHovered ? palette.quickBarControlFillHover : palette.quickBarControlFill,
+                    highlightTint: palette.quickBarSurfaceStroke,
+                    shadowColor: palette.splitPaneShadow,
+                    style: .control(isHovered: isHovered)
+                )
+            }
     }
 
     private func preferredScheme(for theme: AppTheme) -> ColorScheme {
