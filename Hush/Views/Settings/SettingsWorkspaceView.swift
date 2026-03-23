@@ -57,7 +57,8 @@ struct SettingsWorkspaceView: View {
                 theme: theme,
                 palette: themePalette,
                 sidebarWidth: HushSpacing.sidebarWidth,
-                revealWidth: sidebarRevealWidth
+                revealWidth: sidebarRevealWidth,
+                prefersNativeGlassShell: true
             )
         }
     }

@@ -445,25 +445,63 @@ struct SplitPaneSidebarSurface: View {
     let palette: HushThemePalette
     let sidebarWidth: CGFloat
     let revealWidth: CGFloat
+    let prefersNativeGlassShell: Bool
+
+    init(
+        theme: AppTheme,
+        palette: HushThemePalette,
+        sidebarWidth: CGFloat,
+        revealWidth: CGFloat,
+        prefersNativeGlassShell: Bool = false
+    ) {
+        self.theme = theme
+        self.palette = palette
+        self.sidebarWidth = sidebarWidth
+        self.revealWidth = revealWidth
+        self.prefersNativeGlassShell = prefersNativeGlassShell
+    }
 
     private var totalWidth: CGFloat {
         max(0, sidebarWidth + revealWidth)
     }
 
     var body: some View {
-        SidebarMaterialBackground(theme: theme, palette: palette)
-            .frame(width: totalWidth)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .allowsHitTesting(false)
+        SidebarMaterialBackground(
+            theme: theme,
+            palette: palette,
+            prefersNativeGlassShell: prefersNativeGlassShell
+        )
+        .frame(width: totalWidth)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .allowsHitTesting(false)
     }
 }
 
 struct SidebarMaterialBackground: View {
     let theme: AppTheme
     let palette: HushThemePalette
+    let prefersNativeGlassShell: Bool
+
+    init(
+        theme: AppTheme,
+        palette: HushThemePalette,
+        prefersNativeGlassShell: Bool = false
+    ) {
+        self.theme = theme
+        self.palette = palette
+        self.prefersNativeGlassShell = prefersNativeGlassShell
+    }
 
     private var usesGlassSidebar: Bool {
         theme.usesGlassSurface
+    }
+
+    private var usesNativeGlassSidebar: Bool {
+        guard prefersNativeGlassShell, usesGlassSidebar else { return false }
+        if #available(macOS 26.0, *) {
+            return true
+        }
+        return false
     }
 
     private var glassTintOpacity: Double {
@@ -499,8 +537,52 @@ struct SidebarMaterialBackground: View {
     }
 
     var body: some View {
-        ZStack {
-            if usesGlassSidebar {
+        shellBody
+            .overlay(alignment: .leading) {
+                if usesGlassSidebar {
+                    Rectangle()
+                        .fill(palette.sidebarGlassStroke.opacity(leadingEdgeStrokeOpacity))
+                        .frame(width: 1)
+                }
+            }
+            .overlay(alignment: .trailing) {
+                if usesGlassSidebar {
+                    ZStack(alignment: .trailing) {
+                        LinearGradient(
+                            colors: [
+                                palette.sidebarGlassShadow.opacity(trailingEdgeShadowOpacity),
+                                .clear
+                            ],
+                            startPoint: .trailing,
+                            endPoint: .leading
+                        )
+                        .frame(width: trailingEdgeShadowWidth)
+
+                        Rectangle()
+                            .fill(palette.sidebarGlassStroke.opacity(trailingEdgeStrokeOpacity))
+                            .frame(width: 1)
+                    }
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var shellBody: some View {
+        if usesNativeGlassSidebar {
+            if #available(macOS 26.0, *) {
+                SidebarNativeGlassBackground(theme: theme, palette: palette)
+            } else {
+                fallbackShellBody
+            }
+        } else {
+            fallbackShellBody
+        }
+    }
+
+    @ViewBuilder
+    private var fallbackShellBody: some View {
+        if usesGlassSidebar {
+            ZStack {
                 BehindWindowVibrancyHost(material: .sidebar)
 
                 Rectangle()
@@ -537,37 +619,106 @@ struct SidebarMaterialBackground: View {
                     startRadius: 8,
                     endRadius: 190
                 )
-            } else {
-                Rectangle()
-                    .fill(palette.sidebarBackground)
             }
+        } else {
+            Rectangle()
+                .fill(palette.sidebarBackground)
         }
-        .overlay(alignment: .leading) {
-            if usesGlassSidebar {
-                Rectangle()
-                    .fill(palette.sidebarGlassStroke.opacity(leadingEdgeStrokeOpacity))
-                    .frame(width: 1)
-            }
-        }
-        .overlay(alignment: .trailing) {
-            if usesGlassSidebar {
-                ZStack(alignment: .trailing) {
-                    LinearGradient(
-                        colors: [
-                            palette.sidebarGlassShadow.opacity(trailingEdgeShadowOpacity),
-                            .clear
-                        ],
-                        startPoint: .trailing,
-                        endPoint: .leading
-                    )
-                    .frame(width: trailingEdgeShadowWidth)
+    }
+}
 
-                    Rectangle()
-                        .fill(palette.sidebarGlassStroke.opacity(trailingEdgeStrokeOpacity))
-                        .frame(width: 1)
-                }
-            }
-        }
+@available(macOS 26.0, *)
+private struct SidebarNativeGlassBackground: View {
+    let theme: AppTheme
+    let palette: HushThemePalette
+
+    private var resolvedGlass: Glass {
+        Glass.regular
+            .interactive(false)
+            .tint(palette.sidebarGlassTint)
+    }
+
+    private var baseTintTopOpacity: Double {
+        theme.usesDarkAppearance ? 0.18 : 0.12
+    }
+
+    private var baseTintBottomOpacity: Double {
+        theme.usesDarkAppearance ? 0.10 : 0.06
+    }
+
+    private var specularOpacity: Double {
+        theme.usesDarkAppearance ? 0.14 : 0.10
+    }
+
+    private var specularTailOpacity: Double {
+        theme.usesDarkAppearance ? 0.05 : 0.03
+    }
+
+    private var topGlowOpacity: Double {
+        theme.usesDarkAppearance ? 0.07 : 0.05
+    }
+
+    private var radialHighlightOpacity: Double {
+        theme.usesDarkAppearance ? 0.08 : 0.06
+    }
+
+    var body: some View {
+        let shape = Rectangle()
+
+        shape
+            .fill(.clear)
+            .glassEffect(resolvedGlass, in: shape)
+            .overlay(
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                palette.sidebarBackground.opacity(baseTintTopOpacity),
+                                palette.sidebarGlassTint.opacity(baseTintBottomOpacity)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                palette.sidebarGlassHighlight.opacity(specularOpacity),
+                                palette.sidebarGlassTint.opacity(specularTailOpacity),
+                                .clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                palette.sidebarGlassHighlight.opacity(topGlowOpacity),
+                                .clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+            )
+            .overlay(
+                RadialGradient(
+                    colors: [
+                        palette.sidebarGlassHighlight.opacity(radialHighlightOpacity),
+                        .clear
+                    ],
+                    center: .topLeading,
+                    startRadius: 8,
+                    endRadius: 190
+                )
+            )
     }
 }
 
