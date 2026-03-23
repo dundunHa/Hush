@@ -16,6 +16,7 @@ struct GeneralSettingsView: View {
                     .font(HushTypography.heading)
 
                 appearanceSection
+                quickBarSection
                 typographySection
                 concurrencySection
             }
@@ -138,6 +139,59 @@ struct GeneralSettingsView: View {
         )
     }
 
+    private var quickBarSection: some View {
+        VStack(alignment: .leading, spacing: HushSpacing.md) {
+            Text("Quick Bar")
+                .font(HushTypography.captionBold)
+                .foregroundStyle(themePalette.secondaryText)
+
+            HStack(alignment: .top, spacing: HushSpacing.xl) {
+                VStack(alignment: .leading, spacing: HushSpacing.sm) {
+                    Text("Trigger key")
+                        .font(HushTypography.scaled(14, weight: .semibold))
+
+                    Picker("", selection: quickBarKeySelection) {
+                        ForEach(QuickBarConfiguration.supportedKeys, id: \.self) { key in
+                            Text(key).tag(key)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 140, alignment: .leading)
+                }
+
+                VStack(alignment: .leading, spacing: HushSpacing.sm) {
+                    Text("Modifiers")
+                        .font(HushTypography.scaled(14, weight: .semibold))
+
+                    HStack(spacing: HushSpacing.md) {
+                        ForEach(QuickBarConfiguration.supportedModifiers, id: \.self) { modifier in
+                            Toggle(
+                                QuickBarConfiguration.modifierDisplayName(for: modifier),
+                                isOn: quickBarModifierBinding(modifier)
+                            )
+                            .toggleStyle(.switch)
+                            .fixedSize()
+                        }
+                    }
+                }
+            }
+
+            Text("Global shortcut: \(container.settings.quickBar.displayString)")
+                .font(HushTypography.captionBold)
+                .foregroundStyle(themePalette.primaryText)
+
+            Text("Quick Bar uses a system-wide hotkey. At least one modifier is always required.")
+                .font(HushTypography.caption)
+                .foregroundStyle(themePalette.secondaryText)
+        }
+        .padding(HushSpacing.lg)
+        .cardStyle(
+            background: themePalette.cardBackground,
+            stroke: themePalette.subtleStroke
+        )
+    }
+
     private var concurrencySection: some View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
             Text("Concurrency")
@@ -174,6 +228,38 @@ struct GeneralSettingsView: View {
         Binding(
             get: { container.settings.fontSettings.normalizedFamilyName },
             set: { container.settings.fontSettings.familyName = $0 }
+        )
+    }
+
+    private var quickBarKeySelection: Binding<String> {
+        Binding(
+            get: { container.settings.quickBar.validated().normalizedKey },
+            set: { newValue in
+                let candidate = QuickBarConfiguration(
+                    key: newValue,
+                    modifiers: container.settings.quickBar.normalizedModifiers
+                )
+                container.settings.quickBar = candidate.validated(fallback: container.settings.quickBar.validated())
+            }
+        )
+    }
+
+    private func quickBarModifierBinding(_ modifier: String) -> Binding<Bool> {
+        Binding(
+            get: { container.settings.quickBar.normalizedModifiers.contains(modifier) },
+            set: { isEnabled in
+                var modifiers = container.settings.quickBar.normalizedModifiers
+                if isEnabled {
+                    modifiers.append(modifier)
+                } else {
+                    modifiers.removeAll { $0 == modifier }
+                }
+                let candidate = QuickBarConfiguration(
+                    key: container.settings.quickBar.normalizedKey,
+                    modifiers: modifiers
+                )
+                container.settings.quickBar = candidate.validated(fallback: container.settings.quickBar.validated())
+            }
         )
     }
 

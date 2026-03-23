@@ -124,6 +124,11 @@ private func makeConversationMessageStats(_ messages: [ChatMessage]) -> Conversa
     )
 }
 
+private enum SendDraftDestination {
+    case activeConversation
+    case quickBar
+}
+
 @MainActor
 final class AppContainer: ObservableObject {
     // MARK: - Published State
@@ -147,6 +152,7 @@ final class AppContainer: ObservableObject {
     @Published private(set) var activeConversationLoadError: String?
 
     @Published var showQuickBar: Bool = false
+    @Published private(set) var quickBarState: QuickBarSessionState = .empty
     @Published var statusMessage: String = "Ready"
 
     // MARK: - Request Lifecycle State (managed by RequestCoordinator)
@@ -172,6 +178,11 @@ final class AppContainer: ObservableObject {
     var isActiveConversationSending: Bool {
         guard let activeId = activeConversationId else { return false }
         return runningConversationIds.contains(activeId)
+    }
+
+    var isQuickBarSending: Bool {
+        guard let conversationId = quickBarState.conversationId else { return false }
+        return runningConversationIds.contains(conversationId)
     }
 
     var isQueueFull: Bool {
@@ -238,6 +249,7 @@ final class AppContainer: ObservableObject {
     private var switchAwayPrewarmTask: Task<Void, Never>?
     private var idlePrewarmTask: Task<Void, Never>?
     private var activeConversationSwitchTrace: ConversationSwitchTrace?
+    private var quickBarGeneration: UInt64 = 0
 
     // MARK: - Testing Overrides (forwarded to coordinator)
 
@@ -274,6 +286,7 @@ final class AppContainer: ObservableObject {
             messages.append(message)
         }
         messagesByConversationId[conversationId, default: []].append(message)
+        syncQuickBarMessagesIfNeeded(conversationId: conversationId)
         hotScenePool?.markNeedsReload(conversationID: conversationId)
     }
 
@@ -287,6 +300,7 @@ final class AppContainer: ObservableObject {
             bucket[index] = existing.updatingContent(content)
             messagesByConversationId[conversationId] = bucket
         }
+        syncQuickBarMessagesIfNeeded(conversationId: conversationId)
         hotScenePool?.markNeedsReload(conversationID: conversationId)
     }
 
@@ -312,6 +326,7 @@ final class AppContainer: ObservableObject {
             }
         }
 
+        syncQuickBarMessagesIfNeeded(conversationId: conversationId)
         hotScenePool?.markNeedsReload(conversationID: conversationId)
     }
 
@@ -346,6 +361,23 @@ final class AppContainer: ObservableObject {
     }
 
     var sidebarThreadsLoadApplyDelayOverride: Duration?
+
+    private func mutateQuickBarState(_ mutate: (inout QuickBarSessionState) -> Void) {
+        var nextState = quickBarState
+        mutate(&nextState)
+        quickBarState = nextState
+    }
+
+    private func syncQuickBarMessagesIfNeeded(conversationId: String) {
+        guard quickBarState.conversationId == conversationId else { return }
+        let messages = messagesByConversationId[conversationId] ?? []
+        mutateQuickBarState { state in
+            state.messages = messages
+            if !messages.isEmpty {
+                state.isExpanded = true
+            }
+        }
+    }
 
     // MARK: - Init
 
@@ -645,7 +677,72 @@ final class AppContainer: ObservableObject {
     // MARK: - UI Actions
 
     func toggleQuickBar() {
-        showQuickBar.toggle()
+        if showQuickBar {
+            showQuickBar = false
+        } else {
+            prepareQuickBarSessionIfNeeded()
+            showQuickBar = true
+        }
+    }
+
+    func closeQuickBar() {
+        showQuickBar = false
+    }
+
+    func updateQuickBarDraft(_ draft: String) {
+        mutateQuickBarState { state in
+            state.draft = draft
+        }
+    }
+
+    func selectQuickBarModel(id: String) {
+        prepareQuickBarSessionIfNeeded()
+        mutateQuickBarState { state in
+            state.selectedModelID = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    func resetQuickBarConversation() {
+        guard !isQuickBarSending else { return }
+        prepareQuickBarSessionIfNeeded(forceReset: true)
+    }
+
+    func continueQuickBarInMainChat() {
+        guard !isQuickBarSending else { return }
+        guard let quickBarConversationId = quickBarState.conversationId,
+              !quickBarState.messages.isEmpty
+        else {
+            return
+        }
+
+        cacheCurrentConversationSnapshotIfNeeded()
+        let messages = quickBarState.messages
+        messagesByConversationId[quickBarConversationId] = messages
+        let titleSeed = messages.first(where: { $0.role == .user })?.content
+        let resolvedTitle = ConversationSidebarTitleFormatter.makeTitle(
+            conversationTitle: nil,
+            firstUserContent: titleSeed
+        )
+        let lastActivityAt = messages.last?.createdAt ?? .now
+        upsertSidebarThread(
+            conversationId: quickBarConversationId,
+            title: resolvedTitle,
+            lastActivityAt: lastActivityAt
+        )
+
+        let snapshot = ConversationPageSnapshot(
+            messages: messages,
+            hasMoreOlderMessages: false,
+            oldestLoadedOrderIndex: nil
+        )
+        activateConversationSnapshot(
+            snapshot,
+            conversationId: quickBarConversationId,
+            status: "Quick Bar chat opened in main window"
+        )
+
+        showQuickBar = false
+        NotificationCenter.default.post(name: .hushActivateMainWindow, object: nil)
     }
 
     func addPlaceholderProvider() {
@@ -1009,57 +1106,97 @@ final class AppContainer: ObservableObject {
 
     // MARK: - Send Pipeline
 
-    func sendDraft(_ text: String) {
+    @discardableResult
+    func sendDraft(_ text: String) -> Bool {
+        sendDraft(text, destination: .activeConversation)
+    }
+
+    @discardableResult
+    private func sendDraft(_ text: String, destination: SendDraftDestination) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return false }
 
         // Queue-full atomic rejection: no user message, no queue append, no persistence
         if requestCoordinator.isQueueFull {
             statusMessage = "Queue full – request rejected (max \(RuntimeConstants.pendingQueueCapacity))"
-            return
+            return false
         }
 
-        let conversationId = activeConversationId ?? ""
+        guard let route = resolveSendRoute(for: destination) else {
+            return false
+        }
 
         let userMessage = ChatMessage(role: .user, content: trimmed)
-        appendMessage(userMessage, toConversation: conversationId)
-        updateSidebarThreadsAfterUserMessage(userMessage)
-        cacheCurrentConversationSnapshotIfNeeded()
+        appendMessage(userMessage, toConversation: route.conversationId)
 
-        if !conversationId.isEmpty {
-            try? persistence?.persistUserMessage(userMessage, conversationId: conversationId)
+        switch destination {
+        case .activeConversation:
+            updateSidebarThreadsAfterUserMessage(
+                userMessage,
+                conversationId: route.conversationId
+            )
+            cacheCurrentConversationSnapshotIfNeeded()
+        case .quickBar:
+            updateSidebarThreadsAfterUserMessage(
+                userMessage,
+                conversationId: route.conversationId
+            )
+            mutateQuickBarState { state in
+                state.isExpanded = true
+            }
+        }
+
+        if route.persistenceBehavior == .persistent, !route.conversationId.isEmpty {
+            try? persistence?.persistUserMessage(userMessage, conversationId: route.conversationId)
         }
 
         let snapshot = QueueItemSnapshot(
             prompt: trimmed,
-            providerID: settings.selectedProviderID,
-            modelID: settings.selectedModelID,
+            providerID: route.providerID,
+            modelID: route.modelID,
             parameters: settings.parameters,
             userMessageID: userMessage.id,
-            conversationId: conversationId
+            conversationId: route.conversationId,
+            persistenceBehavior: route.persistenceBehavior
         )
 
         requestCoordinator.submitRequest(snapshot)
+        return true
     }
 
-    private func updateSidebarThreadsAfterUserMessage(_ message: ChatMessage) {
-        guard let conversationId = activeConversationId else { return }
-
+    private func updateSidebarThreadsAfterUserMessage(
+        _ message: ChatMessage,
+        conversationId: String
+    ) {
         let derivedTitle = ConversationSidebarTitleFormatter.topicTitle(from: message.content)
+        let resolvedTitle: String
+        if let existing = sidebarThreads.first(where: { $0.id == conversationId }),
+           existing.title != ConversationSidebarTitleFormatter.placeholderTitle
+        {
+            resolvedTitle = existing.title
+        } else {
+            resolvedTitle = derivedTitle
+        }
 
+        upsertSidebarThread(
+            conversationId: conversationId,
+            title: resolvedTitle,
+            lastActivityAt: message.createdAt
+        )
+    }
+
+    private func upsertSidebarThread(
+        conversationId: String,
+        title: String,
+        lastActivityAt: Date
+    ) {
         if let existingIndex = sidebarThreads.firstIndex(where: { $0.id == conversationId }) {
-            let existing = sidebarThreads[existingIndex]
-            let resolvedTitle =
-                existing.title == ConversationSidebarTitleFormatter.placeholderTitle
-                    ? derivedTitle
-                    : existing.title
-
             sidebarThreads.remove(at: existingIndex)
             sidebarThreads.insert(
                 ConversationSidebarThread(
                     id: conversationId,
-                    title: resolvedTitle,
-                    lastActivityAt: message.createdAt
+                    title: title,
+                    lastActivityAt: lastActivityAt
                 ),
                 at: 0
             )
@@ -1067,20 +1204,162 @@ final class AppContainer: ObservableObject {
             sidebarThreads.insert(
                 ConversationSidebarThread(
                     id: conversationId,
-                    title: derivedTitle,
-                    lastActivityAt: message.createdAt
+                    title: title,
+                    lastActivityAt: lastActivityAt
                 ),
                 at: 0
             )
         }
     }
 
-    func quickBarSubmit(_ text: String) {
-        sendDraft(text)
+    @discardableResult
+    func quickBarSubmit(_ text: String? = nil) -> Bool {
+        let draft = text ?? quickBarState.draft
+        let didSend = sendDraft(draft, destination: .quickBar)
+        if didSend {
+            mutateQuickBarState { state in
+                state.draft = ""
+                state.isExpanded = true
+            }
+        }
+        return didSend
+    }
+
+    private struct SendRoute {
+        let conversationId: String
+        let providerID: String
+        let modelID: String
+        let persistenceBehavior: ConversationPersistenceBehavior
+    }
+
+    private func resolveSendRoute(for destination: SendDraftDestination) -> SendRoute? {
+        switch destination {
+        case .activeConversation:
+            guard let conversationId = activeConversationId else {
+                statusMessage = "No active conversation available"
+                return nil
+            }
+            let providerID = settings.selectedProviderID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let modelID = settings.selectedModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !providerID.isEmpty, !modelID.isEmpty else {
+                statusMessage = "Choose a provider and model before sending"
+                return nil
+            }
+            return SendRoute(
+                conversationId: conversationId,
+                providerID: providerID,
+                modelID: modelID,
+                persistenceBehavior: .persistent
+            )
+        case .quickBar:
+            guard hasConfiguredProvider else {
+                statusMessage = "Add a provider to start chatting"
+                return nil
+            }
+
+            prepareQuickBarSessionIfNeeded()
+            let defaults = resolveQuickBarDefaults()
+            guard let conversationId = ensureQuickBarConversationId() else {
+                statusMessage = "Quick Bar is not ready yet"
+                return nil
+            }
+            guard !defaults.providerID.isEmpty, !defaults.modelID.isEmpty else {
+                statusMessage = "Choose a model before sending"
+                return nil
+            }
+
+            mutateQuickBarState { state in
+                state.providerID = defaults.providerID
+                state.selectedModelID = defaults.modelID
+                state.isExpanded = true
+            }
+
+            return SendRoute(
+                conversationId: conversationId,
+                providerID: defaults.providerID,
+                modelID: defaults.modelID,
+                persistenceBehavior: .persistent
+            )
+        }
+    }
+
+    private func prepareQuickBarSessionIfNeeded(forceReset: Bool = false) {
+        let defaults = resolveQuickBarDefaults()
+
+        if forceReset || quickBarState.conversationId == nil {
+            let preservedDraft = forceReset ? "" : quickBarState.draft
+            quickBarGeneration &+= 1
+            quickBarState = QuickBarSessionState(
+                conversationId: nil,
+                messages: [],
+                draft: preservedDraft,
+                isExpanded: false,
+                providerID: defaults.providerID,
+                selectedModelID: defaults.modelID,
+                generation: quickBarGeneration
+            )
+            return
+        }
+
+        mutateQuickBarState { state in
+            if state.providerID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                state.providerID = defaults.providerID
+            }
+            if state.selectedModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                state.selectedModelID = defaults.modelID
+            }
+        }
+    }
+
+    private func ensureQuickBarConversationId() -> String? {
+        if let conversationId = quickBarState.conversationId {
+            return conversationId
+        }
+
+        let conversationId: String
+        if let persistence, let createdConversationId = try? persistence.createNewConversation() {
+            conversationId = createdConversationId
+        } else {
+            conversationId = UUID().uuidString
+        }
+
+        quickBarGeneration &+= 1
+        mutateQuickBarState { state in
+            state.conversationId = conversationId
+            state.generation = quickBarGeneration
+        }
+        if messagesByConversationId[conversationId] == nil {
+            messagesByConversationId[conversationId] = quickBarState.messages
+        }
+        return conversationId
+    }
+
+    private func resolveQuickBarDefaults() -> (providerID: String, modelID: String) {
+        let currentQuickBarProviderID = quickBarState.providerID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let selectedProviderID = settings.selectedProviderID.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let provider = settings.providerConfigurations.first(where: {
+            $0.id == currentQuickBarProviderID && $0.isEnabled
+        }) ?? settings.providerConfigurations.first(where: {
+            $0.id == selectedProviderID && $0.isEnabled
+        }) ?? fallbackProviderConfiguration()
+
+        let providerID = provider?.id ?? currentQuickBarProviderID
+        let quickBarModelID = quickBarState.selectedModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let selectedModelID = settings.selectedModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let defaultModelID = provider?.defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let modelID = [quickBarModelID, selectedModelID, defaultModelID].first(where: { !$0.isEmpty }) ?? ""
+
+        return (providerID, modelID)
     }
 
     func stopActiveRequest() {
         guard let conversationId = activeConversationId else { return }
+        requestCoordinator.stopConversation(conversationId)
+    }
+
+    func stopQuickBarRequest() {
+        guard let conversationId = quickBarState.conversationId else { return }
         requestCoordinator.stopConversation(conversationId)
     }
 
@@ -1570,6 +1849,32 @@ final class AppContainer: ObservableObject {
         }
 
         return didChange
+    }
+
+    private func activateConversationSnapshot(
+        _ snapshot: ConversationPageSnapshot,
+        conversationId: String,
+        status: String
+    ) {
+        conversationLoadTask?.cancel()
+        conversationLoadTask = nil
+        activeConversationSwitchTrace = nil
+        isActiveConversationLoading = false
+        activeConversationLoadError = nil
+        hasMoreOlderMessages = snapshot.hasMoreOlderMessages
+        oldestLoadedOrderIndex = snapshot.oldestLoadedOrderIndex
+
+        conversationLoadGeneration &+= 1
+        activeConversationRenderGeneration = conversationLoadGeneration
+        messageRenderRuntime.setActiveConversation(
+            conversationID: conversationId,
+            generation: activeConversationRenderGeneration
+        )
+        requestCoordinator.rebalanceForActiveSwitch(newActiveConversationId: conversationId)
+        _ = applyConversationSnapshot(snapshot, conversationId: conversationId)
+        cacheConversationSnapshot(conversationId: conversationId, snapshot: snapshot)
+        clearUnreadCompletion(forConversation: conversationId)
+        statusMessage = status
     }
 
     private func cacheCurrentConversationSnapshotIfNeeded() {

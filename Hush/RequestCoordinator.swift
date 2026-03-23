@@ -147,6 +147,14 @@ final class RequestCoordinator {
         }) else { return nil }
         return container.requestStates[requestID]
     }
+
+    private func shouldPersistConversation(for requestID: RequestID) -> Bool {
+        sessionSnapshots[requestID]?.persistenceBehavior == .persistent
+    }
+
+    private func shouldPersistConversation(for snapshot: QueueItemSnapshot) -> Bool {
+        snapshot.persistenceBehavior == .persistent
+    }
 }
 
 // MARK: - Message Trace
@@ -231,11 +239,13 @@ extension RequestCoordinator {
             inConversation: snapshot.conversationId,
             debugInfoJSON: debugInfoJSON
         )
-        for messageID in uniqueMessageIDs {
-            try? persistence?.updateMessageDebugInfo(
-                messageId: messageID.uuidString,
-                debugInfoJSON: debugInfoJSON
-            )
+        if shouldPersistConversation(for: requestID) {
+            for messageID in uniqueMessageIDs {
+                try? persistence?.updateMessageDebugInfo(
+                    messageId: messageID.uuidString,
+                    debugInfoJSON: debugInfoJSON
+                )
+            }
         }
     }
 
@@ -337,7 +347,9 @@ extension RequestCoordinator {
         flushPendingUIUpdate(requestID: requestID, contentSource: .accumulated)
         cleanupFlushState(requestID: requestID)
 
-        if let msgID = container.requestStates[requestID]?.assistantMessageID {
+        if shouldPersistConversation(for: requestID),
+           let msgID = container.requestStates[requestID]?.assistantMessageID
+        {
             try? persistence?.finalizeAssistantMessage(
                 messageId: msgID.uuidString,
                 content: container.requestStates[requestID]?.accumulatedText ?? "",
@@ -351,7 +363,7 @@ extension RequestCoordinator {
                 debugInfoJSON: stoppedDebugInfoJSON
             )
             container.appendMessage(stoppedMessage, toConversation: owningConversationId)
-            if !owningConversationId.isEmpty {
+            if shouldPersistConversation(for: requestID), !owningConversationId.isEmpty {
                 try? persistence?.persistSystemMessage(
                     stoppedMessage,
                     conversationId: owningConversationId,
@@ -393,7 +405,9 @@ extension RequestCoordinator {
         flushPendingUIUpdate(requestID: requestID, contentSource: .accumulated)
         cleanupFlushState(requestID: requestID)
 
-        if let msgID = container.requestStates[requestID]?.assistantMessageID {
+        if shouldPersistConversation(for: requestID),
+           let msgID = container.requestStates[requestID]?.assistantMessageID
+        {
             try? persistence?.finalizeAssistantMessage(
                 messageId: msgID.uuidString,
                 content: container.requestStates[requestID]?.accumulatedText ?? "",
@@ -403,7 +417,7 @@ extension RequestCoordinator {
 
         let isBackground = owningConversationId != container.activeConversationId
         let finalAssistantContent = state.accumulatedText
-        if isBackground {
+        if isBackground, shouldPersistConversation(for: requestID) {
             container.scheduleStreamingCompletePrewarmIfNeeded(
                 conversationID: owningConversationId,
                 finalAssistantContent: finalAssistantContent
@@ -440,7 +454,9 @@ extension RequestCoordinator {
         flushPendingUIUpdate(requestID: requestID, contentSource: .accumulated)
         cleanupFlushState(requestID: requestID)
 
-        if let msgID = container.requestStates[requestID]?.assistantMessageID {
+        if shouldPersistConversation(for: requestID),
+           let msgID = container.requestStates[requestID]?.assistantMessageID
+        {
             try? persistence?.finalizeAssistantMessage(
                 messageId: msgID.uuidString,
                 content: container.requestStates[requestID]?.accumulatedText ?? "",
@@ -455,7 +471,7 @@ extension RequestCoordinator {
         )
         container.appendMessage(errorMessage, toConversation: owningConversationId)
         logger.info("[Request] Error message added to chat: \(errorDescription)")
-        if !owningConversationId.isEmpty {
+        if shouldPersistConversation(for: requestID), !owningConversationId.isEmpty {
             try? persistence?.persistSystemMessage(
                 errorMessage,
                 conversationId: owningConversationId,
@@ -815,7 +831,7 @@ extension RequestCoordinator {
             container.requestStates[requestID]?.assistantMessageID = assistantMessage.id
             container.appendMessage(assistantMessage, toConversation: snapshot.conversationId)
 
-            if !snapshot.conversationId.isEmpty {
+            if shouldPersistConversation(for: snapshot), !snapshot.conversationId.isEmpty {
                 try persistence?.persistSystemMessage(
                     assistantMessage,
                     conversationId: snapshot.conversationId,
@@ -823,7 +839,9 @@ extension RequestCoordinator {
                 )
             }
 
-            if snapshot.conversationId != container.activeConversationId {
+            if shouldPersistConversation(for: snapshot),
+               snapshot.conversationId != container.activeConversationId
+            {
                 container.markUnreadCompletion(forConversation: snapshot.conversationId)
             }
 
@@ -1036,7 +1054,7 @@ extension RequestCoordinator {
         let owningConversationId = container.requestStates[requestID]!.conversationId
         let isActiveConversation = owningConversationId == container.activeConversationId
 
-        if !isActiveConversation {
+        if !isActiveConversation, shouldPersistConversation(for: requestID) {
             container.markUnreadCompletion(forConversation: owningConversationId)
         }
 
@@ -1071,7 +1089,7 @@ extension RequestCoordinator {
             flushState.latestPresentedLength = initialPresented.count
         }
 
-        if !owningConversationId.isEmpty {
+        if shouldPersistConversation(for: requestID), !owningConversationId.isEmpty {
             let persistedDraft = ChatMessage(
                 id: newMessage.id,
                 role: .assistant,
@@ -1371,6 +1389,7 @@ extension RequestCoordinator {
     private func throttledStreamingFlush(requestID: RequestID, messageId: String, content _: String) {
         guard let container else { return }
         guard let flushState = sessionFlushState[requestID] else { return }
+        guard shouldPersistConversation(for: requestID) else { return }
         let now = ContinuousClock.now
         let interval = SessionFlushState.streamingFlushInterval
         if let lastFlush = flushState.lastStreamingFlush, now - lastFlush < interval {

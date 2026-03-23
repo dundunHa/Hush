@@ -56,10 +56,17 @@ final class ConversationViewController: NSViewController {
         bottomReservedHeight: CGFloat = HushSpacing.xl + HushSpacing.sm
     ) {
         self.container = container
+        updatePresentation(theme: theme, bottomReservedHeight: bottomReservedHeight)
+        renderConversationState()
+    }
+
+    func updatePresentation(
+        theme: AppTheme,
+        bottomReservedHeight: CGFloat = HushSpacing.xl + HushSpacing.sm
+    ) {
         self.theme = theme
         self.bottomReservedHeight = bottomReservedHeight
         messageTableView.setBottomReservedHeight(bottomReservedHeight)
-        renderConversationState()
     }
 
     func updateBottomReservedHeight(_ bottomReservedHeight: CGFloat) {

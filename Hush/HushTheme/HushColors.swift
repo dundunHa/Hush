@@ -64,6 +64,19 @@ struct HushThemePalette {
     let composerShellTop: Color
     let composerShellBottom: Color
     let composerShellStroke: Color
+    let quickBarSurface: Color
+    let quickBarSurfaceStroke: Color
+    let quickBarPrimaryText: Color
+    let quickBarSecondaryText: Color
+    let quickBarTertiaryText: Color
+    let quickBarControlFill: Color
+    let quickBarControlFillHover: Color
+    let quickBarControlForeground: Color
+    let quickBarControlMuted: Color
+    let quickBarButtonFill: Color
+    let quickBarButtonForeground: Color
+    let quickBarDisabledButtonFill: Color
+    let quickBarDisabledButtonForeground: Color
 }
 
 enum HushColors {
@@ -141,7 +154,20 @@ enum HushColors {
         codeBlockSeparator: Color(hex: 0x647282),
         composerShellTop: Color(hex: 0x363634),
         composerShellBottom: Color(hex: 0x363634),
-        composerShellStroke: Color(hex: 0xFFFFFF, opacity: 0.14)
+        composerShellStroke: Color(hex: 0xFFFFFF, opacity: 0.14),
+        quickBarSurface: Color(hex: 0xD4D2D1),
+        quickBarSurfaceStroke: Color(hex: 0xE7E3E1),
+        quickBarPrimaryText: Color(hex: 0x4E4B49),
+        quickBarSecondaryText: Color(hex: 0x666260),
+        quickBarTertiaryText: Color(hex: 0x8A8684),
+        quickBarControlFill: Color(hex: 0xC9C5C3, opacity: 0.54),
+        quickBarControlFillHover: Color(hex: 0xC1BDBA, opacity: 0.82),
+        quickBarControlForeground: Color(hex: 0x4A4745),
+        quickBarControlMuted: Color(hex: 0x706C69),
+        quickBarButtonFill: Color(hex: 0xBDB8B4),
+        quickBarButtonForeground: Color(hex: 0xF6F4F2),
+        quickBarDisabledButtonFill: Color(hex: 0xC8C4C2),
+        quickBarDisabledButtonForeground: Color(hex: 0xF2EFED)
     )
 
     private static let lightGlassPalette = HushThemePalette(
@@ -207,7 +233,20 @@ enum HushColors {
         codeBlockSeparator: Color(hex: 0xD3DCE7),
         composerShellTop: Color(hex: 0xFFFFFF, opacity: 0.96),
         composerShellBottom: Color(hex: 0xEEF4FB, opacity: 0.92),
-        composerShellStroke: Color(hex: 0xD6E0EC)
+        composerShellStroke: Color(hex: 0xD6E0EC),
+        quickBarSurface: Color(hex: 0xD4D2D1),
+        quickBarSurfaceStroke: Color(hex: 0xE7E3E1),
+        quickBarPrimaryText: Color(hex: 0x4E4B49),
+        quickBarSecondaryText: Color(hex: 0x666260),
+        quickBarTertiaryText: Color(hex: 0x8A8684),
+        quickBarControlFill: Color(hex: 0xC9C5C3, opacity: 0.54),
+        quickBarControlFillHover: Color(hex: 0xC1BDBA, opacity: 0.82),
+        quickBarControlForeground: Color(hex: 0x4A4745),
+        quickBarControlMuted: Color(hex: 0x706C69),
+        quickBarButtonFill: Color(hex: 0xBDB8B4),
+        quickBarButtonForeground: Color(hex: 0xF6F4F2),
+        quickBarDisabledButtonFill: Color(hex: 0xC8C4C2),
+        quickBarDisabledButtonForeground: Color(hex: 0xF2EFED)
     )
 
     private static let ivoryGlassPalette = HushThemePalette(
@@ -273,7 +312,20 @@ enum HushColors {
         codeBlockSeparator: Color(hex: 0xD2C4B1),
         composerShellTop: Color(hex: 0xFFF9F1, opacity: 0.97),
         composerShellBottom: Color(hex: 0xF5ECE0, opacity: 0.93),
-        composerShellStroke: Color(hex: 0xDCCFBE)
+        composerShellStroke: Color(hex: 0xDCCFBE),
+        quickBarSurface: Color(hex: 0xD4D2D1),
+        quickBarSurfaceStroke: Color(hex: 0xE7E3E1),
+        quickBarPrimaryText: Color(hex: 0x4E4B49),
+        quickBarSecondaryText: Color(hex: 0x666260),
+        quickBarTertiaryText: Color(hex: 0x8A8684),
+        quickBarControlFill: Color(hex: 0xC9C5C3, opacity: 0.54),
+        quickBarControlFillHover: Color(hex: 0xC1BDBA, opacity: 0.82),
+        quickBarControlForeground: Color(hex: 0x4A4745),
+        quickBarControlMuted: Color(hex: 0x706C69),
+        quickBarButtonFill: Color(hex: 0xBDB8B4),
+        quickBarButtonForeground: Color(hex: 0xF6F4F2),
+        quickBarDisabledButtonFill: Color(hex: 0xC8C4C2),
+        quickBarDisabledButtonForeground: Color(hex: 0xF2EFED)
     )
 }
 

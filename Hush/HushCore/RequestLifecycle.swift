@@ -174,6 +174,11 @@ public struct ActiveRequestState: Sendable, Equatable {
 
 // MARK: - Queue Item Snapshot
 
+public enum ConversationPersistenceBehavior: String, Codable, Sendable, Equatable {
+    case persistent
+    case ephemeral
+}
+
 public struct QueueItemSnapshot: Sendable, Equatable, Identifiable {
     public let id: RequestID
     public let prompt: String
@@ -182,6 +187,7 @@ public struct QueueItemSnapshot: Sendable, Equatable, Identifiable {
     public let parameters: ModelParameters
     public let userMessageID: UUID
     public let conversationId: String
+    public let persistenceBehavior: ConversationPersistenceBehavior
     public let createdAt: Date
 
     public init(
@@ -192,6 +198,7 @@ public struct QueueItemSnapshot: Sendable, Equatable, Identifiable {
         parameters: ModelParameters,
         userMessageID: UUID,
         conversationId: String,
+        persistenceBehavior: ConversationPersistenceBehavior = .persistent,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -201,6 +208,7 @@ public struct QueueItemSnapshot: Sendable, Equatable, Identifiable {
         self.parameters = parameters
         self.userMessageID = userMessageID
         self.conversationId = conversationId
+        self.persistenceBehavior = persistenceBehavior
         self.createdAt = createdAt
     }
 }

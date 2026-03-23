@@ -180,6 +180,7 @@ run: clean build ## Clean, rebuild, launch app and stream rendering logs
 	launchctl setenv HUSH_SWITCH_DEBUG "$$HUSH_SWITCH_VALUE"; \
 	launchctl setenv HUSH_CONTENT_DEBUG "$$HUSH_CONTENT_VALUE"; \
 	trap 'launchctl unsetenv HUSH_RENDER_DEBUG >/dev/null 2>&1 || true; launchctl unsetenv HUSH_SWITCH_DEBUG >/dev/null 2>&1 || true; launchctl unsetenv HUSH_CONTENT_DEBUG >/dev/null 2>&1 || true' EXIT INT TERM; \
+	pkill -x "$(SCHEME)" >/dev/null 2>&1 || true; \
 	open -n "$(APP_PATH)"; \
 	log stream --style compact --level debug --predicate 'subsystem == "com.hush.app" && (category == "Rendering" || category == "PerfTrace" || category == "SwitchRender" || category == "SwitchScroll" || category == "SwitchRenderScheduler" || category == "SwitchBubble")'
 

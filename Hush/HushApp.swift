@@ -32,6 +32,7 @@ struct HushApp: App {
                 )
                 .onAppear {
                     wireAppDelegateCallbacks()
+                    appDelegate.configureQuickBar(with: container)
                     #if DEBUG
                         container.runAutomationScenarioIfNeeded()
                     #endif
@@ -46,7 +47,6 @@ struct HushApp: App {
                 Button("Toggle Quick Bar") {
                     container.toggleQuickBar()
                 }
-                .keyboardShortcut("k", modifiers: [.command, .option])
             }
         }
     }
@@ -65,6 +65,10 @@ struct HushApp: App {
             showSettings = true
         }
     }
+}
+
+extension Notification.Name {
+    static let hushActivateMainWindow = Notification.Name("hushActivateMainWindow")
 }
 
 // MARK: - WindowCloseObserver
