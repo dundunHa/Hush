@@ -56,10 +56,10 @@ struct QuickBarComposer: View {
                     .padding(.vertical, HushSpacing.xs + 2)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(palette.quickBarControlFill)
+                            .fill(localControlFill)
                             .overlay(
                                 Capsule(style: .continuous)
-                                    .stroke(palette.quickBarSurfaceStroke.opacity(0.85), lineWidth: 0.5)
+                                    .stroke(localControlStroke, lineWidth: 0.5)
                             )
                     )
                 }
@@ -129,12 +129,7 @@ struct QuickBarComposer: View {
                     .background(sendButtonBackground, in: Circle())
                     .overlay(
                         Circle()
-                            .stroke(
-                                palette.quickBarSurfaceStroke.opacity(
-                                    canSendDraft || container.isQuickBarSending ? 0.12 : 0.06
-                                ),
-                                lineWidth: 0.5
-                            )
+                            .stroke(sendButtonStroke, lineWidth: 0.5)
                     )
             }
             .buttonStyle(.plain)
@@ -173,11 +168,11 @@ struct QuickBarComposer: View {
             .padding(.vertical, HushSpacing.xs + 2)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isModelHovered ? palette.quickBarControlFillHover : .clear)
+                    .fill(isModelHovered ? localHoverFill : .clear)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .stroke(
-                                isModelHovered ? palette.quickBarSurfaceStroke.opacity(0.82) : .clear,
+                                isModelHovered ? localControlStroke : .clear,
                                 lineWidth: 0.5
                             )
                     )
@@ -209,12 +204,12 @@ struct QuickBarComposer: View {
 
     private var sendButtonBackground: Color {
         if container.isQuickBarSending {
-            return palette.destructiveActionBackground.opacity(0.92)
+            return palette.destructiveActionBackground.opacity(0.58)
         }
         if canSendDraft {
-            return palette.quickBarButtonFill
+            return palette.quickBarButtonFill.opacity(0.22)
         }
-        return palette.quickBarDisabledButtonFill
+        return palette.quickBarDisabledButtonFill.opacity(0.46)
     }
 
     private var sendButtonForeground: Color {
@@ -224,38 +219,122 @@ struct QuickBarComposer: View {
         return canSendDraft ? palette.quickBarButtonForeground : palette.quickBarDisabledButtonForeground
     }
 
+    private var sendButtonStroke: Color {
+        if container.isQuickBarSending {
+            return palette.destructiveActionForeground.opacity(0.20)
+        }
+        return canSendDraft ? palette.quickBarButtonFill.opacity(0.32) : palette.quickBarSurfaceStroke.opacity(0.18)
+    }
+
+    private var localControlFill: Color {
+        palette.quickBarControlFill
+    }
+
+    private var localHoverFill: Color {
+        palette.quickBarControlFillHover
+    }
+
+    private var localControlStroke: Color {
+        palette.quickBarSurfaceStroke.opacity(0.28)
+    }
+
     private var composerSurface: some View {
-        let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
+        glassShell(cornerRadius: 28, shadowOpacity: shellShadowOpacity)
+    }
+
+    private var providerEmptySurface: some View {
+        glassShell(cornerRadius: 28, shadowOpacity: 0.05)
+    }
+
+    private func glassShell(cornerRadius: CGFloat, shadowOpacity: Double) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
         return shape
-            .fill(palette.quickBarSurface)
+            .fill(.clear)
+            .background {
+                BehindWindowVibrancyHost(material: .hudWindow)
+                    .clipShape(shape)
+            }
+            .overlay(
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                palette.quickBarSurface.opacity(shellTintTopOpacity),
+                                palette.quickBarSurface.opacity(shellTintBottomOpacity)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                palette.quickBarSurfaceStroke.opacity(shellHighlightOpacity),
+                                palette.quickBarSurfaceStroke.opacity(0.03),
+                                .clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                RadialGradient(
+                    colors: [
+                        palette.quickBarSurfaceStroke.opacity(shellRadialHighlightOpacity),
+                        .clear
+                    ],
+                    center: .topLeading,
+                    startRadius: 8,
+                    endRadius: shellRadialHighlightRadius
+                )
+                .clipShape(shape)
+            )
             .overlay(
                 shape
                     .stroke(
-                        palette.quickBarSurfaceStroke.opacity(0.92),
+                        palette.quickBarSurfaceStroke.opacity(shellStrokeOpacity),
                         lineWidth: 0.5
                     )
             )
             .shadow(
-                color: palette.splitPaneShadow.opacity(0.08),
-                radius: 8,
+                color: palette.splitPaneShadow.opacity(shadowOpacity),
+                radius: 6,
                 x: 0,
                 y: 2
             )
     }
 
-    private var providerEmptySurface: some View {
-        let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
+    private var shellTintTopOpacity: Double {
+        container.quickBarState.isExpanded ? 0.12 : 0.16
+    }
 
-        return shape
-            .fill(palette.quickBarSurface)
-            .overlay(
-                shape
-                    .stroke(
-                        palette.quickBarSurfaceStroke.opacity(0.92),
-                        lineWidth: 0.5
-                    )
-            )
+    private var shellTintBottomOpacity: Double {
+        container.quickBarState.isExpanded ? 0.08 : 0.10
+    }
+
+    private var shellHighlightOpacity: Double {
+        container.quickBarState.isExpanded ? 0.10 : 0.13
+    }
+
+    private var shellRadialHighlightOpacity: Double {
+        container.quickBarState.isExpanded ? 0.05 : 0.07
+    }
+
+    private var shellRadialHighlightRadius: CGFloat {
+        container.quickBarState.isExpanded ? 160 : 140
+    }
+
+    private var shellStrokeOpacity: Double {
+        container.quickBarState.isExpanded ? 0.52 : 0.56
+    }
+
+    private var shellShadowOpacity: Double {
+        container.quickBarState.isExpanded ? 0.03 : 0.04
     }
 
     @MainActor

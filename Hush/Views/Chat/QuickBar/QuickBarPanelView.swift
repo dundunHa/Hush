@@ -15,6 +15,7 @@ struct QuickBarPanelView: View {
                 compactBody
             }
         }
+        .preferredColorScheme(preferredScheme(for: container.settings.theme))
     }
 
     private var compactBody: some View {
@@ -104,10 +105,10 @@ struct QuickBarPanelView: View {
         let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
 
         return shape
-            .fill(palette.quickBarSurface.opacity(0.92))
+            .fill(palette.quickBarSurface.opacity(0.72))
             .overlay(
                 shape
-                    .stroke(palette.quickBarSurfaceStroke.opacity(0.88), lineWidth: 0.5)
+                    .stroke(palette.quickBarSurfaceStroke.opacity(0.54), lineWidth: 0.5)
             )
     }
 
@@ -115,21 +116,64 @@ struct QuickBarPanelView: View {
         let shape = RoundedRectangle(cornerRadius: 38, style: .continuous)
 
         return shape
-            .fill(palette.quickBarSurface)
+            .fill(.clear)
+            .background {
+                BehindWindowVibrancyHost(material: .hudWindow)
+                    .clipShape(shape)
+            }
             .overlay(
                 shape
-                    .stroke(palette.quickBarSurfaceStroke.opacity(0.88), lineWidth: 0.5)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                palette.quickBarSurface.opacity(0.12),
+                                palette.quickBarSurface.opacity(0.07)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                palette.quickBarSurfaceStroke.opacity(0.10),
+                                palette.quickBarSurfaceStroke.opacity(0.03),
+                                .clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                RadialGradient(
+                    colors: [
+                        palette.quickBarSurfaceStroke.opacity(0.05),
+                        .clear
+                    ],
+                    center: .topLeading,
+                    startRadius: 8,
+                    endRadius: 180
+                )
+                .clipShape(shape)
+            )
+            .overlay(
+                shape
+                    .stroke(palette.quickBarSurfaceStroke.opacity(0.52), lineWidth: 0.5)
             )
             .shadow(
-                color: palette.splitPaneShadow.opacity(0.08),
-                radius: 8,
+                color: palette.splitPaneShadow.opacity(0.03),
+                radius: 6,
                 x: 0,
                 y: 2
             )
     }
 
     private var handleColor: Color {
-        palette.quickBarSurfaceStroke.opacity(0.96)
+        palette.quickBarSurfaceStroke.opacity(0.68)
     }
 
     private func toolbarOrb(systemName: String) -> some View {
@@ -139,11 +183,15 @@ struct QuickBarPanelView: View {
             .frame(width: 30, height: 30)
             .background(
                 Circle()
-                    .fill(palette.quickBarControlFill)
+                    .fill(palette.quickBarSurfaceStroke.opacity(0.08))
                     .overlay(
                         Circle()
-                            .stroke(palette.quickBarSurfaceStroke.opacity(0.82), lineWidth: 0.5)
+                            .stroke(palette.quickBarSurfaceStroke.opacity(0.28), lineWidth: 0.5)
                     )
             )
+    }
+
+    private func preferredScheme(for theme: AppTheme) -> ColorScheme {
+        theme.usesDarkAppearance ? .dark : .light
     }
 }

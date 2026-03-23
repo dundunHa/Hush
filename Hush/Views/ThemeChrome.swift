@@ -1,10 +1,12 @@
 import AppKit
 import SwiftUI
 
-private struct SidebarVibrancyHost: NSViewRepresentable {
+struct BehindWindowVibrancyHost: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+
     func makeNSView(context _: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
-        view.material = .sidebar
+        view.material = material
         view.blendingMode = .behindWindow
         view.state = .active
         view.isEmphasized = false
@@ -12,7 +14,7 @@ private struct SidebarVibrancyHost: NSViewRepresentable {
     }
 
     func updateNSView(_ view: NSVisualEffectView, context _: Context) {
-        view.material = .sidebar
+        view.material = material
         view.blendingMode = .behindWindow
         view.state = .active
         view.isEmphasized = false
@@ -130,7 +132,7 @@ struct SidebarMaterialBackground: View {
     var body: some View {
         ZStack {
             if usesGlassSidebar {
-                SidebarVibrancyHost()
+                BehindWindowVibrancyHost(material: .sidebar)
 
                 Rectangle()
                     .fill(
