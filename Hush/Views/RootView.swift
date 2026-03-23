@@ -78,7 +78,8 @@ struct RootView: View {
                         theme: container.settings.theme,
                         palette: themePalette,
                         sidebarWidth: showSidebar ? HushSpacing.sidebarWidth : 0,
-                        revealWidth: sidebarRevealWidth
+                        revealWidth: sidebarRevealWidth,
+                        prefersNativeGlassShell: true
                     )
                 }
                 .overlay(alignment: .topLeading) {

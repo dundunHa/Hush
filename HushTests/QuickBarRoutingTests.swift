@@ -6,7 +6,7 @@ import Testing
 @MainActor
 struct QuickBarRoutingTests {
     private func makePersistence() throws -> ChatPersistenceCoordinator {
-        ChatPersistenceCoordinator(dbManager: try DatabaseManager.inMemory())
+        try ChatPersistenceCoordinator(dbManager: DatabaseManager.inMemory())
     }
 
     private func makeContainer(
@@ -104,6 +104,7 @@ private actor InstantQuickBarProvider: LLMProvider {
         self.id = id
     }
 
+    // swiftlint:disable async_without_await
     nonisolated func availableModels(
         context _: ProviderInvocationContext
     ) async throws -> [ModelDescriptor] {
@@ -118,6 +119,8 @@ private actor InstantQuickBarProvider: LLMProvider {
     ) async throws -> ProviderResponse {
         ProviderResponse(text: "unused")
     }
+
+    // swiftlint:enable async_without_await
 
     nonisolated func sendStreaming(
         messages _: [ChatMessage],

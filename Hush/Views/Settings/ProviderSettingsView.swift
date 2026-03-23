@@ -1208,9 +1208,12 @@ struct ProviderSettingsView: View {
                     TextField("model-id", text: $defaultModelID)
                         .textFieldStyle(.roundedBorder)
 
-                    Text("Use this only when the provider does not expose the default model in the catalog. Typing here overrides the catalog picker.")
-                        .font(HushTypography.footnote)
-                        .foregroundStyle(palette.secondaryText)
+                    Text(
+                        "Use this only when the provider does not expose the default model"
+                            + " in the catalog. Typing here overrides the catalog picker."
+                    )
+                    .font(HushTypography.footnote)
+                    .foregroundStyle(palette.secondaryText)
                 }
             }
             .padding(.top, HushSpacing.md)

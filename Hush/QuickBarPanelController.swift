@@ -74,7 +74,10 @@ final class QuickBarPanelController: NSObject, NSWindowDelegate {
         self.container = container
         cancellables.removeAll()
         Self.logger.debug(
-            "Bind quick bar controller pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public) bundle=\(Bundle.main.bundleURL.path, privacy: .public)"
+            """
+            Bind quick bar controller pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public) \
+            bundle=\(Bundle.main.bundleURL.path, privacy: .public)
+            """
         )
 
         container.$showQuickBar
@@ -153,7 +156,11 @@ final class QuickBarPanelController: NSObject, NSWindowDelegate {
         updatePanelFrame(animated: false)
         visibilityAnimationGeneration &+= 1
         Self.logger.debug(
-            "Presenting Quick Bar visible=\(panel.isVisible, privacy: .public) expanded=\(container.quickBarState.isExpanded, privacy: .public) windowCount=\(NSApp.windows.count, privacy: .public)"
+            """
+            Presenting Quick Bar visible=\(panel.isVisible, privacy: .public) \
+            expanded=\(container.quickBarState.isExpanded, privacy: .public) \
+            windowCount=\(NSApp.windows.count, privacy: .public)
+            """
         )
         NSApp.activate(ignoringOtherApps: true)
 
@@ -362,7 +369,10 @@ final class QuickBarPanelController: NSObject, NSWindowDelegate {
             presentationLockFileDescriptor = descriptor
             writePresentationLockMetadata(to: descriptor)
             Self.logger.debug(
-                "Acquired Quick Bar presentation lock path=\(lockPath, privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public)"
+                """
+                Acquired Quick Bar presentation lock path=\(lockPath, privacy: .public) \
+                pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public)
+                """
             )
             return true
         }

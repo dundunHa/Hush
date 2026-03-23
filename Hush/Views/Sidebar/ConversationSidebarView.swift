@@ -23,7 +23,11 @@ struct ConversationSidebarView: View {
         .padding(.top, HushSpacing.topBarHeight)
         .background {
             if showsMaterialBackground {
-                SidebarMaterialBackground(theme: theme, palette: palette)
+                SidebarMaterialBackground(
+                    theme: theme,
+                    palette: palette,
+                    prefersNativeGlassShell: true
+                )
             }
         }
         .background(alignment: .top) {

@@ -145,45 +145,19 @@ struct GeneralSettingsView: View {
                 .font(HushTypography.captionBold)
                 .foregroundStyle(themePalette.secondaryText)
 
-            HStack(alignment: .top, spacing: HushSpacing.xl) {
-                VStack(alignment: .leading, spacing: HushSpacing.sm) {
-                    Text("Trigger key")
-                        .font(HushTypography.scaled(14, weight: .semibold))
+            VStack(alignment: .leading, spacing: HushSpacing.sm) {
+                Text("Global shortcut")
+                    .font(HushTypography.scaled(14, weight: .semibold))
 
-                    Picker("", selection: quickBarKeySelection) {
-                        ForEach(QuickBarConfiguration.supportedKeys, id: \.self) { key in
-                            Text(key).tag(key)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: 140, alignment: .leading)
-                }
-
-                VStack(alignment: .leading, spacing: HushSpacing.sm) {
-                    Text("Modifiers")
-                        .font(HushTypography.scaled(14, weight: .semibold))
-
-                    HStack(spacing: HushSpacing.md) {
-                        ForEach(QuickBarConfiguration.supportedModifiers, id: \.self) { modifier in
-                            Toggle(
-                                QuickBarConfiguration.modifierDisplayName(for: modifier),
-                                isOn: quickBarModifierBinding(modifier)
-                            )
-                            .toggleStyle(.switch)
-                            .fixedSize()
-                        }
-                    }
-                }
+                QuickBarShortcutRecorder(configuration: quickBarConfigurationBinding)
             }
 
-            Text("Global shortcut: \(container.settings.quickBar.displayString)")
-                .font(HushTypography.captionBold)
-                .foregroundStyle(themePalette.primaryText)
-
-            Text("Quick Bar uses a system-wide hotkey. At least one modifier is always required.")
-                .font(HushTypography.caption)
-                .foregroundStyle(themePalette.secondaryText)
+            Text(
+                "Quick Bar uses a system-wide hotkey. Click the shortcut field and press the new shortcut. " +
+                    "Press Esc to cancel, and keep at least one modifier. Default: \(QuickBarConfiguration.standard.displayString)."
+            )
+            .font(HushTypography.caption)
+            .foregroundStyle(themePalette.secondaryText)
         }
         .padding(HushSpacing.lg)
         .cardStyle(
@@ -231,34 +205,11 @@ struct GeneralSettingsView: View {
         )
     }
 
-    private var quickBarKeySelection: Binding<String> {
+    private var quickBarConfigurationBinding: Binding<QuickBarConfiguration> {
         Binding(
-            get: { container.settings.quickBar.validated().normalizedKey },
+            get: { container.settings.quickBar.validated() },
             set: { newValue in
-                let candidate = QuickBarConfiguration(
-                    key: newValue,
-                    modifiers: container.settings.quickBar.normalizedModifiers
-                )
-                container.settings.quickBar = candidate.validated(fallback: container.settings.quickBar.validated())
-            }
-        )
-    }
-
-    private func quickBarModifierBinding(_ modifier: String) -> Binding<Bool> {
-        Binding(
-            get: { container.settings.quickBar.normalizedModifiers.contains(modifier) },
-            set: { isEnabled in
-                var modifiers = container.settings.quickBar.normalizedModifiers
-                if isEnabled {
-                    modifiers.append(modifier)
-                } else {
-                    modifiers.removeAll { $0 == modifier }
-                }
-                let candidate = QuickBarConfiguration(
-                    key: container.settings.quickBar.normalizedKey,
-                    modifiers: modifiers
-                )
-                container.settings.quickBar = candidate.validated(fallback: container.settings.quickBar.validated())
+                container.settings.quickBar = newValue.validated(fallback: container.settings.quickBar.validated())
             }
         )
     }

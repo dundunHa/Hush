@@ -9,9 +9,10 @@ final class QuickBarHotkeyController {
         let modifiers: UInt32
     }
 
-    private static let hotKeySignature: OSType = 0x48515348 // HQSH
+    private static let hotKeySignature: OSType = 0x4851_5348 // HQSH
     private static let hotKeyIdentifier: UInt32 = 1
     private static let keyCodes: [String: UInt32] = [
+        QuickBarConfiguration.spaceKey: UInt32(kVK_Space),
         "A": UInt32(kVK_ANSI_A),
         "B": UInt32(kVK_ANSI_B),
         "C": UInt32(kVK_ANSI_C),
@@ -49,6 +50,9 @@ final class QuickBarHotkeyController {
         "8": UInt32(kVK_ANSI_8),
         "9": UInt32(kVK_ANSI_9)
     ]
+    private static let keysByKeyCode: [UInt16: String] = keyCodes.reduce(into: [:]) { result, entry in
+        result[UInt16(entry.value)] = entry.key
+    }
 
     private var eventHandler: EventHandlerRef?
     private var hotKeyReference: EventHotKeyRef?
@@ -145,6 +149,31 @@ final class QuickBarHotkeyController {
 
         guard modifiers != 0 else { return nil }
         return CarbonShortcut(keyCode: keyCode, modifiers: modifiers)
+    }
+
+    static func configuration(for event: NSEvent) -> QuickBarConfiguration? {
+        guard let key = keysByKeyCode[event.keyCode] else { return nil }
+
+        let modifiers = QuickBarConfiguration.supportedModifiers.filter { modifier in
+            switch modifier {
+            case "command":
+                return event.modifierFlags.contains(.command)
+            case "option":
+                return event.modifierFlags.contains(.option)
+            case "shift":
+                return event.modifierFlags.contains(.shift)
+            case "control":
+                return event.modifierFlags.contains(.control)
+            default:
+                return false
+            }
+        }
+
+        let configuration = QuickBarConfiguration(
+            key: key,
+            modifiers: modifiers
+        )
+        return configuration.isValid ? configuration : nil
     }
 
     private func installEventHandlerIfNeeded() {

@@ -55,11 +55,12 @@ public nonisolated enum AppTheme: String, Codable, CaseIterable, Sendable {
 }
 
 public nonisolated struct QuickBarConfiguration: Codable, Equatable, Sendable {
+    public static let spaceKey = "SPACE"
     public static let supportedModifiers = ["command", "option", "shift", "control"]
     public static let supportedKeys: [String] = {
         let letters = (65 ... 90).compactMap(UnicodeScalar.init).map { String(Character($0)) }
         let digits = (0 ... 9).map(String.init)
-        return letters + digits
+        return [spaceKey] + letters + digits
     }()
 
     public var key: String
@@ -74,14 +75,17 @@ public nonisolated struct QuickBarConfiguration: Codable, Equatable, Sendable {
     }
 
     public static let standard = QuickBarConfiguration(
-        key: "K",
-        modifiers: ["command", "option"]
+        key: spaceKey,
+        modifiers: ["option"]
     )
 
     public var normalizedKey: String {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard trimmed.count == 1 else { return "" }
-        return trimmed
+        guard !trimmed.isEmpty else { return "" }
+        if trimmed == Self.spaceKey {
+            return Self.spaceKey
+        }
+        return Self.supportedKeys.contains(trimmed) ? trimmed : ""
     }
 
     public var normalizedModifiers: [String] {
@@ -105,7 +109,7 @@ public nonisolated struct QuickBarConfiguration: Codable, Equatable, Sendable {
         guard isValid else { return "Disabled" }
 
         let prefix = normalizedModifiers.compactMap(Self.modifierSymbol(for:)).joined()
-        return prefix + normalizedKey
+        return prefix + Self.displayKeyName(for: normalizedKey)
     }
 
     public func validated(fallback: QuickBarConfiguration = .standard) -> QuickBarConfiguration {
@@ -128,6 +132,15 @@ public nonisolated struct QuickBarConfiguration: Codable, Equatable, Sendable {
             return "⌃"
         default:
             return nil
+        }
+    }
+
+    public static func displayKeyName(for key: String) -> String {
+        switch key.uppercased() {
+        case spaceKey:
+            return "Space"
+        default:
+            return key.uppercased()
         }
     }
 
@@ -233,7 +246,7 @@ public nonisolated struct AppSettings: Codable, Equatable, Sendable {
         selectedProviderID = try container.decodeIfPresent(String.self, forKey: .selectedProviderID) ?? ""
         selectedModelID = try container.decodeIfPresent(String.self, forKey: .selectedModelID) ?? ""
         parameters = try container.decodeIfPresent(ModelParameters.self, forKey: .parameters) ?? .standard
-        quickBar = (try container.decodeIfPresent(QuickBarConfiguration.self, forKey: .quickBar) ?? .standard)
+        quickBar = try (container.decodeIfPresent(QuickBarConfiguration.self, forKey: .quickBar) ?? .standard)
             .validated()
         let rawTheme = try container.decodeIfPresent(String.self, forKey: .theme)
         theme = rawTheme.map(AppTheme.persistedValue) ?? .graphiteGlass

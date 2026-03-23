@@ -13,11 +13,23 @@ struct QuickBarConfigurationTests {
         #expect(invalid.validated() == .standard)
     }
 
+    @Test("space shortcut normalizes to a visible display string")
+    func spaceShortcutNormalizesAndFormats() {
+        let shortcut = QuickBarConfiguration(
+            key: "space",
+            modifiers: ["option", "option"]
+        ).validated()
+
+        #expect(shortcut.key == QuickBarConfiguration.spaceKey)
+        #expect(shortcut.modifiers == ["option"])
+        #expect(shortcut.displayString == "⌥Space")
+    }
+
     @Test("hotkey controller maps the standard shortcut to Carbon key codes")
     func carbonShortcutMappingMatchesStandardShortcut() {
         let shortcut = QuickBarHotkeyController.carbonShortcut(for: .standard)
 
-        #expect(shortcut?.keyCode == UInt32(kVK_ANSI_K))
-        #expect(shortcut?.modifiers == UInt32(cmdKey | optionKey))
+        #expect(shortcut?.keyCode == UInt32(kVK_Space))
+        #expect(shortcut?.modifiers == UInt32(optionKey))
     }
 }
