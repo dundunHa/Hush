@@ -2008,6 +2008,7 @@ final class MessageTableCellView: NSTableCellView {
             applyPresentationPalette()
         }
     }
+
     private var theme: AppTheme = .graphiteGlass {
         didSet {
             applyPresentationPalette()
@@ -2218,14 +2219,13 @@ final class MessageTableCellView: NSTableCellView {
 
     override func setFrameSize(_ newSize: NSSize) {
         let oldWidth = frame.size.width
-        let previousHeight = bodyIntrinsicHeight
         super.setFrameSize(newSize)
         if abs(oldWidth - newSize.width) > 0.5 {
             needsUpdateConstraints = true
             contentContainer.needsUpdateConstraints = true
             contentContainer.needsLayout = true
             needsLayout = true
-            refreshAttachmentPreviewForCurrentWidth(previousHeight: previousHeight)
+            bodyTextView.cachedIntrinsicHeight = nil
         }
     }
 
@@ -2233,7 +2233,13 @@ final class MessageTableCellView: NSTableCellView {
         let previousHeight = bodyIntrinsicHeight
         super.layout()
         updateBodyPresentationGeometry()
-        refreshAttachmentPreviewForCurrentWidth(previousHeight: previousHeight)
+        refreshAttachmentPreviewForCurrentWidth()
+        invalidateOwningRowHeightIfNeeded(
+            owningTableView: owningTableView,
+            rowIndex: currentRowIndex,
+            previousHeight: previousHeight,
+            messageTableView: messageTableView
+        )
     }
 
     override func prepareForReuse() {
@@ -2393,7 +2399,10 @@ final class MessageTableCellView: NSTableCellView {
     }
 
     private func plainTextAlignment(for row: MessageTableView.RowModel) -> NSTextAlignment {
-        row.message.role == .user ? .right : .left
+        if row.message.role == .user, surfaceStyle != .quickBar {
+            return .right
+        }
+        return .left
     }
 
     private func plainTextColor(for row: MessageTableView.RowModel) -> NSColor {
@@ -2690,6 +2699,9 @@ final class MessageTableCellView: NSTableCellView {
 
     private func bodyPresentationMode(for row: MessageTableView.RowModel) -> BodyPresentationMode {
         if row.message.role == .user {
+            if surfaceStyle == .quickBar {
+                return .fullWidth
+            }
             return .trailingCompactText
         }
         if isAssistantWaitingState(for: row, content: row.message.content) {
@@ -2701,7 +2713,11 @@ final class MessageTableCellView: NSTableCellView {
     private func applyBodyPresentation(for row: MessageTableView.RowModel, maxBodyWidth: CGFloat) {
         let mode = bodyPresentationMode(for: row)
         currentBodyPresentationMode = mode
-        metaLabel.alignment = row.message.role == .user ? .right : .left
+        if row.message.role == .user, surfaceStyle != .quickBar {
+            metaLabel.alignment = .right
+        } else {
+            metaLabel.alignment = .left
+        }
         let textAlignment = plainTextAlignment(for: row)
 
         switch mode {
@@ -3064,7 +3080,7 @@ final class MessageTableCellView: NSTableCellView {
         )
     }
 
-    private func refreshAttachmentPreviewForCurrentWidth(previousHeight: CGFloat) {
+    private func refreshAttachmentPreviewForCurrentWidth() {
         guard let row = currentRow,
               row.message.attachments.contains(where: { $0.kind == .image }),
               !attachmentPreviewView.isHidden
@@ -3078,14 +3094,7 @@ final class MessageTableCellView: NSTableCellView {
         guard abs(nextContentWidth - currentContentWidth) > 0.5 else { return }
 
         currentContentWidth = nextContentWidth
-        if attachmentPreviewView.updateAvailableWidth(nextContentWidth) {
-            invalidateOwningRowHeightIfNeeded(
-                owningTableView: owningTableView,
-                rowIndex: currentRowIndex,
-                previousHeight: previousHeight,
-                messageTableView: messageTableView
-            )
-        }
+        _ = attachmentPreviewView.updateAvailableWidth(nextContentWidth)
     }
 
     private func updateActionBarLayout(

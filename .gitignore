@@ -6,3 +6,4 @@ build
 openspec
 .tmp
 /.vscode/settings.json
+build

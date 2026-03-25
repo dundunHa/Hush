@@ -11,8 +11,8 @@ final class QuickBarPanelController: NSObject, NSWindowDelegate {
 
     private enum Layout {
         static let width: CGFloat = 708
-        static let compactHeight: CGFloat = 176
-        static let expandedHeight: CGFloat = 552
+        static let compactHeight: CGFloat = 196
+        static let expandedHeight: CGFloat = 584
         static let bottomInset: CGFloat = 40
         static let fadeDuration: TimeInterval = 0.18
         static let resizeDuration: TimeInterval = 0.22
@@ -327,8 +327,8 @@ final class QuickBarPanelController: NSObject, NSWindowDelegate {
         panel.appearance = NSAppearance(
             named: theme.usesDarkAppearance ? .darkAqua : .aqua
         )
-        panel.isOpaque = !theme.usesGlassSurface
-        panel.backgroundColor = theme.usesGlassSurface ? .clear : .windowBackgroundColor
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
         panel.contentView?.needsDisplay = true
         panel.contentViewController?.view.needsDisplay = true
         panel.invalidateShadow()

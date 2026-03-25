@@ -160,6 +160,46 @@ struct MessageBodyAlignmentTests {
         #expect(!cell.waitingBreathingAnimationActiveForTesting)
     }
 
+    @Test("Quick bar user messages share the readable column without trailing drift")
+    func quickBarUserMessagesShareReadableColumnWithoutTrailingDrift() {
+        let renderer = MessageContentRenderer(
+            renderCache: RenderCache(capacity: 10),
+            mathCache: MathRenderCache(capacity: 10)
+        )
+        let runtime = MessageRenderRuntime(
+            renderer: renderer,
+            scheduler: ConversationRenderScheduler()
+        )
+        let cell = MessageTableCellView(identifier: NSUserInterfaceItemIdentifier("quickbar-user-alignment"))
+        let hosted = hostCell(cell)
+        defer {
+            hosted.window.contentView = nil
+            hosted.window.orderOut(nil)
+            withExtendedLifetime(hosted.window) {}
+        }
+
+        cell.configure(
+            row: makeRow(content: "你好", isStreaming: false, role: .user),
+            runtime: runtime,
+            availableWidth: min(
+                hosted.container.bounds.width,
+                HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+            ),
+            surfaceStyle: .quickBar,
+            container: nil
+        )
+        hosted.host.layoutSubtreeIfNeeded()
+
+        #expect(cell.bodyTextAlignmentForTesting == .left)
+        #expect(cell.metaTextAlignmentForTesting == .left)
+        #expect(abs(cell.bodyFrameForTesting.minX - (cell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
+        #expect(abs(cell.bodyFrameForTesting.maxX - (cell.contentContainerFrameForTesting.maxX - HushSpacing.xl)) <= 0.5)
+        #expect(cell.bodyFrameForTesting.width > cell.contentContainerFrameForTesting.width - HushSpacing.xl * 3)
+        #expect(cell.bodyBorderWidthForTesting == 0)
+        #expect(cell.bodyBackgroundAlphaForTesting == 0)
+        #expect(!cell.waitingBreathingAnimationActiveForTesting)
+    }
+
     @Test("Assistant waiting state renders as light leading text with breathing animation")
     func assistantWaitingStateRendersAsLeadingTextWithBreathingAnimation() {
         let renderer = MessageContentRenderer(

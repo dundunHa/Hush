@@ -2706,7 +2706,7 @@ extension AppContainer {
         ) {
             quickBarGeneration &+= 1
 
-            let resolvedConversationId: String? = if messages.isEmpty && !isSending {
+            let resolvedConversationId: String? = if messages.isEmpty, !isSending {
                 nil
             } else {
                 conversationId

@@ -7,6 +7,7 @@ final class ConversationViewController: NSViewController {
     private var surfaceStyle: ConversationSurfaceStyle
     private var bottomReservedHeight: CGFloat
     private let messageTableView = MessageTableView()
+    private var hasAppliedConversationState = false
     private var lastLayoutReadyGeneration: UInt64?
     var needsReload: Bool = false
     #if DEBUG
@@ -50,7 +51,9 @@ final class ConversationViewController: NSViewController {
 
         messageTableView.setBottomReservedHeight(bottomReservedHeight)
         view = rootView
-        renderConversationState()
+        if !hasAppliedConversationState {
+            renderConversationState()
+        }
     }
 
     func update(
@@ -94,6 +97,7 @@ final class ConversationViewController: NSViewController {
         forceFullReload: Bool = false
     ) {
         needsReload = false
+        hasAppliedConversationState = true
         #if DEBUG
             applyCountForTesting += 1
         #endif

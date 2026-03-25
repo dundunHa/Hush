@@ -409,6 +409,31 @@ struct QuickBarLiquidGlassSurface<S: InsettableShape>: View {
     }
 }
 
+struct QuickBarMinimalSurface<S: InsettableShape>: View {
+    let shape: S
+    let fill: Color
+    let stroke: Color
+    let shadowColor: Color
+    let shadowOpacity: Double
+    let shadowRadius: CGFloat
+    let shadowYOffset: CGFloat
+
+    var body: some View {
+        shape
+            .fill(fill)
+            .overlay(
+                shape
+                    .strokeBorder(stroke, lineWidth: 0.5)
+            )
+            .shadow(
+                color: shadowColor.opacity(shadowOpacity),
+                radius: shadowRadius,
+                x: 0,
+                y: shadowYOffset
+            )
+    }
+}
+
 struct QuickBarGlassSurface<S: InsettableShape>: View {
     let shape: S
     let registration: QuickBarNativeGlassRegistration
