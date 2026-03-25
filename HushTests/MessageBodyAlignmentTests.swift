@@ -69,6 +69,7 @@ struct MessageBodyAlignmentTests {
         ])
 
         containerView.addSubview(cell)
+        cell.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             cell.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
             cell.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
@@ -160,8 +161,8 @@ struct MessageBodyAlignmentTests {
         #expect(!cell.waitingBreathingAnimationActiveForTesting)
     }
 
-    @Test("Quick bar user messages share the readable column without trailing drift")
-    func quickBarUserMessagesShareReadableColumnWithoutTrailingDrift() {
+    @Test("Quick bar user messages use the trailing edge of a centered readable column")
+    func quickBarUserMessagesUseTrailingEdgeOfCenteredReadableColumn() {
         let renderer = MessageContentRenderer(
             renderCache: RenderCache(capacity: 10),
             mathCache: MathRenderCache(capacity: 10)
@@ -181,15 +182,53 @@ struct MessageBodyAlignmentTests {
         cell.configure(
             row: makeRow(content: "你好", isStreaming: false, role: .user),
             runtime: runtime,
-            availableWidth: min(
-                hosted.container.bounds.width,
-                HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
-            ),
+            availableWidth: hosted.container.bounds.width,
             surfaceStyle: .quickBar,
             container: nil
         )
         hosted.host.layoutSubtreeIfNeeded()
 
+        #expect(abs(cell.contentContainerFrameForTesting.width - 640) <= 0.5)
+        #expect(abs(cell.contentContainerFrameForTesting.midX - hosted.container.bounds.midX) <= 0.5)
+        #expect(cell.bodyTextAlignmentForTesting == .right)
+        #expect(cell.metaTextAlignmentForTesting == .right)
+        #expect(abs(cell.bodyFrameForTesting.minX - (cell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
+        #expect(abs(cell.bodyFrameForTesting.maxX - (cell.contentContainerFrameForTesting.maxX - HushSpacing.xl)) <= 0.5)
+        #expect(cell.bodyFrameForTesting.width > cell.contentContainerFrameForTesting.width - HushSpacing.xl * 3)
+        #expect(cell.bodyBorderWidthForTesting == 0)
+        #expect(cell.bodyBackgroundAlphaForTesting == 0)
+        #expect(!cell.waitingBreathingAnimationActiveForTesting)
+    }
+
+    @Test("Quick bar assistant messages stay left aligned inside the same centered readable column")
+    func quickBarAssistantMessagesStayLeftAlignedInsideCenteredReadableColumn() {
+        let renderer = MessageContentRenderer(
+            renderCache: RenderCache(capacity: 10),
+            mathCache: MathRenderCache(capacity: 10)
+        )
+        let runtime = MessageRenderRuntime(
+            renderer: renderer,
+            scheduler: ConversationRenderScheduler()
+        )
+        let cell = MessageTableCellView(identifier: NSUserInterfaceItemIdentifier("quickbar-assistant-alignment"))
+        let hosted = hostCell(cell)
+        defer {
+            hosted.window.contentView = nil
+            hosted.window.orderOut(nil)
+            withExtendedLifetime(hosted.window) {}
+        }
+
+        cell.configure(
+            row: makeRow(content: "Hello back", isStreaming: false, role: .assistant),
+            runtime: runtime,
+            availableWidth: hosted.container.bounds.width,
+            surfaceStyle: .quickBar,
+            container: nil
+        )
+        hosted.host.layoutSubtreeIfNeeded()
+
+        #expect(abs(cell.contentContainerFrameForTesting.width - 640) <= 0.5)
+        #expect(abs(cell.contentContainerFrameForTesting.midX - hosted.container.bounds.midX) <= 0.5)
         #expect(cell.bodyTextAlignmentForTesting == .left)
         #expect(cell.metaTextAlignmentForTesting == .left)
         #expect(abs(cell.bodyFrameForTesting.minX - (cell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
@@ -198,6 +237,52 @@ struct MessageBodyAlignmentTests {
         #expect(cell.bodyBorderWidthForTesting == 0)
         #expect(cell.bodyBackgroundAlphaForTesting == 0)
         #expect(!cell.waitingBreathingAnimationActiveForTesting)
+    }
+
+    @Test("Reused user cells reapply quick bar full-width geometry after main conversation layout")
+    func reusedUserCellsReapplyQuickBarFullWidthGeometryAfterMainConversationLayout() {
+        let renderer = MessageContentRenderer(
+            renderCache: RenderCache(capacity: 10),
+            mathCache: MathRenderCache(capacity: 10)
+        )
+        let runtime = MessageRenderRuntime(
+            renderer: renderer,
+            scheduler: ConversationRenderScheduler()
+        )
+        let row = makeRow(content: "say hi", isStreaming: false, role: .user)
+        let cell = MessageTableCellView(identifier: NSUserInterfaceItemIdentifier("reused-quickbar-user-alignment"))
+        let hosted = hostCell(cell)
+        defer {
+            hosted.window.contentView = nil
+            hosted.window.orderOut(nil)
+            withExtendedLifetime(hosted.window) {}
+        }
+
+        cell.configure(
+            row: row,
+            runtime: runtime,
+            availableWidth: 640,
+            surfaceStyle: .main,
+            container: nil
+        )
+        hosted.host.layoutSubtreeIfNeeded()
+        #expect(cell.bodyFrameForTesting.width < cell.contentContainerFrameForTesting.width - HushSpacing.xl * 3)
+
+        cell.configure(
+            row: row,
+            runtime: runtime,
+            availableWidth: 640,
+            surfaceStyle: .quickBar,
+            container: nil
+        )
+        hosted.host.layoutSubtreeIfNeeded()
+
+        #expect(abs(cell.contentContainerFrameForTesting.width - 640) <= 0.5)
+        #expect(cell.bodyTextAlignmentForTesting == .right)
+        #expect(cell.metaTextAlignmentForTesting == .right)
+        #expect(cell.bodyFrameForTesting.width > cell.contentContainerFrameForTesting.width - HushSpacing.xl * 3)
+        #expect(abs(cell.bodyFrameForTesting.minX - (cell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
+        #expect(abs(cell.bodyFrameForTesting.maxX - (cell.contentContainerFrameForTesting.maxX - HushSpacing.xl)) <= 0.5)
     }
 
     @Test("Assistant waiting state renders as light leading text with breathing animation")

@@ -239,6 +239,17 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         let createdAt: Date
     }
 
+    private static let quickBarContentMaxWidth: CGFloat = 640
+
+    private static func maxContentWidth(for surfaceStyle: ConversationSurfaceStyle) -> CGFloat {
+        switch surfaceStyle {
+        case .main:
+            HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+        case .quickBar:
+            quickBarContentMaxWidth
+        }
+    }
+
     private var lastScrollDirection: ScrollDirection = .none
     private var lastOlderLoadTriggerAt: Date = .distantPast
     private var lastKnownFirstMessageID: UUID?
@@ -414,6 +425,11 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         super.layout()
         guard tableView.numberOfColumns > 0 else { return }
         let targetWidth = max(1, bounds.width.rounded(.down))
+        var tableFrame = tableView.frame
+        if abs(tableFrame.width - targetWidth) > 0.5 {
+            tableFrame.size.width = targetWidth
+            tableView.frame = tableFrame
+        }
         let currentWidth = tableView.tableColumns[0].width
         if abs(currentWidth - targetWidth) > 0.5 {
             tableView.tableColumns[0].width = targetWidth
@@ -651,8 +667,22 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
                 rowIndex: row,
                 messageTableView: self
             )
+            applyColumnWidthFrame(to: cell, in: tableView)
         }
         return cell
+    }
+
+    private func applyColumnWidthFrame(to cell: MessageTableCellView, in tableView: NSTableView) {
+        let targetWidth = max(1, tableView.bounds.width.rounded(.down))
+        var frame = cell.frame
+        frame.origin.x = 0
+        frame.size.width = targetWidth
+        if frame.size.height <= 0 {
+            frame.size.height = max(1, cell.fittingSize.height.rounded(.up))
+        }
+        if cell.frame != frame {
+            cell.frame = frame
+        }
     }
 
     private func resolveUpdateMode(
@@ -1321,8 +1351,8 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     private func effectiveAvailableWidth() -> CGFloat {
         let raw = bounds.width > 1
             ? bounds.width
-            : (HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2)
-        return min(raw, HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2)
+            : Self.maxContentWidth(for: surfaceStyle)
+        return min(raw, Self.maxContentWidth(for: surfaceStyle))
     }
 
     #if DEBUG
@@ -1934,6 +1964,7 @@ final class MessageTableCellView: NSTableCellView {
         let isStreaming: Bool
         let contentWidth: Int
         let styleKey: Int
+        let surfaceStyle: ConversationSurfaceStyle
     }
 
     private enum BodyPresentationMode: Equatable {
@@ -1965,6 +1996,8 @@ final class MessageTableCellView: NSTableCellView {
     private var isMouseHovering = false
     private var metaLeadingConstraint: NSLayoutConstraint!
     private var metaTrailingConstraint: NSLayoutConstraint!
+    private var contentContainerPreferredWidthConstraint: NSLayoutConstraint!
+    private var contentContainerMaxWidthConstraint: NSLayoutConstraint!
     private var bodyLeadingFullWidthConstraint: NSLayoutConstraint!
     private var bodyTrailingFullWidthConstraint: NSLayoutConstraint!
     private var bodyLeadingBubbleConstraint: NSLayoutConstraint!
@@ -2006,6 +2039,8 @@ final class MessageTableCellView: NSTableCellView {
     private var surfaceStyle: ConversationSurfaceStyle = .main {
         didSet {
             applyPresentationPalette()
+            applyContentContainerWidthConstraints()
+            updateBodyPresentationGeometry()
         }
     }
 
@@ -2040,6 +2075,25 @@ final class MessageTableCellView: NSTableCellView {
         copyButton.themePalette = palette
     }
 
+    private static func maxContentWidth(for surfaceStyle: ConversationSurfaceStyle) -> CGFloat {
+        switch surfaceStyle {
+        case .main:
+            HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+        case .quickBar:
+            quickBarContentMaxWidth
+        }
+    }
+
+    private func applyContentContainerWidthConstraints() {
+        let maxContentWidth = Self.maxContentWidth(for: surfaceStyle)
+        contentContainerPreferredWidthConstraint?.constant = maxContentWidth
+        contentContainerMaxWidthConstraint?.constant = maxContentWidth
+    }
+
+    private func clampedAvailableWidth(_ availableWidth: CGFloat) -> CGFloat {
+        min(availableWidth, Self.maxContentWidth(for: surfaceStyle))
+    }
+
     private func plainTextAttributes(
         alignment: NSTextAlignment = .left,
         foregroundColor: NSColor? = nil
@@ -2057,6 +2111,7 @@ final class MessageTableCellView: NSTableCellView {
 
     private static let compactTextMaxWidthRatio: CGFloat = 0.76
     private static let compactTextMinWidth: CGFloat = 44
+    private static let quickBarContentMaxWidth: CGFloat = 640
     private static let assistantWaitingBreathingAnimationKey = "assistantWaitingBreathing"
     private static let assistantWaitingBreathingDuration: CFTimeInterval = 1.18
     private static let assistantWaitingRestingOpacity: Float = 0.88
@@ -2074,18 +2129,20 @@ final class MessageTableCellView: NSTableCellView {
     init(identifier: NSUserInterfaceItemIdentifier) {
         super.init(frame: .zero)
         self.identifier = identifier
-        translatesAutoresizingMaskIntoConstraints = false
 
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
+        contentContainer.setContentHuggingPriority(.required, for: .horizontal)
+        contentContainer.setContentCompressionResistancePriority(.required, for: .horizontal)
         addSubview(contentContainer)
 
-        let maxContentWidth = HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+        let maxContentWidth = Self.maxContentWidth(for: surfaceStyle)
         let fillLeading = contentContainer.leadingAnchor.constraint(equalTo: leadingAnchor)
         fillLeading.priority = .defaultLow
         let fillTrailing = contentContainer.trailingAnchor.constraint(equalTo: trailingAnchor)
         fillTrailing.priority = .defaultLow
-        let preferredWidth = contentContainer.widthAnchor.constraint(equalToConstant: maxContentWidth)
-        preferredWidth.priority = .defaultHigh
+        contentContainerPreferredWidthConstraint = contentContainer.widthAnchor.constraint(equalToConstant: maxContentWidth)
+        contentContainerPreferredWidthConstraint.priority = NSLayoutConstraint.Priority(999)
+        contentContainerMaxWidthConstraint = contentContainer.widthAnchor.constraint(lessThanOrEqualToConstant: maxContentWidth)
 
         NSLayoutConstraint.activate([
             contentContainer.topAnchor.constraint(equalTo: topAnchor),
@@ -2093,10 +2150,10 @@ final class MessageTableCellView: NSTableCellView {
             contentContainer.centerXAnchor.constraint(equalTo: centerXAnchor),
             contentContainer.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor),
             contentContainer.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
-            contentContainer.widthAnchor.constraint(lessThanOrEqualToConstant: maxContentWidth),
+            contentContainerMaxWidthConstraint,
             fillLeading,
             fillTrailing,
-            preferredWidth
+            contentContainerPreferredWidthConstraint
         ])
 
         metaLabel.font = HushFontResolver.contentFont(
@@ -2399,7 +2456,7 @@ final class MessageTableCellView: NSTableCellView {
     }
 
     private func plainTextAlignment(for row: MessageTableView.RowModel) -> NSTextAlignment {
-        if row.message.role == .user, surfaceStyle != .quickBar {
+        if row.message.role == .user {
             return .right
         }
         return .left
@@ -2713,7 +2770,7 @@ final class MessageTableCellView: NSTableCellView {
     private func applyBodyPresentation(for row: MessageTableView.RowModel, maxBodyWidth: CGFloat) {
         let mode = bodyPresentationMode(for: row)
         currentBodyPresentationMode = mode
-        if row.message.role == .user, surfaceStyle != .quickBar {
+        if row.message.role == .user {
             metaLabel.alignment = .right
         } else {
             metaLabel.alignment = .left
@@ -2915,7 +2972,7 @@ final class MessageTableCellView: NSTableCellView {
         self.surfaceStyle = surfaceStyle
         fontSettings = container?.settings.fontSettings ?? .default
 
-        let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
+        let contentWidth = max(1, clampedAvailableWidth(availableWidth) - HushSpacing.xl * 2)
         currentContentWidth = contentWidth
         let fingerprint = RenderInputFingerprint(
             messageID: row.message.id,
@@ -2925,9 +2982,11 @@ final class MessageTableCellView: NSTableCellView {
             generation: row.renderHint.switchGeneration,
             isStreaming: row.isStreaming,
             contentWidth: Int(contentWidth.rounded(.down)),
-            styleKey: renderStyle.cacheKey
+            styleKey: renderStyle.cacheKey,
+            surfaceStyle: surfaceStyle
         )
         if fingerprint == lastFingerprint {
+            updateBodyPresentationGeometry()
             return
         }
         lastFingerprint = fingerprint
@@ -3088,7 +3147,7 @@ final class MessageTableCellView: NSTableCellView {
             return
         }
 
-        let maxAvailableWidth = HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+        let maxAvailableWidth = Self.maxContentWidth(for: surfaceStyle)
         let clampedAvailableWidth = min(bounds.width, maxAvailableWidth)
         let nextContentWidth = max(1, (clampedAvailableWidth - HushSpacing.xl * 2).rounded(.down))
         guard abs(nextContentWidth - currentContentWidth) > 0.5 else { return }
@@ -3494,6 +3553,7 @@ private final class MessageAttachmentPreviewView: NSView {
 
         private func testingCellForRow(_ row: Int) -> MessageTableCellView? {
             if let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: true) as? MessageTableCellView {
+                applyColumnWidthFrame(to: cell, in: tableView)
                 return cell
             }
             guard let runtime else { return nil }
@@ -3511,6 +3571,7 @@ private final class MessageAttachmentPreviewView: NSView {
                 rowIndex: row,
                 messageTableView: self
             )
+            applyColumnWidthFrame(to: cell, in: tableView)
             return cell
         }
         // swiftlint:enable identifier_name
