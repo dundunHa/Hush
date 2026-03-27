@@ -36,7 +36,7 @@ protocol MessageTableRowView: AnyObject {
     var bodyIntrinsicHeight: CGFloat { get }
 }
 
-typealias AnyMessageTableRowView = NSView & MessageTableRowView
+typealias AnyMessageTableRowView = MessageTableRowView & NSView
 
 #if DEBUG
     // swiftlint:disable identifier_name
@@ -74,7 +74,7 @@ typealias AnyMessageTableRowView = NSView & MessageTableRowView
         ) -> Bool
     }
 
-    typealias AnyMessageTableTestingRowView = NSView & MessageTableTestingRowView
+    typealias AnyMessageTableTestingRowView = MessageTableTestingRowView & NSView
     // swiftlint:enable identifier_name
 #endif
 
@@ -2872,7 +2872,9 @@ final class MessageTableCellView: NSTableCellView, MessageTableRowView {
         return wasShowingStreamingRichOutput
     }
 
-    private func rowShowsTranscriptActions(for _: MessageTableView.RowModel) -> Bool { true }
+    private func rowShowsTranscriptActions(for _: MessageTableView.RowModel) -> Bool {
+        true
+    }
 
     private func bodyPresentationMode(for row: MessageTableView.RowModel) -> MessageBodyPresentationMode {
         if row.message.role == .user {
@@ -2959,11 +2961,11 @@ final class MessageTableCellView: NSTableCellView, MessageTableRowView {
         bodyTextView.prepareMeasurementWidth(bodyWidthConstraint.constant)
     }
 
-    private func fullWidthTextInsets(for row: MessageTableView.RowModel) -> NSSize {
+    private func fullWidthTextInsets(for _: MessageTableView.RowModel) -> NSSize {
         return .zero
     }
 
-    private func applyFullWidthDecoration(for row: MessageTableView.RowModel) {
+    private func applyFullWidthDecoration(for _: MessageTableView.RowModel) {
         bodyTextView.layer?.cornerRadius = 0
         bodyTextView.layer?.borderWidth = 0
         bodyTextView.layer?.masksToBounds = false
@@ -2972,22 +2974,22 @@ final class MessageTableCellView: NSTableCellView, MessageTableRowView {
     }
 
     private func compactTextInsets(
-        for row: MessageTableView.RowModel,
-        alignTrailing: Bool
+        for _: MessageTableView.RowModel,
+        alignTrailing _: Bool
     ) -> NSSize {
         return .zero
     }
 
     private func compactTextWidthRatio(
-        for row: MessageTableView.RowModel,
-        alignTrailing: Bool
+        for _: MessageTableView.RowModel,
+        alignTrailing _: Bool
     ) -> CGFloat {
         return Self.compactTextMaxWidthRatio
     }
 
     private func applyCompactTextDecoration(
-        for row: MessageTableView.RowModel,
-        alignTrailing: Bool
+        for _: MessageTableView.RowModel,
+        alignTrailing _: Bool
     ) {
         bodyTextView.layer?.cornerRadius = 0
         bodyTextView.layer?.borderWidth = 0
@@ -2997,7 +2999,7 @@ final class MessageTableCellView: NSTableCellView, MessageTableRowView {
     }
 
     private func preferredCompactTextWidth(
-        for row: MessageTableView.RowModel,
+        for _: MessageTableView.RowModel,
         maxBodyWidth: CGFloat,
         widthRatio: CGFloat,
         horizontalInset: CGFloat
@@ -3591,6 +3593,7 @@ final class QuickBarMessageCellView: NSTableCellView, MessageTableRowView {
     private var theme: AppTheme = .graphiteGlass {
         didSet { applyPresentationPalette() }
     }
+
     private var fontSettings: AppFontSettings = .default {
         didSet { applyPresentationPalette() }
     }

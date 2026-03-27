@@ -59,8 +59,8 @@ struct QuickBarPanelView: View {
 
     private var expandedHeader: some View {
         handle
-        .padding(.horizontal, Layout.headerHorizontalInset)
-        .frame(height: Layout.headerHeight)
+            .padding(.horizontal, Layout.headerHorizontalInset)
+            .frame(height: Layout.headerHeight)
     }
 
     private var transcriptRegion: some View {
