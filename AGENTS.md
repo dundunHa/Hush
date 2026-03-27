@@ -1,12 +1,12 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-02-23 (Asia/Shanghai)
-**Commit:** 1c9ef15
+**Generated:** 2026-03-28 (Asia/Shanghai)
+**Commit:** a4f99a2
 **Branch:** dev
 
 # AGENTS.md — Hush
 
-macOS-native LLM chat client built with SwiftUI + Xcode. Dark-themed, single-window app with sidebar, multi-conversation concurrent streaming, and multi-provider support.
+macOS-native LLM chat client built with SwiftUI + Xcode. Dark-themed, single-window app with sidebar, multi-conversation concurrent streaming, multi-provider support, and system-wide Quick Bar.
 
 ## Hierarchy
 
@@ -14,7 +14,7 @@ macOS-native LLM chat client built with SwiftUI + Xcode. Dark-themed, single-win
 - `Hush/HushCore/AGENTS.md` (pure domain + scheduler invariants)
 - `Hush/HushProviders/AGENTS.md` (provider protocol + streaming terminal contract)
 - `Hush/HushRendering/AGENTS.md` (two-phase rendering + cache/scheduler constraints)
-- `Hush/HushStorage/AGENTS.md` (GRDB repositories + keychain/migrations)
+- `Hush/HushStorage/AGENTS.md` (GRDB repositories + migrations + credential persistence)
 - `Hush/Views/AGENTS.md` (UI conventions + view-layer constraints)
 - `Hush/Views/Chat/AppKit/AGENTS.md` (hot-scene pool + table view lifecycle)
 - `HushTests/AGENTS.md` (Swift Testing conventions + test isolation)
@@ -29,6 +29,8 @@ make fmt         # Format with SwiftFormat, then lint with SwiftLint
 make run         # Launch the built .app
 make dev         # Watch mode: rebuild + relaunch on file changes
 make clean       # Remove .build/ and build/
+make version     # Show MARKETING_VERSION + CURRENT_PROJECT_VERSION
+make release     # Ad-hoc signed .app + DMG
 ```
 
 ### Running a Single Test
@@ -52,7 +54,7 @@ xcodebuild test \
 ### Dependencies
 
 - **GRDB** 7.0+ — SQLite via DatabasePool (WAL mode).
-- **Markdown** 0.4+ — Swift Markdown parsing (AST → NSAttributedString).
+- **Markdown** 0.4+ — Swift Markdown parsing (AST -> NSAttributedString).
 - **SwiftMath** 1.0+ — LaTeX math rendering.
 - **Homebrew tools**: swiftformat, swiftlint, fswatch (installed via `make setup` / `Brewfile`).
 
@@ -60,18 +62,22 @@ xcodebuild test \
 
 ```
 Hush/
-  HushApp.swift              # @main entry, WindowGroup
-  AppContainer.swift         # Root ObservableObject (DI container, @MainActor)
+  HushApp.swift              # @main entry, WindowGroup + Quick Bar bootstrap
+  HushAppDelegate.swift      # NSApplicationDelegate, status bar + Quick Bar panel lifecycle
+  AppContainer.swift         # Root ObservableObject (DI container, @MainActor, 2833 lines)
   RequestCoordinator.swift   # Multi-conversation concurrent request lifecycle & scheduling
-  HushCore/                  # Domain models: ChatMessage, RequestLifecycle, RequestScheduler, RuntimeConstants, etc.
+  QuickBarPanelController.swift  # Floating NSPanel for system-wide Quick Bar
+  QuickBarHotkeyController.swift # Global hotkey registration (Carbon HIToolbox)
+  StatusBarController.swift  # Menu bar status item
+  HushCore/                  # Domain models: ChatMessage, RequestLifecycle, RequestScheduler, RuntimeConstants, QuickBarSessionState, etc.
   HushNetworking/            # HTTPClient protocol + URLSession impl, SSEParser
-  HushProviders/             # LLMProvider protocol + OpenAI, Mock impls, ProviderRegistry
-  HushRendering/             # Two-phase markdown render pipeline, math/table rendering
+  HushProviders/             # LLMProvider protocol + OpenAI (chat + image gen), Mock impls, ProviderRegistry
+  HushRendering/             # Two-phase markdown render pipeline, math/table rendering, row height cache
   HushSettings/              # JSONSettingsStore (file-based JSON persistence)
-  HushStorage/               # GRDB repositories, DatabaseManager, provider config persistence, ChatPersistenceCoordinator
-  HushTheme/                 # HushColors, HushSpacing, HushTypography, CardModifier
-  Views/                     # SwiftUI views (Chat/, Sidebar/, TopBar/, Settings/)
-HushTests/                   # Swift Testing framework (@Suite, @Test, #expect)
+  HushStorage/               # GRDB repositories, DatabaseManager, credential persistence, FileMessageAssetStore
+  HushTheme/                 # HushColors, HushSpacing, HushTypography, ConversationSurfaceStyle, HushFontResolver
+  Views/                     # SwiftUI views (Chat/, Sidebar/, TopBar/, Settings/, QuickBar/)
+HushTests/                   # Swift Testing framework (@Suite, @Test, #expect) — 77 test files
 openspec/                    # Spec-driven design docs (proposals, specs, tasks)
 ```
 
@@ -82,8 +88,10 @@ openspec/                    # Spec-driven design docs (proposals, specs, tasks)
 - **RequestScheduler**: Pure-function scheduling logic. `SchedulerState` holds running sessions, active/background queues, round-robin cursor. Static methods: `selectNext`, `enqueue`, `rebalanceForActiveSwitch`, `canAcceptSubmission`.
 - **Message Buckets**: `AppContainer.messagesByConversationId` stores per-conversation message arrays; `messages` is the active conversation projection. All request deltas route by owning `conversationId`, never by `activeConversationId`.
 - **Protocol-driven storage**: `ConversationRepository`, `MessageRepository`, `SyncOutboxRepository` protocols with GRDB implementations (`GRDB*Repository`).
-- **Credential flow**: Provider API keys are persisted with provider configuration rows in SQLite. Generic JSON settings encoding omits `apiKey`; `CredentialResolver` now validates/normalizes the stored value at request time.
-- **Two-phase init**: AppContainer creates itself, then calls `configureCoordinator()` to resolve the circular `RequestCoordinator ↔ AppContainer` dependency.
+- **Credential flow**: Provider API keys persist in `providerConfigurations` SQLite table. Generic JSON settings encoding omits `apiKey`; `CredentialResolver` validates/normalizes at request time.
+- **Two-phase init**: AppContainer creates itself, then calls `configureCoordinator()` to resolve the circular `RequestCoordinator <-> AppContainer` dependency.
+- **Quick Bar**: System-wide floating panel (`QuickBarPanelController`) with global hotkey (`QuickBarHotkeyController`). Manages its own `QuickBarSessionState` for ephemeral conversations. Status bar via `StatusBarController`.
+- **Image generation**: `OpenAIProvider` supports DALL-E image generation via `sendImageGeneration()`. Generated images stored via `FileMessageAssetStore`.
 
 ## Code Style
 
@@ -140,6 +148,7 @@ Use `// MARK: -` sections consistently to organize files:
 - SwiftUI views are plain `struct View`. Use `@EnvironmentObject` for `AppContainer`.
 - Theme constants from `HushColors`, `HushSpacing`, `HushTypography` — never hardcode colors/spacing.
 - Dark mode only (single `AppTheme.dark` case). Custom color palette, not system colors.
+- `ConversationSurfaceStyle` controls per-surface rendering (main window vs Quick Bar).
 
 ### Testing
 
@@ -150,6 +159,11 @@ Use `// MARK: -` sections consistently to organize files:
 - Database tests: use `DatabaseManager.inMemory()` for isolated, disposable databases.
 - DI for tests: `AppContainer.forTesting(...)` with injectable dependencies.
 - Use `StubURLProtocol` pattern for HTTP tests. Mark serialized suites with `.serialized`.
+
+## Versioning
+
+- Version truth source: `Config/Versions.xcconfig` — `MARKETING_VERSION` + `CURRENT_PROJECT_VERSION`.
+- CI: `.github/workflows/release-dmg.yml` — builds DMG on push to master/tag, runs tests, uploads artifacts.
 
 ## Spec-Driven Development
 

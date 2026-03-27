@@ -5,15 +5,21 @@ Pure domain models and deterministic scheduling logic. No I/O, no side effects, 
 ## Structure
 
 ```
-ChatMessage.swift          # Core message model (id, role, content, conversationId, timestamps)
-ChatRole.swift             # enum: system, user, assistant
-Conversation.swift         # Conversation model (id, title, timestamps, provider/model config)
+AgentPreset.swift          # Saved agent configurations (system prompt, model, temperature)
+AppSettings.swift          # App-level preference model (QuickBarConfiguration nested)
+ChatMessage.swift          # Core message model (id, role, content, conversationId, timestamps, imageAssetIds)
+ChatWindowing.swift        # Windowed message loading for large conversations
+ConversationSidebarThread.swift # Sidebar display model (title, preview, timestamp, activity state)
+ModelDescriptor.swift      # Provider model metadata (id, name, capabilities)
+ModelParameters.swift      # Temperature, topP, maxTokens, reasoning effort
+PerfTrace.swift            # Lightweight performance tracing helpers
+PromptTemplate.swift       # Reusable prompt templates
+ProviderConfiguration.swift# Provider endpoint + model + credential ref
+QuickBarSessionState.swift # Quick Bar ephemeral conversation state (messages, draft, expansion)
 RequestLifecycle.swift     # RequestID, StreamEvent, RequestError, ActiveRequestState, QueueItemSnapshot
 RequestScheduler.swift     # Pure-function enum: selectNext, enqueue, rebalanceForActiveSwitch, canAcceptSubmission
 RuntimeConstants.swift     # enum namespace with static lets for all magic numbers
-ProviderConfiguration.swift# Provider endpoint + model + credential ref
-AgentPreset.swift          # Saved agent configurations
-PromptTemplate.swift       # Reusable prompt templates
+TailFollowStateMachine.swift # Auto-scroll state machine (events: newContent, userScroll, conversationSwitched)
 ```
 
 ## Where to Look
@@ -21,10 +27,13 @@ PromptTemplate.swift       # Reusable prompt templates
 | Task | File |
 |------|------|
 | Change scheduling behavior | `RequestScheduler.swift` — static methods on `SchedulerState` |
-| Add new error case | `RequestLifecycle.swift` → `RequestError` enum |
+| Add new error case | `RequestLifecycle.swift` -> `RequestError` enum |
 | Tune timeouts/limits | `RuntimeConstants.swift` — all magic numbers centralized here |
 | Add message field | `ChatMessage.swift` — also update `MessageRecord` in HushStorage |
-| Add conversation field | `Conversation.swift` — also update `ConversationRecord` in HushStorage |
+| Add conversation field | `Conversation` in `ConversationSidebarThread.swift` — also update `ConversationRecord` in HushStorage |
+| Quick Bar state | `QuickBarSessionState.swift` — ephemeral session model |
+| Tail-follow behavior | `TailFollowStateMachine.swift` — event-driven state transitions |
+| Quick Bar shortcut config | `AppSettings.swift` -> `QuickBarConfiguration` |
 
 ## Conventions
 
@@ -38,6 +47,7 @@ PromptTemplate.swift       # Reusable prompt templates
   - `preflightTimeoutSeconds = 3.0`, `generationTimeoutSeconds = 60.0`
   - `settingsDebounceInterval = 1s`
 - **RequestError taxonomy**: Rich typed errors — `networkFailure`, `providerError`, `timeout`, `cancelled`, `invalidConfiguration`, etc. All conform to `Error + Sendable + Equatable + LocalizedError`.
+- **TailFollowStateMachine**: Event-driven with `.following`, `.detached`, `.locked` states. Consumed by `MessageTableView`.
 
 ## Anti-Patterns
 
