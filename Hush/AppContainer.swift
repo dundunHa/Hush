@@ -702,6 +702,21 @@ final class AppContainer: ObservableObject {
         }
     }
 
+    func selectQuickBarProvider(id: String) {
+        prepareQuickBarSessionIfNeeded()
+        guard let config = settings.providerConfigurations.first(where: {
+            $0.id == id && $0.isEnabled
+        }) else {
+            return
+        }
+
+        let defaultModelID = config.defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        mutateQuickBarState { state in
+            state.providerID = id
+            state.selectedModelID = defaultModelID
+        }
+    }
+
     func resetQuickBarConversation() {
         guard !isQuickBarSending else { return }
         prepareQuickBarSessionIfNeeded(forceReset: true)
@@ -2119,9 +2134,8 @@ final class AppContainer: ObservableObject {
     #if DEBUG
         func runAutomationScenarioIfNeeded() {
             guard !Self.didStartAutomationScenario else { return }
-            guard let raw = ProcessInfo.processInfo.environment["HUSH_AUTOMATION_SCENARIO"]?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-                !raw.isEmpty
+            guard let raw = automationScenarioValue(),
+                  !raw.isEmpty
             else {
                 return
             }
@@ -2135,11 +2149,41 @@ final class AppContainer: ObservableObject {
 
         private static var didStartAutomationScenario: Bool = false
 
+        private func automationScenarioValue() -> String? {
+            if let raw = ProcessInfo.processInfo.environment["HUSH_AUTOMATION_SCENARIO"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !raw.isEmpty
+            {
+                return raw
+            }
+
+            let arguments = ProcessInfo.processInfo.arguments
+
+            if let index = arguments.firstIndex(of: "--automation-scenario"),
+               arguments.indices.contains(index + 1)
+            {
+                let raw = arguments[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+                return raw.isEmpty ? nil : raw
+            }
+
+            if let argument = arguments.first(where: { $0.hasPrefix("--automation-scenario=") }) {
+                let raw = String(argument.dropFirst("--automation-scenario=".count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return raw.isEmpty ? nil : raw
+            }
+
+            return nil
+        }
+
         private func runAutomationScenario(_ rawScenario: String) async {
             let scenario = rawScenario.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             switch scenario {
             case "hot-scene-memory":
                 await runHotSceneMemoryAutomation()
+            case "quickbar-layout":
+                runQuickBarLayoutAutomation(showsComplexAssistantReply: false)
+            case "quickbar-layout-complex":
+                runQuickBarLayoutAutomation(showsComplexAssistantReply: true)
             default:
                 return
             }
@@ -2210,6 +2254,47 @@ final class AppContainer: ObservableObject {
             if automationBool(for: "HUSH_AUTOMATION_EXIT", default: false) {
                 NSApp.terminate(nil)
             }
+        }
+
+        private func runQuickBarLayoutAutomation(showsComplexAssistantReply: Bool) {
+            settings.providerConfigurations = [.mockDefault()]
+            settings.selectedProviderID = "mock"
+            settings.selectedModelID = "mock-text-1"
+
+            let base = Date.now
+            let messages = [
+                ChatMessage(
+                    role: .user,
+                    content: "QuickBar 里用户消息右侧留白看起来比 assistant 左侧更窄，帮我看一下。",
+                    createdAt: base.addingTimeInterval(-32)
+                ),
+                ChatMessage(
+                    role: .assistant,
+                    content: showsComplexAssistantReply
+                        ? """
+                        我先把 QuickBar 这里的复杂回复也放进同一个发布态检查里：
+
+                        - 对比 mirrored lane 和 full-width card 的切换
+                        - 确认 markdown 列表不会被误压进窄 bubble
+                        - 检查 transcript 和 composer 的整体呼吸感
+                        """
+                        : """
+                        我先对比消息容器、文本对齐和 transcript surface 的横向 inset，确认问题是出在 QuickBar 外层宽度，还是单条消息内部的布局约束。
+                        """,
+                    createdAt: base.addingTimeInterval(-12)
+                )
+            ]
+
+            configureQuickBarPreview(
+                conversationId: "quickbar-layout-automation",
+                messages: messages,
+                draft: "",
+                isExpanded: true,
+                isSending: false,
+                showQuickBar: true,
+                providerID: "mock",
+                modelID: "mock-text-1"
+            )
         }
 
         private func waitForAutomationReady(conversationId: String, timeout: Duration) async -> Bool {

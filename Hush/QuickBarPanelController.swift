@@ -10,9 +10,9 @@ final class QuickBarPanelController: NSObject, NSWindowDelegate {
     private static let logger = Logger(subsystem: "com.hush.app", category: "QuickBar")
 
     private enum Layout {
-        static let width: CGFloat = 708
-        static let compactHeight: CGFloat = 196
-        static let expandedHeight: CGFloat = 584
+        static let width: CGFloat = QuickBarPanelReleaseMetrics.width
+        static let compactHeight: CGFloat = QuickBarPanelReleaseMetrics.compactHeight
+        static let expandedHeight: CGFloat = QuickBarPanelReleaseMetrics.expandedHeight
         static let bottomInset: CGFloat = 40
         static let fadeDuration: TimeInterval = 0.18
         static let resizeDuration: TimeInterval = 0.22

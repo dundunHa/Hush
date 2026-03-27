@@ -123,7 +123,15 @@ struct SinglePathRoutingTests {
 
         #expect(controller.applyCountForTesting == 1)
         #expect(controller.messageTableViewForTesting.tableView.numberOfRows == 2)
-        #expect(controller.messageTableViewForTesting.visibleCellForTesting(row: 0)?.attributedStringForTesting.string == "Summarize this PR")
-        #expect(controller.messageTableViewForTesting.visibleCellForTesting(row: 1)?.attributedStringForTesting.string == "Quick Bar reply.")
+        #expect(
+            controller.messageTableViewForTesting.visibleCellForTesting(row: 0)?.attributedStringForTesting.string
+                == "Summarize this PR"
+        )
+        #expect(
+            controller.messageTableViewForTesting.visibleCellForTesting(row: 1)?.attributedStringForTesting.string
+                == "Quick Bar reply."
+        )
+        #expect(controller.messageTableViewForTesting.visibleCellForTesting(row: 0)?.usesQuickBarRowPresentationForTesting == true)
+        #expect(controller.messageTableViewForTesting.visibleCellForTesting(row: 1)?.usesQuickBarRowPresentationForTesting == true)
     }
 }

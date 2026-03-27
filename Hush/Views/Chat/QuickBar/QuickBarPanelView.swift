@@ -2,8 +2,6 @@ import SwiftUI
 
 struct QuickBarPanelView: View {
     @EnvironmentObject private var container: AppContainer
-    @State private var isOverflowHovered = false
-    @State private var isCloseHovered = false
 
     private var palette: HushThemePalette {
         HushColors.palette(for: container.settings.theme)
@@ -12,16 +10,15 @@ struct QuickBarPanelView: View {
     private enum Layout {
         static let shellCornerRadius: CGFloat = 40
         static let transcriptCornerRadius: CGFloat = 28
-        static let outerTopPadding: CGFloat = HushSpacing.sm + 2
-        static let outerBottomPadding: CGFloat = HushSpacing.sm + 4
+        static let outerTopPadding: CGFloat = HushSpacing.xs + 2
+        static let outerBottomPadding: CGFloat = HushSpacing.xs + 2
         static let contentHorizontalInset: CGFloat = HushSpacing.sm + 2
         static let headerHorizontalInset: CGFloat = HushSpacing.md
-        static let headerHeight: CGFloat = 32
-        static let transcriptTopPadding: CGFloat = HushSpacing.sm
-        static let transcriptBottomPadding: CGFloat = HushSpacing.sm + 2
-        static let dividerHorizontalInset: CGFloat = HushSpacing.md
-        static let composerTopPadding: CGFloat = HushSpacing.sm
-        static let toolbarButtonSize: CGFloat = 34
+        static let headerHeight: CGFloat = 22
+        static let transcriptTopPadding: CGFloat = HushSpacing.xs
+        static let transcriptBottomPadding: CGFloat = HushSpacing.xs
+        static let dividerHorizontalInset: CGFloat = HushSpacing.sm
+        static let composerTopPadding: CGFloat = 0
     }
 
     var body: some View {
@@ -61,10 +58,7 @@ struct QuickBarPanelView: View {
     }
 
     private var expandedHeader: some View {
-        ZStack(alignment: .trailing) {
-            handle
-            controls
-        }
+        handle
         .padding(.horizontal, Layout.headerHorizontalInset)
         .frame(height: Layout.headerHeight)
     }
@@ -78,10 +72,11 @@ struct QuickBarPanelView: View {
         )
         .environmentObject(container)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(HushSpacing.xs)
+        .padding(.horizontal, HushSpacing.xs)
+        .padding(.top, HushSpacing.xs)
         .padding(.horizontal, Layout.contentHorizontalInset)
         .padding(.top, Layout.transcriptTopPadding)
-        .padding(.bottom, Layout.transcriptBottomPadding)
+        .padding(.bottom, Layout.transcriptBottomPadding + 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(transcriptShell)
         .clipShape(RoundedRectangle(cornerRadius: Layout.transcriptCornerRadius, style: .continuous))
@@ -109,7 +104,7 @@ struct QuickBarPanelView: View {
 
     private var composerDivider: some View {
         Rectangle()
-            .fill(palette.quickBarSurfaceStroke.opacity(container.settings.theme.usesDarkAppearance ? 0.12 : 0.18))
+            .fill(palette.quickBarSurfaceStroke.opacity(container.settings.theme.usesDarkAppearance ? 0.05 : 0.08))
             .frame(height: 0.5)
             .padding(.horizontal, Layout.dividerHorizontalInset)
     }
@@ -120,51 +115,6 @@ struct QuickBarPanelView: View {
             .frame(width: 72, height: 3)
             .frame(maxWidth: .infinity)
             .accessibilityHidden(true)
-    }
-
-    private var controls: some View {
-        HStack(spacing: HushSpacing.sm) {
-            if container.isQuickBarSending {
-                Circle()
-                    .fill(palette.quickBarButtonFill.opacity(0.90))
-                    .frame(width: 6, height: 6)
-            }
-
-            Menu {
-                Button("New Chat") {
-                    container.resetQuickBarConversation()
-                }
-                .disabled(container.isQuickBarSending)
-
-                if !container.quickBarState.messages.isEmpty {
-                    Button("Open in Main Chat") {
-                        container.continueQuickBarInMainChat()
-                    }
-                    .disabled(container.isQuickBarSending)
-                }
-            } label: {
-                toolbarOrb(
-                    systemName: "ellipsis",
-                    isHovered: isOverflowHovered
-                )
-            }
-            .menuStyle(.borderlessButton)
-            .help("Quick Bar actions")
-            .onHover { isOverflowHovered = $0 }
-
-            Button {
-                container.closeQuickBar()
-            } label: {
-                toolbarOrb(
-                    systemName: "xmark",
-                    isHovered: isCloseHovered
-                )
-            }
-            .buttonStyle(QuickBarScaleButtonStyle())
-            .help("Close Quick Bar")
-            .onHover { isCloseHovered = $0 }
-            .keyboardShortcut("w", modifiers: [.option])
-        }
     }
 
     private var backgroundShell: some View {
@@ -237,35 +187,6 @@ struct QuickBarPanelView: View {
         palette.quickBarSurfaceStroke.opacity(0.20)
     }
 
-    private func toolbarOrb(
-        systemName: String,
-        isHovered: Bool
-    ) -> some View {
-        Image(systemName: systemName)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(palette.quickBarControlMuted.opacity(isHovered ? 1 : 0.88))
-            .frame(width: Layout.toolbarButtonSize, height: Layout.toolbarButtonSize)
-            .background {
-                QuickBarMinimalSurface(
-                    shape: Circle(),
-                    fill: palette.quickBarControlFill.opacity(
-                        container.settings.theme.usesDarkAppearance
-                            ? (isHovered ? 0.24 : 0.10)
-                            : (isHovered ? 0.34 : 0.14)
-                    ),
-                    stroke: palette.quickBarSurfaceStroke.opacity(
-                        container.settings.theme.usesDarkAppearance
-                            ? (isHovered ? 0.18 : 0.08)
-                            : (isHovered ? 0.26 : 0.14)
-                    ),
-                    shadowColor: palette.splitPaneShadow,
-                    shadowOpacity: isHovered ? 0.08 : 0.03,
-                    shadowRadius: 4,
-                    shadowYOffset: 1
-                )
-            }
-    }
-
     private func preferredScheme(for theme: AppTheme) -> ColorScheme {
         theme.usesDarkAppearance ? .dark : .light
     }
@@ -281,7 +202,7 @@ struct QuickBarPanelView: View {
                     isExpanded: false
                 )
             )
-            .frame(width: 708, height: 196)
+            .frame(width: QuickBarPanelReleaseMetrics.width, height: QuickBarPanelReleaseMetrics.compactHeight)
             .padding()
     }
 
@@ -294,7 +215,7 @@ struct QuickBarPanelView: View {
                     isExpanded: true
                 )
             )
-            .frame(width: 708, height: 584)
+            .frame(width: QuickBarPanelReleaseMetrics.width, height: QuickBarPanelReleaseMetrics.expandedHeight)
             .padding()
     }
 
@@ -308,7 +229,7 @@ struct QuickBarPanelView: View {
                     isSending: true
                 )
             )
-            .frame(width: 708, height: 584)
+            .frame(width: QuickBarPanelReleaseMetrics.width, height: QuickBarPanelReleaseMetrics.expandedHeight)
             .padding()
     }
 
@@ -322,7 +243,7 @@ struct QuickBarPanelView: View {
                     hasConfiguredProvider: false
                 )
             )
-            .frame(width: 708, height: 196)
+            .frame(width: QuickBarPanelReleaseMetrics.width, height: QuickBarPanelReleaseMetrics.compactHeight)
             .padding()
     }
 
@@ -336,7 +257,7 @@ struct QuickBarPanelView: View {
                     isExpanded: false
                 )
             )
-            .frame(width: 708, height: 196)
+            .frame(width: QuickBarPanelReleaseMetrics.width, height: QuickBarPanelReleaseMetrics.compactHeight)
             .padding()
     }
 
@@ -350,7 +271,7 @@ struct QuickBarPanelView: View {
                     isExpanded: true
                 )
             )
-            .frame(width: 708, height: 584)
+            .frame(width: QuickBarPanelReleaseMetrics.width, height: QuickBarPanelReleaseMetrics.expandedHeight)
             .padding()
     }
 #endif

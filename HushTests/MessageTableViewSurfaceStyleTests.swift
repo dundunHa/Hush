@@ -120,5 +120,7 @@ struct MessageTableViewSurfaceStyleTests {
         #expect(abs(assistantContentFrame.midX - table.bounds.midX) <= 0.5)
         #expect(abs(userContentFrame.width - 640) <= 0.5)
         #expect(abs(userContentFrame.midX - table.bounds.midX) <= 0.5)
+        #expect(assistantCell.usesQuickBarRowPresentationForTesting)
+        #expect(userCell.usesQuickBarRowPresentationForTesting)
     }
 }

@@ -59,6 +59,36 @@ struct MessageTableViewFastTrackTests {
         #expect(lastCell?.attributedStringForTesting.string == "last")
     }
 
+    @Test("Quick bar rows keep their dedicated row presentation during fast-track streaming")
+    func quickBarRowsKeepDedicatedPresentationDuringFastTrackStreaming() throws {
+        let table = MessageTableView()
+        let runtime = makeRuntime()
+        let container = AppContainer.forTesting(settings: .testDefault)
+        let messageID = try #require(UUID(uuidString: "99999999-AAAA-BBBB-CCCC-999999999999"))
+        let message = makeMessage(id: messageID, content: "seed")
+
+        table.apply(
+            messages: [message],
+            activeConversationID: "conv-fast-quickbar",
+            isActiveConversationSending: true,
+            switchGeneration: 1,
+            theme: container.settings.theme,
+            surfaceStyle: .quickBar,
+            runtime: runtime,
+            container: container
+        )
+        table.prepareCellForTesting(row: 0)
+
+        let beforeCell = try #require(table.visibleCellForTesting(row: 0))
+        #expect(beforeCell.usesQuickBarRowPresentationForTesting)
+
+        table.updateStreamingCell(messageID: messageID, content: "seed-updated")
+
+        let afterCell = try #require(table.visibleCellForTesting(row: 0))
+        #expect(afterCell.usesQuickBarRowPresentationForTesting)
+        #expect(afterCell.attributedStringForTesting.string == "seed-updated")
+    }
+
     @Test("updateStreamingCell no-ops when messageID is stale or list is empty")
     func updateStreamingCellNoOpsForStaleOrEmptyMessageID() throws {
         let table = MessageTableView()

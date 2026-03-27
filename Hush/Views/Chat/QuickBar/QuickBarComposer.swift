@@ -12,11 +12,8 @@ struct QuickBarComposer: View {
 
     @State private var availableModels: [ModelDescriptor] = []
     @State private var catalogStateMessage: String?
-    @State private var isAddHovered = false
-    @State private var isWebHovered = false
+    @State private var isProviderHovered = false
     @State private var isModelHovered = false
-    @State private var isStatusHovered = false
-    @State private var isMicHovered = false
     @State private var isOpenSettingsHovered = false
     @State private var isSendHovered = false
     @FocusState private var isEditorFocused: Bool
@@ -29,40 +26,10 @@ struct QuickBarComposer: View {
         HushColors.palette(for: container.settings.theme)
     }
 
-    private struct LayoutMetrics {
-        let shellCornerRadius: CGFloat
-        let shellHorizontalInset: CGFloat
-        let shellTopInset: CGFloat
-        let shellBottomInset: CGFloat
-        let editorMinHeight: CGFloat
-        let editorMaxHeight: CGFloat
-        let editorHorizontalPadding: CGFloat
-        let editorVerticalPadding: CGFloat
-        let placeholderHorizontalInset: CGFloat
-        let placeholderTopInset: CGFloat
-        let placeholderFontSize: CGFloat
-        let toolbarTopPadding: CGFloat
-        let toolbarMinHeight: CGFloat
-        let toolbarSpacing: CGFloat
-        let controlHitSize: CGFloat
-        let controlVisualSize: CGFloat
-        let plusIconSize: CGFloat
-        let ornamentIconSize: CGFloat
-        let modelIconSize: CGFloat
-        let modelLabelFontSize: CGFloat
-        let modelChevronSize: CGFloat
-        let statusGlyphSize: CGFloat
-        let capsuleHorizontalPadding: CGFloat
-        let capsuleVisualHeight: CGFloat
-        let sendButtonHitSize: CGFloat
-        let sendButtonVisualSize: CGFloat
-        let sendIconSize: CGFloat
-    }
-
-    private var metrics: LayoutMetrics {
+    private var metrics: QuickBarComposerLayoutMetrics {
         switch layoutStyle {
         case .compact:
-            return LayoutMetrics(
+            return QuickBarComposerLayoutMetrics(
                 shellCornerRadius: 34,
                 shellHorizontalInset: 18,
                 shellTopInset: 16,
@@ -74,17 +41,18 @@ struct QuickBarComposer: View {
                 placeholderHorizontalInset: 6,
                 placeholderTopInset: 6,
                 placeholderFontSize: 17,
+                editorSurfaceHorizontalInset: 0,
+                editorSurfaceVerticalInset: 0,
                 toolbarTopPadding: 8,
+                toolbarHorizontalInset: 0,
+                toolbarBottomPadding: 0,
                 toolbarMinHeight: 52,
                 toolbarSpacing: 10,
                 controlHitSize: 44,
-                controlVisualSize: 36,
-                plusIconSize: 22,
-                ornamentIconSize: 17,
+                providerLabelFontSize: 16,
                 modelIconSize: 15,
                 modelLabelFontSize: 16,
                 modelChevronSize: 11,
-                statusGlyphSize: 19,
                 capsuleHorizontalPadding: 14,
                 capsuleVisualHeight: 36,
                 sendButtonHitSize: 44,
@@ -92,34 +60,35 @@ struct QuickBarComposer: View {
                 sendIconSize: 17
             )
         case .expanded:
-            return LayoutMetrics(
-                shellCornerRadius: 28,
-                shellHorizontalInset: 16,
-                shellTopInset: 14,
-                shellBottomInset: 12,
-                editorMinHeight: 68,
-                editorMaxHeight: 100,
-                editorHorizontalPadding: 0,
-                editorVerticalPadding: 1,
-                placeholderHorizontalInset: 5,
-                placeholderTopInset: 4,
-                placeholderFontSize: 16,
-                toolbarTopPadding: 8,
-                toolbarMinHeight: 48,
-                toolbarSpacing: 8,
-                controlHitSize: 44,
-                controlVisualSize: 34,
-                plusIconSize: 22,
-                ornamentIconSize: 17,
-                modelIconSize: 15,
-                modelLabelFontSize: 15,
-                modelChevronSize: 11,
-                statusGlyphSize: 18,
-                capsuleHorizontalPadding: 13,
-                capsuleVisualHeight: 34,
-                sendButtonHitSize: 44,
-                sendButtonVisualSize: 38,
-                sendIconSize: 17
+            return QuickBarComposerLayoutMetrics(
+                shellCornerRadius: 18,
+                shellHorizontalInset: 0,
+                shellTopInset: 2,
+                shellBottomInset: 0,
+                editorMinHeight: 46,
+                editorMaxHeight: 64,
+                editorHorizontalPadding: 2,
+                editorVerticalPadding: 0,
+                placeholderHorizontalInset: 4,
+                placeholderTopInset: 1,
+                placeholderFontSize: 15,
+                editorSurfaceHorizontalInset: 3,
+                editorSurfaceVerticalInset: 2,
+                toolbarTopPadding: 2,
+                toolbarHorizontalInset: 3,
+                toolbarBottomPadding: 1,
+                toolbarMinHeight: 34,
+                toolbarSpacing: 6,
+                controlHitSize: 36,
+                providerLabelFontSize: 13,
+                modelIconSize: 14,
+                modelLabelFontSize: 13,
+                modelChevronSize: 10,
+                capsuleHorizontalPadding: 10,
+                capsuleVisualHeight: 26,
+                sendButtonHitSize: 36,
+                sendButtonVisualSize: 30,
+                sendIconSize: 15
             )
         }
     }
@@ -203,7 +172,7 @@ struct QuickBarComposer: View {
 
             TextEditor(text: draftBinding)
                 .focused($isEditorFocused)
-                .font(HushTypography.scaled(isExpandedLayout ? 15 : 16))
+                .font(HushTypography.scaled(isExpandedLayout ? 14 : 16))
                 .foregroundStyle(palette.quickBarPrimaryText)
                 .frame(minHeight: metrics.editorMinHeight, maxHeight: metrics.editorMaxHeight)
                 .scrollIndicators(.never, axes: .vertical)
@@ -221,11 +190,23 @@ struct QuickBarComposer: View {
                     return .ignored
                 }
         }
+        .padding(.horizontal, metrics.editorSurfaceHorizontalInset)
+        .padding(.vertical, metrics.editorSurfaceVerticalInset)
+        .background {
+            if isExpandedLayout {
+                QuickBarComposerExpandedEditorSurface(
+                    palette: palette,
+                    usesDarkAppearance: container.settings.theme.usesDarkAppearance,
+                    cornerRadius: metrics.shellCornerRadius
+                )
+            }
+        }
     }
 
     private var bottomBar: some View {
         HStack(alignment: .center, spacing: metrics.toolbarSpacing) {
-            leadingControls
+            providerMenu
+            modelMenu
 
             if let catalogStateMessage, !catalogStateMessage.isEmpty {
                 Text(catalogStateMessage)
@@ -236,65 +217,60 @@ struct QuickBarComposer: View {
 
             Spacer(minLength: 0)
 
-            trailingControls
+            sendButton
         }
         .frame(minHeight: metrics.toolbarMinHeight)
         .padding(.top, metrics.toolbarTopPadding)
+        .padding(.horizontal, metrics.toolbarHorizontalInset)
+        .padding(.bottom, metrics.toolbarBottomPadding)
     }
 
-    private var leadingControls: some View {
-        HStack(spacing: metrics.toolbarSpacing) {
-            ornamentButton(
-                accessibilityLabel: "Add attachment",
-                helpText: "Attachment picker coming soon",
-                isHovered: isAddHovered,
-                action: {}
-            ) {
-                Image(systemName: "plus")
-                    .font(.system(size: metrics.plusIconSize, weight: .light))
-            }
-            .onHover { isAddHovered = $0 }
-
-            ornamentButton(
-                accessibilityLabel: "Browse the web",
-                helpText: "Web access control coming soon",
-                isHovered: isWebHovered,
-                action: {}
-            ) {
-                Image(systemName: "globe")
-                    .font(.system(size: metrics.ornamentIconSize, weight: .regular))
-            }
-            .onHover { isWebHovered = $0 }
-
-            modelMenu
-        }
+    private var enabledProviders: [ProviderConfiguration] {
+        container.settings.providerConfigurations.filter(\.isEnabled)
     }
 
-    private var trailingControls: some View {
-        HStack(spacing: metrics.toolbarSpacing) {
-            ornamentButton(
-                accessibilityLabel: "Mode status",
-                helpText: "Mode switching control coming soon",
-                isHovered: isStatusHovered,
-                action: {}
-            ) {
-                statusGlyph
-            }
-            .onHover { isStatusHovered = $0 }
+    private var selectedProviderName: String {
+        let name = enabledProviders.first(where: { $0.id == container.quickBarState.providerID })?.name
+            ?? container.quickBarState.providerID
+        return name.isEmpty ? "Provider" : name
+    }
 
-            ornamentButton(
-                accessibilityLabel: "Voice input",
-                helpText: "Voice input coming soon",
-                isHovered: isMicHovered,
-                action: {}
-            ) {
-                Image(systemName: "mic")
-                    .font(.system(size: metrics.ornamentIconSize, weight: .medium))
+    private var providerMenu: some View {
+        Menu {
+            ForEach(enabledProviders) { provider in
+                Button {
+                    container.selectQuickBarProvider(id: provider.id)
+                } label: {
+                    HStack(spacing: HushSpacing.sm) {
+                        if provider.id == container.quickBarState.providerID {
+                            Image(systemName: "checkmark")
+                        }
+                        Text(provider.name)
+                    }
+                }
             }
-            .onHover { isMicHovered = $0 }
-
-            sendButton
+        } label: {
+            HStack(spacing: HushSpacing.xs + 2) {
+                Image(systemName: "server.rack")
+                    .font(.system(size: metrics.modelIconSize, weight: .semibold))
+                Text(selectedProviderName)
+                    .font(HushTypography.scaled(metrics.providerLabelFontSize, weight: .semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: metrics.modelChevronSize, weight: .semibold))
+            }
+            .foregroundStyle(palette.quickBarControlForeground)
+            .frame(minHeight: metrics.capsuleVisualHeight)
+            .padding(.horizontal, metrics.capsuleHorizontalPadding)
+            .background {
+                controlCapsuleSurface(isHovered: isProviderHovered)
+            }
+            .frame(minHeight: metrics.controlHitSize)
         }
+        .buttonStyle(.plain)
+        .menuStyle(.borderlessButton)
+        .help(selectedProviderName)
+        .onHover { isProviderHovered = $0 }
     }
 
     private var modelMenu: some View {
@@ -315,8 +291,9 @@ struct QuickBarComposer: View {
             HStack(spacing: HushSpacing.xs + 2) {
                 Image(systemName: "sparkles")
                     .font(.system(size: metrics.modelIconSize, weight: .semibold))
-                Text("Auto")
+                Text(selectedModelDisplayName)
                     .font(HushTypography.scaled(metrics.modelLabelFontSize, weight: .semibold))
+                    .lineLimit(1)
                 Image(systemName: "chevron.down")
                     .font(.system(size: metrics.modelChevronSize, weight: .semibold))
             }
@@ -357,17 +334,6 @@ struct QuickBarComposer: View {
         .accessibilityLabel(container.isQuickBarSending ? "Stop generation" : "Send message")
     }
 
-    private var statusGlyph: some View {
-        ZStack {
-            Circle()
-                .stroke(statusGlyphColor.opacity(0.92), lineWidth: 2.2)
-            Circle()
-                .stroke(statusGlyphColor.opacity(0.52), lineWidth: 1.2)
-                .padding(metrics.statusGlyphSize * 0.24)
-        }
-        .frame(width: metrics.statusGlyphSize, height: metrics.statusGlyphSize)
-    }
-
     private var modelsForMenu: [ModelDescriptor] {
         let models = availableModels.isEmpty ? fallbackModels() : availableModels
         let filtered = models.filter {
@@ -377,8 +343,9 @@ struct QuickBarComposer: View {
     }
 
     private var selectedModelDisplayName: String {
-        modelsForMenu.first(where: { $0.id == container.quickBarState.selectedModelID })?.displayName
+        let name = modelsForMenu.first(where: { $0.id == container.quickBarState.selectedModelID })?.displayName
             ?? container.quickBarState.selectedModelID
+        return name.isEmpty ? "Model" : name
     }
 
     private var canSendDraft: Bool {
@@ -395,24 +362,16 @@ struct QuickBarComposer: View {
         return canSendDraft ? palette.quickBarButtonForeground : palette.quickBarDisabledButtonForeground
     }
 
-    private var statusGlyphColor: Color {
-        palette.quickBarControlForeground.opacity(
-            container.settings.theme.usesDarkAppearance ? 0.92 : 0.88
-        )
-    }
-
     private var shellFill: Color {
-        let usesDarkAppearance = container.settings.theme.usesDarkAppearance
-        return palette.quickBarSurface.opacity(usesDarkAppearance ? 0.92 : 0.975)
+        palette.quickBarSurface.opacity(container.settings.theme.usesDarkAppearance ? 0.92 : 0.975)
     }
 
     private var shellStroke: Color {
-        let usesDarkAppearance = container.settings.theme.usesDarkAppearance
-        return palette.quickBarSurfaceStroke.opacity(usesDarkAppearance ? 0.22 : 0.48)
+        palette.quickBarSurfaceStroke.opacity(container.settings.theme.usesDarkAppearance ? 0.22 : 0.48)
     }
 
     private var shellHighlight: LinearGradient {
-        LinearGradient(
+        return LinearGradient(
             colors: [
                 Color.white.opacity(container.settings.theme.usesDarkAppearance ? 0.08 : 0.38),
                 .clear
@@ -422,63 +381,37 @@ struct QuickBarComposer: View {
         )
     }
 
+    @ViewBuilder
     private var shellSurface: some View {
-        let shape = RoundedRectangle(cornerRadius: metrics.shellCornerRadius, style: .continuous)
+        if isExpandedLayout {
+            Color.clear
+        } else {
+            let shape = RoundedRectangle(cornerRadius: metrics.shellCornerRadius, style: .continuous)
 
-        return ZStack {
-            QuickBarMinimalSurface(
-                shape: shape,
-                fill: shellFill,
-                stroke: shellStroke,
-                shadowColor: palette.splitPaneShadow,
-                shadowOpacity: container.settings.theme.usesDarkAppearance ? 0.18 : 0.10,
-                shadowRadius: isExpandedLayout ? 10 : 12,
-                shadowYOffset: 2
-            )
-
-            shape
-                .fill(shellHighlight)
-                .clipShape(shape)
-
-            shape
-                .strokeBorder(
-                    Color.white.opacity(container.settings.theme.usesDarkAppearance ? 0.04 : 0.16),
-                    lineWidth: 0.5
+            ZStack {
+                QuickBarMinimalSurface(
+                    shape: shape,
+                    fill: shellFill,
+                    stroke: shellStroke,
+                    shadowColor: palette.splitPaneShadow,
+                    shadowOpacity: container.settings.theme.usesDarkAppearance ? 0.18 : 0.10,
+                    shadowRadius: 12,
+                    shadowYOffset: 2
                 )
-        }
-    }
 
-    private func ornamentButton<Label: View>(
-        accessibilityLabel: String,
-        helpText: String,
-        isHovered: Bool,
-        action: @escaping () -> Void,
-        @ViewBuilder label: () -> Label
-    ) -> some View {
-        Button(action: action) {
-            label()
-                .foregroundStyle(ornamentForegroundColor(isHovered: isHovered))
-                .frame(width: metrics.controlVisualSize, height: metrics.controlVisualSize)
-                .background {
-                    ornamentCircleSurface(isHovered: isHovered)
-                }
-                .frame(width: metrics.controlHitSize, height: metrics.controlHitSize)
-        }
-        .buttonStyle(QuickBarScaleButtonStyle())
-        .help(helpText)
-        .accessibilityLabel(accessibilityLabel)
-    }
+                shape
+                    .fill(shellHighlight)
+                    .clipShape(shape)
 
-    private func ornamentCircleSurface(isHovered: Bool) -> some View {
-        QuickBarMinimalSurface(
-            shape: Circle(),
-            fill: ornamentFillColor(isHovered: isHovered),
-            stroke: ornamentStrokeColor(isHovered: isHovered),
-            shadowColor: palette.splitPaneShadow,
-            shadowOpacity: isHovered ? 0.08 : 0.03,
-            shadowRadius: isHovered ? 5 : 3,
-            shadowYOffset: 1
-        )
+                shape
+                    .strokeBorder(
+                        Color.white.opacity(
+                            container.settings.theme.usesDarkAppearance ? 0.04 : 0.16
+                        ),
+                        lineWidth: 0.5
+                    )
+            }
+        }
     }
 
     private func controlCapsuleSurface(isHovered: Bool) -> some View {
@@ -487,9 +420,9 @@ struct QuickBarComposer: View {
             fill: controlCapsuleFillColor(isHovered: isHovered),
             stroke: controlCapsuleStrokeColor(isHovered: isHovered),
             shadowColor: palette.splitPaneShadow,
-            shadowOpacity: isHovered ? 0.08 : 0.04,
-            shadowRadius: 4,
-            shadowYOffset: 1
+            shadowOpacity: isExpandedLayout ? 0 : (isHovered ? 0.08 : 0.04),
+            shadowRadius: isExpandedLayout ? 0 : 4,
+            shadowYOffset: isExpandedLayout ? 0 : 1
         )
     }
 
@@ -517,28 +450,15 @@ struct QuickBarComposer: View {
         )
     }
 
-    private func ornamentFillColor(isHovered: Bool) -> Color {
-        palette.quickBarControlFill.opacity(
-            container.settings.theme.usesDarkAppearance
-                ? (isHovered ? 0.30 : 0.10)
-                : (isHovered ? 0.42 : 0.18)
-        )
-    }
-
-    private func ornamentStrokeColor(isHovered: Bool) -> Color {
-        palette.quickBarSurfaceStroke.opacity(
-            isHovered
-                ? (container.settings.theme.usesDarkAppearance ? 0.18 : 0.28)
-                : (container.settings.theme.usesDarkAppearance ? 0.08 : 0.16)
-        )
-    }
-
-    private func ornamentForegroundColor(isHovered: Bool) -> Color {
-        isHovered ? palette.quickBarControlForeground : palette.quickBarControlMuted
-    }
-
     private func controlCapsuleFillColor(isHovered: Bool) -> Color {
-        palette.quickBarControlFill.opacity(
+        if isExpandedLayout {
+            return palette.quickBarControlFill.opacity(
+                container.settings.theme.usesDarkAppearance
+                    ? (isHovered ? 0.18 : 0.10)
+                    : (isHovered ? 0.24 : 0.14)
+            )
+        }
+        return palette.quickBarControlFill.opacity(
             container.settings.theme.usesDarkAppearance
                 ? (isHovered ? 0.34 : 0.18)
                 : (isHovered ? 0.56 : 0.34)
@@ -546,7 +466,14 @@ struct QuickBarComposer: View {
     }
 
     private func controlCapsuleStrokeColor(isHovered: Bool) -> Color {
-        palette.quickBarSurfaceStroke.opacity(
+        if isExpandedLayout {
+            return palette.quickBarSurfaceStroke.opacity(
+                isHovered
+                    ? (container.settings.theme.usesDarkAppearance ? 0.12 : 0.18)
+                    : (container.settings.theme.usesDarkAppearance ? 0.08 : 0.12)
+            )
+        }
+        return palette.quickBarSurfaceStroke.opacity(
             isHovered
                 ? (container.settings.theme.usesDarkAppearance ? 0.24 : 0.34)
                 : (container.settings.theme.usesDarkAppearance ? 0.16 : 0.24)
@@ -600,6 +527,18 @@ struct QuickBarComposer: View {
         isEnabled: Bool,
         isSending: Bool
     ) -> Double {
+        if isExpandedLayout {
+            if isSending {
+                return isHovered ? 0.12 : 0.08
+            }
+
+            if isEnabled {
+                return isHovered ? 0.10 : 0.06
+            }
+
+            return 0.02
+        }
+
         if isSending {
             return isHovered ? 0.18 : 0.12
         }
