@@ -26,7 +26,7 @@ make test    # 跑单元测试（Swift Testing）
 ```
 
 说明：
-- 默认 `DerivedData` / SwiftPM 缓存现在写到 `/tmp/hush-dd` 和 `/tmp/hush-spm`，避免 Dropbox / File Provider 给测试产物附加扩展属性，导致 macOS codesign 失败。
+- 默认 `DerivedData` 写到 `/tmp/hush-dd`；SwiftPM 依赖会优先复用本机已存在的 Xcode `SourcePackages` 缓存，找不到时再回退到 `/tmp/hush-spm`，避免 Dropbox / File Provider 给测试产物附加扩展属性，导致 macOS codesign 失败。
 - 如需自定义目录，可在命令前覆写，例如：`DERIVED_DATA=$PWD/.build/DerivedData SPM_DIR=$PWD/.build/SourcePackages make build`
 
 ## Release（DMG）

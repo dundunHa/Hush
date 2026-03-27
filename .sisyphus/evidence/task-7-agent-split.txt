@@ -1,0 +1,25 @@
+=== Task 7: Split AgentSettingsView ===
+Date: 2026-03-28 01:57:46
+
+--- Build Result ---
+** BUILD SUCCEEDED **
+
+--- Line Counts ---
+     136 Hush/Views/Settings/AgentSettingsView.swift
+     359 Hush/Views/Settings/AgentPresetDetailSheet.swift
+     113 Hush/Views/Settings/AgentPresetActions.swift
+     608 total
+
+--- SettingsListRow Usage ---
+78:                            SettingsListRow(
+
+--- EmptyStateView Usage ---
+70:                    EmptyStateView(
+
+--- AgentPresetRow Removed ---
+Not found (removed)
+
+--- Summary ---
+AgentSettingsView.swift: 718 -> 136 lines (coordinator only)
+AgentPresetDetailSheet.swift: 359 lines (detail form)
+AgentPresetActions.swift: 113 lines (action bar + CRUD)

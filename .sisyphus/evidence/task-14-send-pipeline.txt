@@ -1,0 +1,24 @@
+Task 14 Evidence — Extract AppContainer+SendPipeline
+
+Created file:
+- Hush/AppContainer+SendPipeline.swift
+
+Required symbol checks:
+- grep "func sendDraft" Hush/AppContainer+SendPipeline.swift
+  -> func sendDraft(_ text: String) -> Bool {
+  -> func sendDraft(_ text: String, destination: SendDraftDestination) -> Bool {
+
+- grep "func quickBarSubmit" Hush/AppContainer+SendPipeline.swift
+  -> func quickBarSubmit(_ text: String? = nil) -> Bool {
+
+AppContainer line count:
+- wc -l Hush/AppContainer.swift
+  -> 815 Hush/AppContainer.swift
+
+Build check:
+- make build 2>&1 | grep "BUILD"
+  -> ** BUILD SUCCEEDED **
+
+Diagnostics check:
+- lsp_diagnostics Hush/AppContainer.swift -> No diagnostics found
+- lsp_diagnostics Hush/AppContainer+SendPipeline.swift -> No diagnostics found

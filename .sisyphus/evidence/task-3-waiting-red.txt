@@ -1,0 +1,24 @@
+Task 3: Waiting-State Symmetry Test Results
+============================================
+Date: 2026-03-28
+Test: waitingStateAssistantAndUserOuterEdgeGapsAreSymmetric
+Status: GREEN (PASSED)
+
+Configuration:
+  - Assistant: content="", role=.assistant, isStreaming=true (→ waiting state → .leadingColumn)
+  - User: content="好的", role=.user (→ .trailingColumn)
+  - Width: transcriptReadableWidth (derived from QuickBarPanelReleaseMetrics)
+
+Body-frame layer:
+  assistantBodyLeftGap = 20.0
+  userBodyRightGap     = 20.0
+  delta                = 0.0  ✅ (tolerance: 1.0)
+
+Visible-text-frame layer:
+  assistantVisibleLeftGap = 20.0
+  userVisibleRightGap     = 20.0
+  delta                   = 0.0  ✅ (tolerance: 1.0)
+  assistantVisibleWidth   = 220.0 (waiting placeholder has text content)
+  userVisibleWidth        = 220.0
+
+Conclusion: Waiting-state mode has PERFECT symmetry (delta=0) at both body and visible-text layers.

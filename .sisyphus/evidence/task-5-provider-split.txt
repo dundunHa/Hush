@@ -1,0 +1,25 @@
+=== Task 5: Split ProviderSettingsView into focused files ===
+
+--- Build Result ---
+** BUILD SUCCEEDED **
+
+--- Line Counts ---
+     494 Hush/Views/Settings/ProviderSettingsView.swift
+     115 Hush/Views/Settings/ProviderCatalogLogic.swift
+      50 Hush/Views/Settings/ProviderEditorState.swift
+     641 Hush/Views/Settings/ProviderSettingsDetailPane.swift
+     457 Hush/Views/Settings/ProviderSettingsActionBar.swift
+    1757 total
+
+--- ProviderSettingsView.swift < 600 lines? ---
+Lines: 494 (target: < 600)
+✅ PASS
+
+--- Files Created ---
+-rw-r--r--@ 1 lxp  staff   4077 Mar 28 01:37 Hush/Views/Settings/ProviderCatalogLogic.swift
+-rw-r--r--@ 1 lxp  staff   1235 Mar 28 01:38 Hush/Views/Settings/ProviderEditorState.swift
+-rw-r--r--@ 1 lxp  staff  16028 Mar 28 01:46 Hush/Views/Settings/ProviderSettingsActionBar.swift
+-rw-r--r--@ 1 lxp  staff  26842 Mar 28 01:44 Hush/Views/Settings/ProviderSettingsDetailPane.swift
+
+--- Tests still compile? ---
+-rw-r--r--@ 1 lxp  staff  5142 Mar 21 00:55 HushTests/ProviderSettingsViewTests.swift

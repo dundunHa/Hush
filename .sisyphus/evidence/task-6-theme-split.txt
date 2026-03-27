@@ -1,0 +1,33 @@
+Task 6: Split ThemeChrome.swift into glass/materials/utilities
+==============================================================
+Date: 2026-03-28
+
+BEFORE:
+  ThemeChrome.swift: 832 lines (16 types in single file)
+
+AFTER:
+  GlassEffectSurfaces.swift: 465 lines (9 Quick Bar glass types + BehindWindowVibrancyHost)
+    - BehindWindowVibrancyHost
+    - QuickBarNativeGlassID
+    - QuickBarNativeGlassTransitionKind
+    - QuickBarNativeGlassRegistration
+    - QuickBarNativeGlassStyle
+    - QuickBarNativeGlassSurface
+    - QuickBarLiquidGlassStyle
+    - QuickBarLiquidGlassSurface
+    - QuickBarMinimalSurface
+    - QuickBarGlassSurface
+    + private View extension (glass transitions)
+
+  ChromeMaterials.swift: 319 lines (4 sidebar/workspace types)
+    - SplitPaneSidebarSurface
+    - SidebarMaterialBackground
+    - SidebarNativeGlassBackground (private)
+    - WorkspaceChromeBackground
+
+  ThemeChrome.swift: 51 lines (border/mask utilities only)
+    - LeadingPaneBorderMask (private)
+    - LeadingPaneBorder
+
+BUILD: ** BUILD SUCCEEDED **
+No type renames. No visual changes. No new swiftlint:disable pragmas.

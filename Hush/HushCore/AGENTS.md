@@ -12,13 +12,13 @@ ChatWindowing.swift        # Windowed message loading for large conversations
 ConversationSidebarThread.swift # Sidebar display model (title, preview, timestamp, activity state)
 ModelDescriptor.swift      # Provider model metadata (id, name, capabilities)
 ModelParameters.swift      # Temperature, topP, maxTokens, reasoning effort
-PerfTrace.swift            # Lightweight performance tracing helpers
 PromptTemplate.swift       # Reusable prompt templates
 ProviderConfiguration.swift# Provider endpoint + model + credential ref
 QuickBarSessionState.swift # Quick Bar ephemeral conversation state (messages, draft, expansion)
 RequestLifecycle.swift     # RequestID, StreamEvent, RequestError, ActiveRequestState, QueueItemSnapshot
 RequestScheduler.swift     # Pure-function enum: selectNext, enqueue, rebalanceForActiveSwitch, canAcceptSubmission
 RuntimeConstants.swift     # enum namespace with static lets for all magic numbers
+SettingsDTOs.swift         # Data Transfer Objects for settings UI (OpenAISettingsSnapshot, DataStats, etc.)
 TailFollowStateMachine.swift # Auto-scroll state machine (events: newContent, userScroll, conversationSwitched)
 ```
 
@@ -34,6 +34,7 @@ TailFollowStateMachine.swift # Auto-scroll state machine (events: newContent, us
 | Quick Bar state | `QuickBarSessionState.swift` — ephemeral session model |
 | Tail-follow behavior | `TailFollowStateMachine.swift` — event-driven state transitions |
 | Quick Bar shortcut config | `AppSettings.swift` -> `QuickBarConfiguration` |
+| Settings UI Data Models | `SettingsDTOs.swift` — snapshots and input models for settings views |
 
 ## Conventions
 

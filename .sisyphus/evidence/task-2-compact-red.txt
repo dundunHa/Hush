@@ -1,0 +1,47 @@
+Task 2: Compact Plain-Text Outer-Edge Symmetry Tests
+=====================================================
+Date: 2026-03-28
+Test file: HushTests/QuickBarTranscriptSymmetryTests.swift
+
+Tests Added:
+1. compactShortTextOuterEdgeGapsAreSymmetric
+   - Assistant content: "Hello!" (6 chars)
+   - User content: "你好世界!" (5 CJK chars)
+   
+2. compactLongTextOuterEdgeGapsAreSymmetric
+   - Assistant content: "The quick brown fox jumps over!" (30 chars)
+   - User content: "敏捷的棕色狐狸跳过了懒狗旁边的围栏!" (17 CJK chars)
+
+Test Results: ALL GREEN (unexpected — expected RED)
+===================================================
+
+Short text gaps:
+  assistantBodyLeftGap = 20.0
+  userBodyRightGap     = 20.0
+  bodyDelta            = 0.0
+  assistantVisibleLeftGap = 20.0
+  userVisibleRightGap     = 20.0
+  visDelta                = 0.0
+
+Long text gaps:
+  assistantBodyLeftGap = 20.0
+  userBodyRightGap     = 20.0
+  bodyDelta            = 0.0
+  assistantVisibleLeftGap = 20.0
+  userVisibleRightGap     = 20.0
+  visDelta                = 0.0
+
+Analysis:
+- Both body frame and visible text frame layers show perfect symmetry at cell level
+- Outer-edge gap is exactly 20.0pt on both sides
+- The asymmetry (if present) must originate from layers ABOVE the cell:
+  either the SwiftUI padding chain in QuickBarPanelView or the
+  transcript-level container, NOT from cell-internal layout
+
+Full test output:
+✔ Test "Smoke: assistant cell visibleTextFrame is obtainable at transcript readable width" passed after 0.012s
+✔ Test "Short text outer-edge gap symmetry should match between assistant and user (RED until fixed)" passed after 0.023s
+✔ Test "Long text outer-edge gap symmetry should match between assistant and user (RED until fixed)" passed after 0.017s
+✔ Suite "Quick Bar transcript outer-edge symmetry helpers" passed after 0.053s
+✔ Test run with 3 tests in 1 suite passed after 0.053s
+** TEST SUCCEEDED **

@@ -7,11 +7,13 @@ struct ComposerDock: View {
     @State private var draft: String = ""
     @State private var availableModels: [ModelDescriptor] = []
     @State private var catalogStateMessage: String?
-    @State private var isProviderHovered = false
-    @State private var isModelHovered = false
     @State private var isStrengthHovered = false
     @State private var isConfigHovered = false
     @State private var isOpenSettingsHovered = false
+
+    private var modelService: ComposerModelService {
+        ComposerModelService(container: container, surfaceStyle: .main)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: HushSpacing.sm) {
@@ -28,10 +30,30 @@ struct ComposerDock: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Add context")
 
-                    if enabledProviders.count > 1 {
-                        providerMenu
-                    }
-                    modelMenu
+                    ProviderModelSelector(
+                        surfaceStyle: .main,
+                        providers: modelService.enabledProviders,
+                        models: modelsForMenu,
+                        selectedProviderID: container.settings.selectedProviderID,
+                        selectedProviderName: modelService.selectedProviderName,
+                        selectedModelID: container.settings.selectedModelID,
+                        selectedModelDisplayName: modelService.selectedModelDisplayName(models: modelsForMenu),
+                        showsProviderMenu: modelService.enabledProviders.count > 1,
+                        providerHelpText: modelService.selectedProviderName,
+                        modelHelpText: modelService.selectedModelDisplayName(models: modelsForMenu),
+                        onSelectProvider: { provider in
+                            container.selectProvider(id: provider.id)
+                        },
+                        onSelectModel: { model in
+                            container.settings.selectedModelID = model.id
+                        },
+                        providerLabel: { title, isHovered in
+                            selectorLabel(title: title, isHovered: isHovered)
+                        },
+                        modelLabel: { title, isHovered in
+                            selectorLabel(title: title, isHovered: isHovered)
+                        }
+                    )
                     thinkingStrengthMenu
 
                     Spacer(minLength: 0)
@@ -114,57 +136,6 @@ struct ComposerDock: View {
                 }
                 return .handled
             }
-    }
-
-    private var enabledProviders: [ProviderConfiguration] {
-        container.settings.providerConfigurations.filter(\.isEnabled)
-    }
-
-    private var selectedProviderName: String {
-        enabledProviders.first(where: { $0.id == container.settings.selectedProviderID })?.name
-            ?? container.settings.selectedProviderID
-    }
-
-    private var providerMenu: some View {
-        Menu {
-            ForEach(enabledProviders) { provider in
-                Button {
-                    container.selectProvider(id: provider.id)
-                } label: {
-                    HStack(spacing: HushSpacing.sm) {
-                        if provider.id == container.settings.selectedProviderID {
-                            Image(systemName: "checkmark")
-                        }
-                        Text(provider.name)
-                    }
-                }
-            }
-        } label: {
-            selectorLabel(title: selectedProviderName, isHovered: isProviderHovered)
-        }
-        .buttonStyle(.plain)
-        .onHover { isProviderHovered = $0 }
-    }
-
-    private var modelMenu: some View {
-        Menu {
-            ForEach(modelsForMenu) { model in
-                Button {
-                    container.settings.selectedModelID = model.id
-                } label: {
-                    HStack(spacing: HushSpacing.sm) {
-                        if model.id == container.settings.selectedModelID {
-                            Image(systemName: "checkmark")
-                        }
-                        Text(model.displayName)
-                    }
-                }
-            }
-        } label: {
-            selectorLabel(title: selectedModelDisplayName, isHovered: isModelHovered)
-        }
-        .buttonStyle(.plain)
-        .onHover { isModelHovered = $0 }
     }
 
     private var thinkingStrengthMenu: some View {
@@ -267,8 +238,7 @@ struct ComposerDock: View {
     }
 
     private var canSendDraft: Bool {
-        let trimmedDraft = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmedDraft.isEmpty && !container.isQueueFull && container.hasConfiguredProvider
+        modelService.canSendDraft(draft: draft)
     }
 
     private func sendAndClearDraft() {
@@ -279,22 +249,7 @@ struct ComposerDock: View {
     }
 
     private var modelsForMenu: [ModelDescriptor] {
-        if availableModels.isEmpty {
-            return fallbackModels()
-        }
-        let pinnedIDs = container.settings.providerConfigurations
-            .first(where: { $0.id == container.settings.selectedProviderID })?
-            .pinnedModelIDs ?? []
-        if pinnedIDs.isEmpty {
-            return availableModels
-        }
-        let pinned = availableModels.filter { pinnedIDs.contains($0.id) }
-        return pinned.isEmpty ? availableModels : pinned
-    }
-
-    private var selectedModelDisplayName: String {
-        modelsForMenu.first(where: { $0.id == container.settings.selectedModelID })?.displayName
-            ?? container.settings.selectedModelID
+        modelService.modelsForMenu(availableModels: availableModels)
     }
 
     private var selectedThinkingStrength: ThinkingStrength {
@@ -434,86 +389,8 @@ struct ComposerDock: View {
 
     @MainActor
     private func refreshAvailableModels() async {
-        let providerID = container.settings.selectedProviderID
-        catalogStateMessage = nil
-
-        guard !providerID.isEmpty else {
-            availableModels = []
-            return
-        }
-
-        let (models, _, error) = await container.availableModels(forProviderID: providerID)
-
-        if models.isEmpty {
-            availableModels = fallbackModels()
-            if let error {
-                catalogStateMessage = error
-            }
-        } else {
-            availableModels = models
-        }
-
-        if !availableModels.contains(where: { $0.id == container.settings.selectedModelID }),
-           let firstModel = availableModels.first
-        {
-            container.settings.selectedModelID = firstModel.id
-        }
-    }
-
-    private func fallbackModels() -> [ModelDescriptor] {
-        let providerDefaultModel = container.settings.providerConfigurations
-            .first(where: { $0.id == container.settings.selectedProviderID })?
-            .defaultModelID
-
-        var uniqueIDs: [String] = []
-        for id in [container.settings.selectedModelID, providerDefaultModel].compactMap({ $0 }) {
-            guard !id.isEmpty, !uniqueIDs.contains(id) else { continue }
-            uniqueIDs.append(id)
-        }
-
-        return uniqueIDs.map {
-            ModelDescriptor(id: $0, displayName: $0, capabilities: [.text])
-        }
-    }
-}
-
-extension Notification.Name {
-    static let hushOpenSettings = Notification.Name("hushOpenSettings")
-}
-
-private enum ThinkingStrength: String, CaseIterable, Identifiable {
-    case `default` = "Default"
-    case low = "Low"
-    case medium = "Medium"
-    case high = "High"
-
-    var id: String {
-        rawValue
-    }
-
-    var reasoningEffort: ModelReasoningEffort? {
-        switch self {
-        case .default:
-            return nil
-        case .low:
-            return .low
-        case .medium:
-            return .medium
-        case .high:
-            return .high
-        }
-    }
-
-    static func from(reasoningEffort: ModelReasoningEffort?) -> ThinkingStrength {
-        switch reasoningEffort {
-        case nil:
-            return .default
-        case .some(.none), .some(.minimal), .some(.low):
-            return .low
-        case .some(.medium):
-            return .medium
-        case .some(.high), .some(.xhigh):
-            return .high
-        }
+        let result = await modelService.refreshAvailableModels()
+        availableModels = result.models
+        catalogStateMessage = result.catalogStateMessage
     }
 }

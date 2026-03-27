@@ -1,0 +1,7 @@
+Task 8 evidence
+
+- Extracted parameter controls into `Hush/Views/Chat/ChatParameterControls.swift`.
+- Trimmed `Hush/Views/Chat/ChatConfigPopover.swift` to 310 lines.
+- Build verification: `** BUILD SUCCEEDED **`
+- File verification: `test -f Hush/Views/Chat/ChatParameterControls.swift && echo EXISTS` → `EXISTS`
+- Diagnostics verification: no diagnostics found for both changed files.

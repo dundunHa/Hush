@@ -5,6 +5,24 @@ import Testing
 
 @MainActor
 struct MessageBodyAlignmentTests {
+    private var quickBarReadableWidth: CGFloat {
+        QuickBarPanelReleaseMetrics.width
+            - (HushSpacing.sm + 2) * 2
+            - HushSpacing.xs * 2
+    }
+
+    private var quickBarCompactMaxWidth: CGFloat {
+        max(1, quickBarReadableWidth - HushSpacing.xl * 2)
+    }
+
+    private var quickBarCompactMinWidth: CGFloat {
+        min(220, quickBarCompactMaxWidth)
+    }
+
+    private var quickBarTrailingCompactInset: CGFloat {
+        HushSpacing.xl + HushSpacing.sm
+    }
+
     private func makeRow(
         content: String,
         isStreaming: Bool,
@@ -189,17 +207,15 @@ struct MessageBodyAlignmentTests {
         )
         hosted.host.layoutSubtreeIfNeeded()
 
-        #expect(abs(cell.contentContainerFrameForTesting.width - 640) <= 0.5)
+        #expect(abs(cell.contentContainerFrameForTesting.width - quickBarReadableWidth) <= 0.5)
         #expect(abs(cell.contentContainerFrameForTesting.midX - hosted.container.bounds.midX) <= 0.5)
-        #expect(cell.bodyTextAlignmentForTesting == .left)
-        #expect(cell.metaTextAlignmentForTesting == .left)
-        let expectedColumnWidth = floor(((cell.contentContainerFrameForTesting.width - HushSpacing.xl * 2) - 56) / 2)
-        #expect(abs(cell.bodyFrameForTesting.width - expectedColumnWidth) <= 0.5)
-        #expect(abs(cell.bodyFrameForTesting.maxX - (cell.contentContainerFrameForTesting.maxX - HushSpacing.xl)) <= 0.5)
-        #expect(abs(cell.bodyFrameForTesting.maxX - (cell.contentContainerFrameForTesting.maxX - HushSpacing.xl)) <= 0.5)
-        #expect(cell.bodyFrameForTesting.minX > cell.contentContainerFrameForTesting.midX)
-        #expect(abs(cell.visibleTextFrameForTesting.minX - cell.bodyFrameForTesting.minX) <= 0.5)
-        #expect(abs(cell.metaFrameForTesting.minX - cell.bodyFrameForTesting.minX) <= 0.5)
+        #expect(cell.bodyTextAlignmentForTesting == .right)
+        #expect(cell.metaTextAlignmentForTesting == .right)
+        #expect(cell.bodyFrameForTesting.width >= quickBarCompactMinWidth - 0.5)
+        #expect(cell.bodyFrameForTesting.width <= quickBarCompactMaxWidth + 0.5)
+        #expect(abs(cell.bodyFrameForTesting.maxX - (cell.contentContainerFrameForTesting.maxX - quickBarTrailingCompactInset)) <= 0.5)
+        #expect(cell.bodyFrameForTesting.minX >= cell.contentContainerFrameForTesting.minX + HushSpacing.xl - 0.5)
+        #expect(abs(cell.visibleTextFrameForTesting.maxX - cell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(abs(cell.metaFrameForTesting.maxX - cell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(cell.bodyBorderWidthForTesting == 0)
         #expect(cell.bodyBackgroundAlphaForTesting == 0)
@@ -232,15 +248,15 @@ struct MessageBodyAlignmentTests {
         )
         hosted.host.layoutSubtreeIfNeeded()
 
-        #expect(abs(cell.contentContainerFrameForTesting.width - 640) <= 0.5)
+        #expect(abs(cell.contentContainerFrameForTesting.width - quickBarReadableWidth) <= 0.5)
         #expect(abs(cell.contentContainerFrameForTesting.midX - hosted.container.bounds.midX) <= 0.5)
         #expect(cell.bodyTextAlignmentForTesting == .left)
         #expect(cell.metaTextAlignmentForTesting == .left)
-        let expectedColumnWidth = floor(((cell.contentContainerFrameForTesting.width - HushSpacing.xl * 2) - 56) / 2)
-        #expect(abs(cell.bodyFrameForTesting.width - expectedColumnWidth) <= 0.5)
+        #expect(cell.bodyFrameForTesting.width >= quickBarCompactMinWidth - 0.5)
+        #expect(cell.bodyFrameForTesting.width <= quickBarCompactMaxWidth + 0.5)
         #expect(abs(cell.bodyFrameForTesting.minX - (cell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
         #expect(abs(cell.visibleTextFrameForTesting.minX - (cell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
-        #expect(cell.bodyFrameForTesting.maxX < cell.contentContainerFrameForTesting.midX)
+        #expect(cell.bodyFrameForTesting.maxX <= cell.contentContainerFrameForTesting.maxX - quickBarTrailingCompactInset + 0.5)
         #expect(abs(cell.metaFrameForTesting.minX - cell.bodyFrameForTesting.minX) <= 0.5)
         #expect(abs(cell.metaFrameForTesting.maxX - cell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(cell.bodyBorderWidthForTesting == 0)
@@ -297,12 +313,12 @@ struct MessageBodyAlignmentTests {
         hostedUser.host.layoutSubtreeIfNeeded()
         hostedAssistant.host.layoutSubtreeIfNeeded()
 
-        let interColumnGap = userCell.bodyFrameForTesting.minX - assistantCell.bodyFrameForTesting.maxX
-
-        #expect(abs(userCell.bodyFrameForTesting.width - assistantCell.bodyFrameForTesting.width) <= 0.5)
-        #expect(abs(interColumnGap - 56) <= 0.5)
+        #expect(userCell.bodyFrameForTesting.width >= quickBarCompactMinWidth - 0.5)
+        #expect(userCell.bodyFrameForTesting.width <= quickBarCompactMaxWidth + 0.5)
+        #expect(assistantCell.bodyFrameForTesting.width >= quickBarCompactMinWidth - 0.5)
+        #expect(assistantCell.bodyFrameForTesting.width <= quickBarCompactMaxWidth + 0.5)
         #expect(abs(assistantCell.bodyFrameForTesting.minX - (assistantCell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
-        #expect(abs(userCell.bodyFrameForTesting.maxX - (userCell.contentContainerFrameForTesting.maxX - HushSpacing.xl)) <= 0.5)
+        #expect(abs(userCell.bodyFrameForTesting.maxX - (userCell.contentContainerFrameForTesting.maxX - quickBarTrailingCompactInset)) <= 0.5)
         #expect(abs(userCell.metaFrameForTesting.maxX - userCell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(abs(assistantCell.metaFrameForTesting.minX - assistantCell.bodyFrameForTesting.minX) <= 0.5)
         #expect(userCell.bodyBorderWidthForTesting == 0)
@@ -352,11 +368,11 @@ struct MessageBodyAlignmentTests {
         hostedUser.host.layoutSubtreeIfNeeded()
         hostedAssistant.host.layoutSubtreeIfNeeded()
 
-        let interColumnGap = userCell.bodyFrameForTesting.minX - assistantCell.bodyFrameForTesting.maxX
-
-        #expect(abs(userCell.bodyFrameForTesting.width - assistantCell.bodyFrameForTesting.width) <= 0.5)
-        #expect(abs(interColumnGap - 56) <= 0.5)
-        #expect(abs(userCell.visibleTextFrameForTesting.minX - userCell.bodyFrameForTesting.minX) <= 0.5)
+        #expect(abs(userCell.bodyFrameForTesting.width - quickBarCompactMinWidth) <= 0.5)
+        #expect(abs(assistantCell.bodyFrameForTesting.width - quickBarCompactMinWidth) <= 0.5)
+        #expect(abs(userCell.bodyFrameForTesting.maxX - (userCell.contentContainerFrameForTesting.maxX - quickBarTrailingCompactInset)) <= 0.5)
+        #expect(abs(assistantCell.bodyFrameForTesting.minX - (assistantCell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
+        #expect(abs(userCell.visibleTextFrameForTesting.maxX - userCell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(abs(assistantCell.visibleTextFrameForTesting.minX - assistantCell.bodyFrameForTesting.minX) <= 0.5)
         #expect(abs(userCell.metaFrameForTesting.maxX - userCell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(abs(assistantCell.metaFrameForTesting.minX - assistantCell.bodyFrameForTesting.minX) <= 0.5)
@@ -435,7 +451,7 @@ struct MessageBodyAlignmentTests {
         cell.configure(
             row: richAssistantRow,
             runtime: runtime,
-            availableWidth: 640,
+            availableWidth: quickBarReadableWidth,
             container: nil
         )
         hosted.host.layoutSubtreeIfNeeded()
@@ -445,17 +461,16 @@ struct MessageBodyAlignmentTests {
         cell.configure(
             row: row,
             runtime: runtime,
-            availableWidth: 640,
+            availableWidth: quickBarReadableWidth,
             container: nil
         )
         hosted.host.layoutSubtreeIfNeeded()
 
-        #expect(abs(cell.contentContainerFrameForTesting.width - 640) <= 0.5)
-        #expect(cell.bodyTextAlignmentForTesting == .left)
-        #expect(cell.metaTextAlignmentForTesting == .left)
-        #expect(abs(cell.bodyFrameForTesting.maxX - (cell.contentContainerFrameForTesting.maxX - HushSpacing.xl)) <= 0.5)
+        #expect(abs(cell.contentContainerFrameForTesting.width - quickBarReadableWidth) <= 0.5)
+        #expect(cell.bodyTextAlignmentForTesting == .right)
+        #expect(cell.metaTextAlignmentForTesting == .right)
+        #expect(abs(cell.bodyFrameForTesting.maxX - (cell.contentContainerFrameForTesting.maxX - quickBarTrailingCompactInset)) <= 0.5)
         #expect(cell.bodyFrameForTesting.minX > cell.contentContainerFrameForTesting.midX)
-        #expect(abs(cell.metaFrameForTesting.minX - cell.bodyFrameForTesting.minX) <= 0.5)
         #expect(abs(cell.metaFrameForTesting.maxX - cell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(cell.bodyBorderWidthForTesting == 0)
         #expect(cell.bodyBackgroundAlphaForTesting == 0)

@@ -15,7 +15,7 @@ struct QuickBarPanelView: View {
         static let contentHorizontalInset: CGFloat = HushSpacing.sm + 2
         static let headerHorizontalInset: CGFloat = HushSpacing.md
         static let headerHeight: CGFloat = 22
-        static let transcriptTopPadding: CGFloat = HushSpacing.xs
+        static let transcriptTopPadding: CGFloat = HushSpacing.md
         static let transcriptBottomPadding: CGFloat = HushSpacing.xs
         static let dividerHorizontalInset: CGFloat = HushSpacing.sm
         static let composerTopPadding: CGFloat = 0

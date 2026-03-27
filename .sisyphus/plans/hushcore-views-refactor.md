@@ -340,7 +340,7 @@ Max Concurrent: 5 (Wave 2)
   - Files: `Hush/HushCore/SettingsDTOs.swift` (new), `Hush/AppContainer.swift` (modified), `Hush.xcodeproj/project.pbxproj`
   - Pre-commit: `make build && make test`
 
-- [ ] 4. Create Shared Settings Components
+- [x] 4. Create Shared Settings Components
 
   **What to do**:
   - Create `Hush/Views/Settings/Components/` directory
@@ -398,7 +398,7 @@ Max Concurrent: 5 (Wave 2)
   - Files: `Hush/Views/Settings/Components/*.swift` (new), `Hush.xcodeproj/project.pbxproj`
   - Pre-commit: `make build && make test`
 
-- [ ] 5. Split ProviderSettingsView.swift (1735 lines → 4+ files)
+- [x] 5. Split ProviderSettingsView.swift (1735 lines → 4+ files)
 
   **What to do**:
   - Extract from `Hush/Views/Settings/ProviderSettingsView.swift`:
@@ -683,7 +683,7 @@ Max Concurrent: 5 (Wave 2)
   - Files: `ComposerModelService.swift`, `ProviderModelSelector.swift` (new), `ComposerDock.swift`, `QuickBarComposer.swift` (simplified), `Hush.xcodeproj/project.pbxproj`
   - Pre-commit: `make build && make test`
 
-- [ ] 10. Extract AppContainer+MessageBuckets.swift
+- [x] 10. Extract AppContainer+MessageBuckets.swift
 
   **What to do**:
   - Create `Hush/AppContainer+MessageBuckets.swift`
@@ -740,7 +740,7 @@ Max Concurrent: 5 (Wave 2)
   - Files: `AppContainer+MessageBuckets.swift` (new), `AppContainer.swift` (trimmed), `Hush.xcodeproj/project.pbxproj`
   - Pre-commit: `make build && make test`
 
-- [ ] 11. Extract AppContainer+ProviderManagement.swift
+- [x] 11. Extract AppContainer+ProviderManagement.swift
 
   **What to do**:
   - Create `Hush/AppContainer+ProviderManagement.swift`
@@ -959,7 +959,7 @@ Max Concurrent: 5 (Wave 2)
   - Files: `AppContainer+SendPipeline.swift` (new), `AppContainer.swift` (trimmed), `Hush.xcodeproj/project.pbxproj`
   - Pre-commit: `make build && make test`
 
-- [ ] 15. Remove SwiftLint Disables + Verify File Sizes
+- [x] 15. Remove SwiftLint Disables + Verify File Sizes
 
   **What to do**:
   - Remove `// swiftlint:disable file_length type_body_length` from `Hush/AppContainer.swift` (line 7)

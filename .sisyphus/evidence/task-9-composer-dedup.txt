@@ -1,0 +1,39 @@
+Task 9 Evidence — Composer Dedup
+Date: 2026-03-28
+
+[1] Build verification
+$ make build 2>&1 | grep "BUILD"
+** BUILD SUCCEEDED **
+
+[2] enabledProviders removed from both composers
+$ grep -c "private var enabledProviders" Hush/Views/Chat/ComposerDock.swift
+0
+$ grep -c "private var enabledProviders" Hush/Views/Chat/QuickBar/QuickBarComposer.swift
+0
+
+[3] Shared component/service references
+$ grep "ComposerModelService" Hush/Views/Chat/ComposerDock.swift
+    private var modelService: ComposerModelService {
+        ComposerModelService(container: container, surfaceStyle: .main)
+
+$ grep "ProviderModelSelector" Hush/Views/Chat/ComposerDock.swift
+                    ProviderModelSelector(
+
+$ grep "ComposerModelService" Hush/Views/Chat/QuickBar/QuickBarComposer.swift
+    private var modelService: ComposerModelService {
+        ComposerModelService(container: container, surfaceStyle: .quickBar)
+
+$ grep "ProviderModelSelector" Hush/Views/Chat/QuickBar/QuickBarComposer.swift
+            ProviderModelSelector(
+
+[4] Composer file line counts
+$ wc -l Hush/Views/Chat/ComposerDock.swift Hush/Views/Chat/QuickBar/QuickBarComposer.swift
+396 Hush/Views/Chat/ComposerDock.swift
+312 Hush/Views/Chat/QuickBar/QuickBarComposer.swift
+708 total
+
+[5] Notes
+- QuickBarComposerSupport.swift unchanged.
+- Shared extraction introduced:
+  - Hush/Views/Chat/ComposerModelService.swift
+  - Hush/Views/Chat/ProviderModelSelector.swift

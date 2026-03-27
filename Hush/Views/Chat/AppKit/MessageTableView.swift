@@ -79,10 +79,15 @@ typealias AnyMessageTableRowView = MessageTableRowView & NSView
 #endif
 
 private enum QuickBarTranscriptMetrics {
-    static let contentMaxWidth: CGFloat = 640
+    static let contentMaxWidth: CGFloat =
+        QuickBarPanelReleaseMetrics.width
+            - (HushSpacing.sm + 2) * 2
+            - HushSpacing.xs * 2
     static let sideInset: CGFloat = HushSpacing.xl
-    static let sideColumnGap: CGFloat = 56
+    static let trailingCompactInset: CGFloat = HushSpacing.xl + HushSpacing.sm
     static let metaTopSpacing: CGFloat = 4
+    static let compactTextMaxWidthRatio: CGFloat = 0.76
+    static let compactTextMinWidth: CGFloat = 220
 }
 
 private enum QuickBarBodyPresentationMode: Equatable {
@@ -3589,7 +3594,6 @@ final class QuickBarMessageCellView: NSTableCellView, MessageTableRowView {
     private var previewTrailingConstraint: NSLayoutConstraint!
     private var previewBottomConstraint: NSLayoutConstraint!
     private var isPreviewVisible = false
-    private var currentPresentationMode: QuickBarBodyPresentationMode = .fullWidth
     private var theme: AppTheme = .graphiteGlass {
         didSet { applyPresentationPalette() }
     }
@@ -3690,7 +3694,7 @@ final class QuickBarMessageCellView: NSTableCellView, MessageTableRowView {
         )
         bodyTrailingColumnConstraint = bodyTextView.trailingAnchor.constraint(
             equalTo: contentContainer.trailingAnchor,
-            constant: -QuickBarTranscriptMetrics.sideInset
+            constant: -QuickBarTranscriptMetrics.trailingCompactInset
         )
         bodyWidthConstraint = bodyTextView.widthAnchor.constraint(equalToConstant: 0)
         previewTopConstraint = attachmentPreviewView.topAnchor.constraint(equalTo: bodyTextView.bottomAnchor, constant: HushSpacing.sm)
@@ -4044,8 +4048,8 @@ final class QuickBarMessageCellView: NSTableCellView, MessageTableRowView {
             && Self.shouldShowStreamingWaitingState(for: content)
     }
 
-    private func plainTextAlignment(for _: MessageTableView.RowModel) -> NSTextAlignment {
-        .left
+    private func plainTextAlignment(for row: MessageTableView.RowModel) -> NSTextAlignment {
+        row.message.role == .user ? .right : .left
     }
 
     private func plainTextColor(for row: MessageTableView.RowModel) -> NSColor {
@@ -4096,7 +4100,6 @@ final class QuickBarMessageCellView: NSTableCellView, MessageTableRowView {
 
     private func applyPresentation(for row: MessageTableView.RowModel, maxBodyWidth: CGFloat) {
         let mode = presentationMode(for: row)
-        currentPresentationMode = mode
         let alignment = plainTextAlignment(for: row)
         bodyTextView.alignment = alignment
         bodyTextView.textContainerInset = .zero
@@ -4137,10 +4140,24 @@ final class QuickBarMessageCellView: NSTableCellView, MessageTableRowView {
     }
 
     private func preferredSideColumnWidth(maxBodyWidth: CGFloat) -> CGFloat {
-        max(
-            1,
-            floor((maxBodyWidth - QuickBarTranscriptMetrics.sideColumnGap) / 2)
+        let maxCompactWidth = max(1, maxBodyWidth - QuickBarTranscriptMetrics.sideInset * 2)
+        let preferredCompactWidth = max(
+            CGFloat(QuickBarTranscriptMetrics.compactTextMinWidth),
+            floor(maxCompactWidth * QuickBarTranscriptMetrics.compactTextMaxWidthRatio)
         )
+        let minCompactWidth = min(CGFloat(QuickBarTranscriptMetrics.compactTextMinWidth), maxCompactWidth)
+        guard let storage = bodyTextView.textStorage, storage.length > 0 else {
+            return minCompactWidth
+        }
+
+        let measurementWidth = max(1, preferredCompactWidth)
+        let bounds = storage.boundingRect(
+            with: NSSize(width: measurementWidth, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+        let contentWidth = ceil(bounds.width)
+
+        return max(minCompactWidth, min(maxCompactWidth, contentWidth))
     }
 
     private func updateWaitingBreathingAnimation(isActive: Bool) {
@@ -4173,7 +4190,6 @@ final class QuickBarMessageCellView: NSTableCellView, MessageTableRowView {
     }
 
     private func resetPresentation() {
-        currentPresentationMode = .fullWidth
         metaLabel.alignment = .left
         bodyTextView.alignment = .left
         bodyTextView.textContainerInset = .zero

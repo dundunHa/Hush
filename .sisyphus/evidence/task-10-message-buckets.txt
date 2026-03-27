@@ -1,0 +1,44 @@
+Task 10: Extract AppContainer+MessageBuckets.swift
+===================================================
+
+Date: 2026-03-28
+
+1. BUILD RESULT:
+** BUILD SUCCEEDED **
+
+2. VERIFICATION:
+- extension AppContainer found in Hush/AppContainer+MessageBuckets.swift ✅
+- registerHotScenePool NOT found in Hush/AppContainer.swift ✅
+- registerHotScenePool found in Hush/AppContainer+MessageBuckets.swift ✅
+
+3. LINE COUNTS:
+- AppContainer.swift: 2787 → 2678 (-109 lines)
+- AppContainer+MessageBuckets.swift: 112 lines (new)
+
+4. METHODS MOVED:
+- registerHotScenePool(_:)
+- messagesForConversation(_:)
+- appendMessage(_:toConversation:)
+- updateMessage(at:inConversation:content:)
+- updateMessagesDebugInfo(_:inConversation:debugInfoJSON:)
+- resolveURL(for:)
+- pushStreamingContent(conversationId:messageID:content:)
+- markUnreadCompletion(forConversation:)
+- clearUnreadCompletion(forConversation:)
+- clearActiveConversationUnreadIfAtTail()
+- syncPublishedSchedulerState()
+- mutateQuickBarState(_:) [private → internal]
+- syncQuickBarMessagesIfNeeded(conversationId:) [private → internal]
+
+5. ACCESS LEVEL CHANGES (necessary for cross-file extension):
+- messagesByConversationId: private → internal
+- hotScenePool: private → internal
+- messageAssetStore: private → internal
+- quickBarState: @Published private(set) → @Published var
+- runningConversationIds: @Published private(set) → @Published var
+- queuedConversationCounts: @Published private(set) → @Published var
+- unreadCompletions: @Published private(set) → @Published var
+
+6. PROPERTIES KEPT IN AppContainer.swift:
+- sidebarThreadsLoadApplyDelayOverride (stored property, cannot be in extension)
+- All @Published properties remain declared in main file

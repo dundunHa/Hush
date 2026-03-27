@@ -1,0 +1,1 @@
+Task 4 completed successfully: Created SettingsListRow.swift and EmptyStateView.swift in Hush/Views/Settings/Components. Both files use HushTheme tokens properly. Project builds successfully.

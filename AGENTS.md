@@ -64,7 +64,12 @@ xcodebuild test \
 Hush/
   HushApp.swift              # @main entry, WindowGroup + Quick Bar bootstrap
   HushAppDelegate.swift      # NSApplicationDelegate, status bar + Quick Bar panel lifecycle
-  AppContainer.swift         # Root ObservableObject (DI container, @MainActor, 2833 lines)
+  AppContainer.swift         # Root ObservableObject (DI container, @MainActor, 810 lines)
+  AppContainer+MessageBuckets.swift # Message bucket management logic
+  AppContainer+ProviderManagement.swift # Provider lifecycle and credential logic
+  AppContainer+Catalog.swift # Provider catalog and model discovery
+  AppContainer+ConversationLifecycle.swift # Conversation CRUD and state transitions
+  AppContainer+SendPipeline.swift # Message sending and streaming coordination
   RequestCoordinator.swift   # Multi-conversation concurrent request lifecycle & scheduling
   QuickBarPanelController.swift  # Floating NSPanel for system-wide Quick Bar
   QuickBarHotkeyController.swift # Global hotkey registration (Carbon HIToolbox)

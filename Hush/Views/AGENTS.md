@@ -7,12 +7,17 @@ SwiftUI + AppKit hybrid view layer. Chat uses NSTableView (AppKit) for performan
 ```
 Views/
   RootView.swift                        # Main window root (sidebar + chat detail)
-  ThemeChrome.swift                     # Window chrome + theme application (832 lines)
+  ThemeChrome.swift                     # Window chrome + theme application (51 lines)
   AppThemeEnvironment.swift             # Theme environment key injection
+  GlassEffectSurfaces.swift             # Reusable glass effect view modifiers and backgrounds
+  ChromeMaterials.swift                 # Reusable window material and blur effects
   Chat/
     ChatDetailPane.swift                # Active conversation view container
     ComposerDock.swift                  # Message input area (text field + send button, 519 lines)
     ChatConfigPopover.swift             # Model/temperature config popover (512 lines)
+    ChatParameterControls.swift         # Reusable temperature/parameter sliders and inputs
+    ComposerModelService.swift          # Logic for model selection in the composer
+    ProviderModelSelector.swift         # View for selecting provider and model in composer
     TypingIndicator.swift               # Animated typing dots
     RenderStyle+Theme.swift             # RenderStyle theme bridge
     AppKit/                             # NSTableView-based chat (see AppKit/AGENTS.md)
@@ -28,13 +33,23 @@ Views/
   Settings/
     SettingsWorkspaceView.swift         # Settings window root
     SettingsContentColumn.swift         # Settings content layout
-    AgentSettingsView.swift             # Agent preset management (718 lines)
-    ProviderSettingsView.swift          # Provider configuration + credential entry (1735 lines)
+    AgentSettingsView.swift             # Agent preset management (136 lines)
+    AgentPresetDetailSheet.swift        # Detailed editor for an agent preset
+    AgentPresetActions.swift            # Logic/Actions for agent preset management
+    ProviderSettingsView.swift          # Provider configuration + credential entry (494 lines)
+    ProviderSettingsDetailPane.swift    # Detailed editor for a provider's settings
+    ProviderSettingsActionBar.swift      # Save/Delete actions for provider settings
+    ProviderCatalogLogic.swift          # Logic for provider catalog and management
+    ProviderCatalogHelpers.swift        # Helper views and types for provider catalog
+    ProviderEditorState.swift           # State management for the provider editor
     PromptLibraryView.swift             # Prompt template editor
     GeneralSettingsView.swift           # App-level preferences
     DataSettingsView.swift              # Data export/import/erase
     ArchivedThreadsSettingsView.swift   # Archived conversation management
     QuickBarShortcutRecorder.swift      # Hotkey recording UI for Quick Bar
+    Components/                         # Reusable settings components
+      SettingsListRow.swift             # Standardized row for settings lists
+      EmptyStateView.swift              # Reusable empty state view for settings
   Previews/
     PreviewSupport.swift                # SwiftUI preview fixtures
     ChatComponentPreviews.swift         # Chat component preview definitions

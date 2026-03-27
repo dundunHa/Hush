@@ -12,11 +12,13 @@ struct QuickBarComposer: View {
 
     @State private var availableModels: [ModelDescriptor] = []
     @State private var catalogStateMessage: String?
-    @State private var isProviderHovered = false
-    @State private var isModelHovered = false
     @State private var isOpenSettingsHovered = false
     @State private var isSendHovered = false
     @FocusState private var isEditorFocused: Bool
+
+    private var modelService: ComposerModelService {
+        ComposerModelService(container: container, surfaceStyle: .quickBar)
+    }
 
     init(layoutStyle: QuickBarComposerLayoutStyle = .compact) {
         self.layoutStyle = layoutStyle
@@ -27,70 +29,7 @@ struct QuickBarComposer: View {
     }
 
     private var metrics: QuickBarComposerLayoutMetrics {
-        switch layoutStyle {
-        case .compact:
-            return QuickBarComposerLayoutMetrics(
-                shellCornerRadius: 34,
-                shellHorizontalInset: 18,
-                shellTopInset: 16,
-                shellBottomInset: 14,
-                editorMinHeight: 78,
-                editorMaxHeight: 116,
-                editorHorizontalPadding: 0,
-                editorVerticalPadding: 2,
-                placeholderHorizontalInset: 6,
-                placeholderTopInset: 6,
-                placeholderFontSize: 17,
-                editorSurfaceHorizontalInset: 0,
-                editorSurfaceVerticalInset: 0,
-                toolbarTopPadding: 8,
-                toolbarHorizontalInset: 0,
-                toolbarBottomPadding: 0,
-                toolbarMinHeight: 52,
-                toolbarSpacing: 10,
-                controlHitSize: 44,
-                providerLabelFontSize: 16,
-                modelIconSize: 15,
-                modelLabelFontSize: 16,
-                modelChevronSize: 11,
-                capsuleHorizontalPadding: 14,
-                capsuleVisualHeight: 36,
-                sendButtonHitSize: 44,
-                sendButtonVisualSize: 40,
-                sendIconSize: 17
-            )
-        case .expanded:
-            return QuickBarComposerLayoutMetrics(
-                shellCornerRadius: 18,
-                shellHorizontalInset: 0,
-                shellTopInset: 2,
-                shellBottomInset: 0,
-                editorMinHeight: 46,
-                editorMaxHeight: 64,
-                editorHorizontalPadding: 2,
-                editorVerticalPadding: 0,
-                placeholderHorizontalInset: 4,
-                placeholderTopInset: 1,
-                placeholderFontSize: 15,
-                editorSurfaceHorizontalInset: 3,
-                editorSurfaceVerticalInset: 2,
-                toolbarTopPadding: 2,
-                toolbarHorizontalInset: 3,
-                toolbarBottomPadding: 1,
-                toolbarMinHeight: 34,
-                toolbarSpacing: 6,
-                controlHitSize: 36,
-                providerLabelFontSize: 13,
-                modelIconSize: 14,
-                modelLabelFontSize: 13,
-                modelChevronSize: 10,
-                capsuleHorizontalPadding: 10,
-                capsuleVisualHeight: 26,
-                sendButtonHitSize: 36,
-                sendButtonVisualSize: 30,
-                sendIconSize: 15
-            )
-        }
+        QuickBarComposerLayoutMetrics.for(layoutStyle: layoutStyle)
     }
 
     private var isExpandedLayout: Bool {
@@ -205,8 +144,40 @@ struct QuickBarComposer: View {
 
     private var bottomBar: some View {
         HStack(alignment: .center, spacing: metrics.toolbarSpacing) {
-            providerMenu
-            modelMenu
+            ProviderModelSelector(
+                surfaceStyle: .quickBar,
+                providers: modelService.enabledProviders,
+                models: modelsForMenu,
+                selectedProviderID: container.quickBarState.providerID,
+                selectedProviderName: modelService.selectedProviderName,
+                selectedModelID: container.quickBarState.selectedModelID,
+                selectedModelDisplayName: modelService.selectedModelDisplayName(models: modelsForMenu),
+                showsProviderMenu: true,
+                providerHelpText: modelService.selectedProviderName,
+                modelHelpText: modelService.selectedModelDisplayName(models: modelsForMenu),
+                onSelectProvider: { provider in
+                    container.selectQuickBarProvider(id: provider.id)
+                },
+                onSelectModel: { model in
+                    container.selectQuickBarModel(id: model.id)
+                },
+                providerLabel: { title, isHovered in
+                    selectorLabel(
+                        iconName: "server.rack",
+                        text: title,
+                        fontSize: metrics.providerLabelFontSize,
+                        isHovered: isHovered
+                    )
+                },
+                modelLabel: { title, isHovered in
+                    selectorLabel(
+                        iconName: "sparkles",
+                        text: title,
+                        fontSize: metrics.modelLabelFontSize,
+                        isHovered: isHovered
+                    )
+                }
+            )
 
             if let catalogStateMessage, !catalogStateMessage.isEmpty {
                 Text(catalogStateMessage)
@@ -225,90 +196,28 @@ struct QuickBarComposer: View {
         .padding(.bottom, metrics.toolbarBottomPadding)
     }
 
-    private var enabledProviders: [ProviderConfiguration] {
-        container.settings.providerConfigurations.filter(\.isEnabled)
-    }
-
-    private var selectedProviderName: String {
-        let name = enabledProviders.first(where: { $0.id == container.quickBarState.providerID })?.name
-            ?? container.quickBarState.providerID
-        return name.isEmpty ? "Provider" : name
-    }
-
-    private var providerMenu: some View {
-        Menu {
-            ForEach(enabledProviders) { provider in
-                Button {
-                    container.selectQuickBarProvider(id: provider.id)
-                } label: {
-                    HStack(spacing: HushSpacing.sm) {
-                        if provider.id == container.quickBarState.providerID {
-                            Image(systemName: "checkmark")
-                        }
-                        Text(provider.name)
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: HushSpacing.xs + 2) {
-                Image(systemName: "server.rack")
-                    .font(.system(size: metrics.modelIconSize, weight: .semibold))
-                Text(selectedProviderName)
-                    .font(HushTypography.scaled(metrics.providerLabelFontSize, weight: .semibold))
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: metrics.modelChevronSize, weight: .semibold))
-            }
-            .foregroundStyle(palette.quickBarControlForeground)
-            .frame(minHeight: metrics.capsuleVisualHeight)
-            .padding(.horizontal, metrics.capsuleHorizontalPadding)
-            .background {
-                controlCapsuleSurface(isHovered: isProviderHovered)
-            }
-            .frame(minHeight: metrics.controlHitSize)
+    private func selectorLabel(
+        iconName: String,
+        text: String,
+        fontSize: CGFloat,
+        isHovered: Bool
+    ) -> some View {
+        HStack(spacing: HushSpacing.xs + 2) {
+            Image(systemName: iconName)
+                .font(.system(size: metrics.modelIconSize, weight: .semibold))
+            Text(text)
+                .font(HushTypography.scaled(fontSize, weight: .semibold))
+                .lineLimit(1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: metrics.modelChevronSize, weight: .semibold))
         }
-        .buttonStyle(.plain)
-        .menuStyle(.borderlessButton)
-        .help(selectedProviderName)
-        .onHover { isProviderHovered = $0 }
-    }
-
-    private var modelMenu: some View {
-        Menu {
-            ForEach(modelsForMenu) { model in
-                Button {
-                    container.selectQuickBarModel(id: model.id)
-                } label: {
-                    HStack(spacing: HushSpacing.sm) {
-                        if model.id == container.quickBarState.selectedModelID {
-                            Image(systemName: "checkmark")
-                        }
-                        Text(model.displayName)
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: HushSpacing.xs + 2) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: metrics.modelIconSize, weight: .semibold))
-                Text(selectedModelDisplayName)
-                    .font(HushTypography.scaled(metrics.modelLabelFontSize, weight: .semibold))
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: metrics.modelChevronSize, weight: .semibold))
-            }
-            .foregroundStyle(palette.quickBarControlForeground)
-            .frame(minHeight: metrics.capsuleVisualHeight)
-            .padding(.horizontal, metrics.capsuleHorizontalPadding)
-            .background {
-                controlCapsuleSurface(isHovered: isModelHovered)
-            }
-            .frame(minHeight: metrics.controlHitSize)
+        .foregroundStyle(palette.quickBarControlForeground)
+        .frame(minHeight: metrics.capsuleVisualHeight)
+        .padding(.horizontal, metrics.capsuleHorizontalPadding)
+        .background {
+            controlCapsuleSurface(isHovered: isHovered)
         }
-        .buttonStyle(.plain)
-        .menuStyle(.borderlessButton)
-        .help(selectedModelDisplayName)
-        .onHover { isModelHovered = $0 }
+        .frame(minHeight: metrics.controlHitSize)
     }
 
     private var sendButton: some View {
@@ -335,24 +244,11 @@ struct QuickBarComposer: View {
     }
 
     private var modelsForMenu: [ModelDescriptor] {
-        let models = availableModels.isEmpty ? fallbackModels() : availableModels
-        let filtered = models.filter {
-            $0.capabilities.contains(.text) || $0.supportedOutputs.contains(.text)
-        }
-        return filtered.isEmpty ? fallbackModels() : filtered
-    }
-
-    private var selectedModelDisplayName: String {
-        let name = modelsForMenu.first(where: { $0.id == container.quickBarState.selectedModelID })?.displayName
-            ?? container.quickBarState.selectedModelID
-        return name.isEmpty ? "Model" : name
+        modelService.modelsForMenu(availableModels: availableModels)
     }
 
     private var canSendDraft: Bool {
-        !container.quickBarState.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !container.isQueueFull
-            && container.hasConfiguredProvider
-            && !container.quickBarState.selectedModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        modelService.canSendDraft(draft: container.quickBarState.draft)
     }
 
     private var sendButtonForeground: Color {
@@ -362,229 +258,40 @@ struct QuickBarComposer: View {
         return canSendDraft ? palette.quickBarButtonForeground : palette.quickBarDisabledButtonForeground
     }
 
-    private var shellFill: Color {
-        palette.quickBarSurface.opacity(container.settings.theme.usesDarkAppearance ? 0.92 : 0.975)
-    }
-
-    private var shellStroke: Color {
-        palette.quickBarSurfaceStroke.opacity(container.settings.theme.usesDarkAppearance ? 0.22 : 0.48)
-    }
-
-    private var shellHighlight: LinearGradient {
-        return LinearGradient(
-            colors: [
-                Color.white.opacity(container.settings.theme.usesDarkAppearance ? 0.08 : 0.38),
-                .clear
-            ],
-            startPoint: .top,
-            endPoint: .center
+    private var shellSurface: some View {
+        QuickBarComposerVisuals.shellSurface(
+            isExpandedLayout: isExpandedLayout,
+            metrics: metrics,
+            palette: palette,
+            usesDarkAppearance: container.settings.theme.usesDarkAppearance
         )
     }
 
-    @ViewBuilder
-    private var shellSurface: some View {
-        if isExpandedLayout {
-            Color.clear
-        } else {
-            let shape = RoundedRectangle(cornerRadius: metrics.shellCornerRadius, style: .continuous)
-
-            ZStack {
-                QuickBarMinimalSurface(
-                    shape: shape,
-                    fill: shellFill,
-                    stroke: shellStroke,
-                    shadowColor: palette.splitPaneShadow,
-                    shadowOpacity: container.settings.theme.usesDarkAppearance ? 0.18 : 0.10,
-                    shadowRadius: 12,
-                    shadowYOffset: 2
-                )
-
-                shape
-                    .fill(shellHighlight)
-                    .clipShape(shape)
-
-                shape
-                    .strokeBorder(
-                        Color.white.opacity(
-                            container.settings.theme.usesDarkAppearance ? 0.04 : 0.16
-                        ),
-                        lineWidth: 0.5
-                    )
-            }
-        }
-    }
-
     private func controlCapsuleSurface(isHovered: Bool) -> some View {
-        QuickBarMinimalSurface(
-            shape: Capsule(style: .continuous),
-            fill: controlCapsuleFillColor(isHovered: isHovered),
-            stroke: controlCapsuleStrokeColor(isHovered: isHovered),
-            shadowColor: palette.splitPaneShadow,
-            shadowOpacity: isExpandedLayout ? 0 : (isHovered ? 0.08 : 0.04),
-            shadowRadius: isExpandedLayout ? 0 : 4,
-            shadowYOffset: isExpandedLayout ? 0 : 1
+        QuickBarComposerVisuals.controlCapsuleSurface(
+            isHovered: isHovered,
+            isExpandedLayout: isExpandedLayout,
+            palette: palette,
+            usesDarkAppearance: container.settings.theme.usesDarkAppearance
         )
     }
 
     private var sendButtonSurface: some View {
-        QuickBarMinimalSurface(
-            shape: Circle(),
-            fill: actionFillColor(
-                isHovered: isSendHovered,
-                isEnabled: canSendDraft,
-                isSending: container.isQuickBarSending
-            ),
-            stroke: actionStrokeColor(
-                isHovered: isSendHovered,
-                isEnabled: canSendDraft,
-                isSending: container.isQuickBarSending
-            ),
-            shadowColor: palette.splitPaneShadow,
-            shadowOpacity: actionShadowOpacity(
-                isHovered: isSendHovered,
-                isEnabled: canSendDraft,
-                isSending: container.isQuickBarSending
-            ),
-            shadowRadius: isSendHovered ? 8 : 6,
-            shadowYOffset: 2
+        QuickBarComposerVisuals.sendButtonSurface(
+            isHovered: isSendHovered,
+            isEnabled: canSendDraft,
+            isSending: container.isQuickBarSending,
+            isExpandedLayout: isExpandedLayout,
+            palette: palette,
+            usesDarkAppearance: container.settings.theme.usesDarkAppearance
         )
-    }
-
-    private func controlCapsuleFillColor(isHovered: Bool) -> Color {
-        if isExpandedLayout {
-            return palette.quickBarControlFill.opacity(
-                container.settings.theme.usesDarkAppearance
-                    ? (isHovered ? 0.18 : 0.10)
-                    : (isHovered ? 0.24 : 0.14)
-            )
-        }
-        return palette.quickBarControlFill.opacity(
-            container.settings.theme.usesDarkAppearance
-                ? (isHovered ? 0.34 : 0.18)
-                : (isHovered ? 0.56 : 0.34)
-        )
-    }
-
-    private func controlCapsuleStrokeColor(isHovered: Bool) -> Color {
-        if isExpandedLayout {
-            return palette.quickBarSurfaceStroke.opacity(
-                isHovered
-                    ? (container.settings.theme.usesDarkAppearance ? 0.12 : 0.18)
-                    : (container.settings.theme.usesDarkAppearance ? 0.08 : 0.12)
-            )
-        }
-        return palette.quickBarSurfaceStroke.opacity(
-            isHovered
-                ? (container.settings.theme.usesDarkAppearance ? 0.24 : 0.34)
-                : (container.settings.theme.usesDarkAppearance ? 0.16 : 0.24)
-        )
-    }
-
-    private func actionFillColor(
-        isHovered: Bool,
-        isEnabled: Bool,
-        isSending: Bool
-    ) -> Color {
-        if isSending {
-            return palette.destructiveActionBackground.opacity(
-                container.settings.theme.usesDarkAppearance
-                    ? (isHovered ? 0.96 : 0.88)
-                    : (isHovered ? 1 : 0.94)
-            )
-        }
-
-        if isEnabled {
-            return palette.quickBarButtonFill.opacity(
-                container.settings.theme.usesDarkAppearance
-                    ? (isHovered ? 0.98 : 0.92)
-                    : (isHovered ? 1 : 0.96)
-            )
-        }
-
-        return palette.quickBarDisabledButtonFill.opacity(
-            container.settings.theme.usesDarkAppearance ? 0.88 : 0.96
-        )
-    }
-
-    private func actionStrokeColor(
-        isHovered: Bool,
-        isEnabled: Bool,
-        isSending: Bool
-    ) -> Color {
-        if isSending {
-            return palette.destructiveActionForeground.opacity(isHovered ? 0.32 : 0.22)
-        }
-
-        if isEnabled {
-            return palette.quickBarButtonFill.opacity(isHovered ? 0.58 : 0.40)
-        }
-
-        return palette.quickBarSurfaceStroke.opacity(0.18)
-    }
-
-    private func actionShadowOpacity(
-        isHovered: Bool,
-        isEnabled: Bool,
-        isSending: Bool
-    ) -> Double {
-        if isExpandedLayout {
-            if isSending {
-                return isHovered ? 0.12 : 0.08
-            }
-
-            if isEnabled {
-                return isHovered ? 0.10 : 0.06
-            }
-
-            return 0.02
-        }
-
-        if isSending {
-            return isHovered ? 0.18 : 0.12
-        }
-
-        if isEnabled {
-            return isHovered ? 0.14 : 0.10
-        }
-
-        return 0.04
     }
 
     @MainActor
     private func refreshAvailableModels() async {
-        let providerID = container.quickBarState.providerID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !providerID.isEmpty else {
-            availableModels = fallbackModels()
-            catalogStateMessage = nil
-            return
-        }
-
-        let (models, _, error) = await container.availableModels(forProviderID: providerID)
-        let textModels = models.filter {
-            $0.capabilities.contains(.text) || $0.supportedOutputs.contains(.text)
-        }
-        availableModels = textModels.isEmpty ? fallbackModels() : textModels
-        catalogStateMessage = error
-
-        if !availableModels.contains(where: { $0.id == container.quickBarState.selectedModelID }),
-           let firstModel = availableModels.first
-        {
-            container.selectQuickBarModel(id: firstModel.id)
-        }
-    }
-
-    private func fallbackModels() -> [ModelDescriptor] {
-        let ids = [
-            container.quickBarState.selectedModelID.trimmingCharacters(in: .whitespacesAndNewlines),
-            container.settings.selectedModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-        ]
-        var uniqueIDs: [String] = []
-        for id in ids where !id.isEmpty && !uniqueIDs.contains(id) {
-            uniqueIDs.append(id)
-        }
-        return uniqueIDs.map {
-            ModelDescriptor(id: $0, displayName: $0, capabilities: [.text])
-        }
+        let result = await modelService.refreshAvailableModels()
+        availableModels = result.models
+        catalogStateMessage = result.catalogStateMessage
     }
 
     private func focusEditorIfNeeded() {

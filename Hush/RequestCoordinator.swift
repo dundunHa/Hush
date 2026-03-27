@@ -794,7 +794,11 @@ extension RequestCoordinator {
             guard let state = container.requestStates[requestID], !state.isTerminal else { return }
 
             let providerElapsed = ContinuousClock.now - startTime
-            logger.info("[Image] Provider responded: text=\(response.text.prefix(50)), attachments=\(response.attachments.count), elapsed=\(providerElapsed)")
+            let responsePreview = String(response.text.prefix(50))
+            let responseSummary =
+                "[Image] Provider responded: text=\(responsePreview), "
+                    + "attachments=\(response.attachments.count), elapsed=\(providerElapsed)"
+            logger.info("\(responseSummary, privacy: .public)")
 
             let attachments: [MessageAttachment]
             let assistantMessageID = UUID()

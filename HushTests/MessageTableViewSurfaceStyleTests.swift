@@ -5,6 +5,12 @@ import Testing
 
 @MainActor
 struct MessageTableViewSurfaceStyleTests {
+    private var quickBarReadableWidth: CGFloat {
+        QuickBarPanelReleaseMetrics.width
+            - (HushSpacing.sm + 2) * 2
+            - HushSpacing.xs * 2
+    }
+
     private func makeContainer() -> AppContainer {
         AppContainer.forTesting(
             messageRenderRuntime: MessageRenderRuntime(),
@@ -116,9 +122,9 @@ struct MessageTableViewSurfaceStyleTests {
             to: table
         )
 
-        #expect(abs(assistantContentFrame.width - 640) <= 0.5)
+        #expect(abs(assistantContentFrame.width - quickBarReadableWidth) <= 0.5)
         #expect(abs(assistantContentFrame.midX - table.bounds.midX) <= 0.5)
-        #expect(abs(userContentFrame.width - 640) <= 0.5)
+        #expect(abs(userContentFrame.width - quickBarReadableWidth) <= 0.5)
         #expect(abs(userContentFrame.midX - table.bounds.midX) <= 0.5)
         #expect(assistantCell.usesQuickBarRowPresentationForTesting)
         #expect(userCell.usesQuickBarRowPresentationForTesting)
