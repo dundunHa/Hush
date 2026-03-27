@@ -163,7 +163,7 @@ struct MessageBodyAlignmentTests {
         #expect(!cell.waitingBreathingAnimationActiveForTesting)
     }
 
-    @Test("Quick bar user messages stay on the shared readable column with leading text alignment")
+    @Test("Quick bar user messages stay on the trailing quick bar column")
     func quickBarUserMessagesUseTrailingEdgeOfCenteredReadableColumn() {
         let renderer = MessageContentRenderer(
             renderCache: RenderCache(capacity: 10),
@@ -193,9 +193,12 @@ struct MessageBodyAlignmentTests {
         #expect(abs(cell.contentContainerFrameForTesting.midX - hosted.container.bounds.midX) <= 0.5)
         #expect(cell.bodyTextAlignmentForTesting == .left)
         #expect(cell.metaTextAlignmentForTesting == .left)
-        #expect(abs(cell.bodyFrameForTesting.minX - (cell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
+        let expectedColumnWidth = floor(((cell.contentContainerFrameForTesting.width - HushSpacing.xl * 2) - 56) / 2)
+        #expect(abs(cell.bodyFrameForTesting.width - expectedColumnWidth) <= 0.5)
         #expect(abs(cell.bodyFrameForTesting.maxX - (cell.contentContainerFrameForTesting.maxX - HushSpacing.xl)) <= 0.5)
-        #expect(abs(cell.visibleTextFrameForTesting.minX - (cell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
+        #expect(abs(cell.bodyFrameForTesting.maxX - (cell.contentContainerFrameForTesting.maxX - HushSpacing.xl)) <= 0.5)
+        #expect(cell.bodyFrameForTesting.minX > cell.contentContainerFrameForTesting.midX)
+        #expect(abs(cell.visibleTextFrameForTesting.minX - cell.bodyFrameForTesting.minX) <= 0.5)
         #expect(abs(cell.metaFrameForTesting.minX - cell.bodyFrameForTesting.minX) <= 0.5)
         #expect(abs(cell.metaFrameForTesting.maxX - cell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(cell.bodyBorderWidthForTesting == 0)
@@ -203,7 +206,7 @@ struct MessageBodyAlignmentTests {
         #expect(!cell.waitingBreathingAnimationActiveForTesting)
     }
 
-    @Test("Quick bar assistant messages stay on the shared readable column with leading text alignment")
+    @Test("Quick bar assistant messages stay on the leading quick bar column")
     func quickBarAssistantMessagesStayLeftAlignedInsideCenteredReadableColumn() {
         let renderer = MessageContentRenderer(
             renderCache: RenderCache(capacity: 10),
@@ -233,9 +236,11 @@ struct MessageBodyAlignmentTests {
         #expect(abs(cell.contentContainerFrameForTesting.midX - hosted.container.bounds.midX) <= 0.5)
         #expect(cell.bodyTextAlignmentForTesting == .left)
         #expect(cell.metaTextAlignmentForTesting == .left)
+        let expectedColumnWidth = floor(((cell.contentContainerFrameForTesting.width - HushSpacing.xl * 2) - 56) / 2)
+        #expect(abs(cell.bodyFrameForTesting.width - expectedColumnWidth) <= 0.5)
         #expect(abs(cell.bodyFrameForTesting.minX - (cell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
-        #expect(abs(cell.bodyFrameForTesting.maxX - (cell.contentContainerFrameForTesting.maxX - HushSpacing.xl)) <= 0.5)
         #expect(abs(cell.visibleTextFrameForTesting.minX - (cell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
+        #expect(cell.bodyFrameForTesting.maxX < cell.contentContainerFrameForTesting.midX)
         #expect(abs(cell.metaFrameForTesting.minX - cell.bodyFrameForTesting.minX) <= 0.5)
         #expect(abs(cell.metaFrameForTesting.maxX - cell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(cell.bodyBorderWidthForTesting == 0)
@@ -243,8 +248,8 @@ struct MessageBodyAlignmentTests {
         #expect(!cell.waitingBreathingAnimationActiveForTesting)
     }
 
-    @Test("Quick bar long simple messages share one readable column without decoration")
-    func quickBarLongSimpleMessagesShareOneReadableColumnWithoutDecoration() {
+    @Test("Quick bar long simple messages use symmetric leading and trailing columns without decoration")
+    func quickBarLongSimpleMessagesUseSymmetricLeadingAndTrailingColumnsWithoutDecoration() {
         let renderer = MessageContentRenderer(
             renderCache: RenderCache(capacity: 10),
             mathCache: MathRenderCache(capacity: 10)
@@ -292,13 +297,12 @@ struct MessageBodyAlignmentTests {
         hostedUser.host.layoutSubtreeIfNeeded()
         hostedAssistant.host.layoutSubtreeIfNeeded()
 
-        let userLeadingGap = userCell.visibleTextFrameForTesting.minX - userCell.contentContainerFrameForTesting.minX
-        let assistantLeadingGap = assistantCell.visibleTextFrameForTesting.minX - assistantCell.contentContainerFrameForTesting.minX
+        let interColumnGap = userCell.bodyFrameForTesting.minX - assistantCell.bodyFrameForTesting.maxX
 
-        #expect(abs(userLeadingGap - assistantLeadingGap) <= 0.5)
-        #expect(abs(userCell.bodyFrameForTesting.minX - assistantCell.bodyFrameForTesting.minX) <= 0.5)
-        #expect(abs(userCell.bodyFrameForTesting.maxX - assistantCell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(abs(userCell.bodyFrameForTesting.width - assistantCell.bodyFrameForTesting.width) <= 0.5)
+        #expect(abs(interColumnGap - 56) <= 0.5)
+        #expect(abs(assistantCell.bodyFrameForTesting.minX - (assistantCell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
+        #expect(abs(userCell.bodyFrameForTesting.maxX - (userCell.contentContainerFrameForTesting.maxX - HushSpacing.xl)) <= 0.5)
         #expect(abs(userCell.metaFrameForTesting.maxX - userCell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(abs(assistantCell.metaFrameForTesting.minX - assistantCell.bodyFrameForTesting.minX) <= 0.5)
         #expect(userCell.bodyBorderWidthForTesting == 0)
@@ -307,8 +311,8 @@ struct MessageBodyAlignmentTests {
         #expect(assistantCell.bodyBackgroundAlphaForTesting == 0)
     }
 
-    @Test("Quick bar short simple messages keep mirrored visible edges on one readable column")
-    func quickBarShortSimpleMessagesKeepMirroredVisibleEdgesOnOneReadableColumn() {
+    @Test("Quick bar short simple messages keep symmetric leading and trailing columns")
+    func quickBarShortSimpleMessagesKeepSymmetricLeadingAndTrailingColumns() {
         let renderer = MessageContentRenderer(
             renderCache: RenderCache(capacity: 10),
             mathCache: MathRenderCache(capacity: 10)
@@ -348,13 +352,12 @@ struct MessageBodyAlignmentTests {
         hostedUser.host.layoutSubtreeIfNeeded()
         hostedAssistant.host.layoutSubtreeIfNeeded()
 
-        let userLeadingGap = userCell.visibleTextFrameForTesting.minX - userCell.contentContainerFrameForTesting.minX
-        let assistantLeadingGap = assistantCell.visibleTextFrameForTesting.minX - assistantCell.contentContainerFrameForTesting.minX
+        let interColumnGap = userCell.bodyFrameForTesting.minX - assistantCell.bodyFrameForTesting.maxX
 
-        #expect(abs(userLeadingGap - assistantLeadingGap) <= 0.5)
-        #expect(abs(userCell.bodyFrameForTesting.minX - assistantCell.bodyFrameForTesting.minX) <= 0.5)
-        #expect(abs(userCell.bodyFrameForTesting.maxX - assistantCell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(abs(userCell.bodyFrameForTesting.width - assistantCell.bodyFrameForTesting.width) <= 0.5)
+        #expect(abs(interColumnGap - 56) <= 0.5)
+        #expect(abs(userCell.visibleTextFrameForTesting.minX - userCell.bodyFrameForTesting.minX) <= 0.5)
+        #expect(abs(assistantCell.visibleTextFrameForTesting.minX - assistantCell.bodyFrameForTesting.minX) <= 0.5)
         #expect(abs(userCell.metaFrameForTesting.maxX - userCell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(abs(assistantCell.metaFrameForTesting.minX - assistantCell.bodyFrameForTesting.minX) <= 0.5)
         #expect(userCell.bodyBorderWidthForTesting == 0)
@@ -400,8 +403,8 @@ struct MessageBodyAlignmentTests {
         #expect(abs(cell.metaFrameForTesting.width - cell.bodyFrameForTesting.width) <= 0.5)
     }
 
-    @Test("Reused quick bar cells reapply shared readable column geometry after rich quick bar content")
-    func reusedQuickBarCellsReapplySharedReadableColumnGeometryAfterRichQuickBarContent() {
+    @Test("Reused quick bar cells reapply trailing column geometry after rich quick bar content")
+    func reusedQuickBarCellsReapplyTrailingColumnGeometryAfterRichQuickBarContent() {
         let renderer = MessageContentRenderer(
             renderCache: RenderCache(capacity: 10),
             mathCache: MathRenderCache(capacity: 10)
@@ -450,8 +453,8 @@ struct MessageBodyAlignmentTests {
         #expect(abs(cell.contentContainerFrameForTesting.width - 640) <= 0.5)
         #expect(cell.bodyTextAlignmentForTesting == .left)
         #expect(cell.metaTextAlignmentForTesting == .left)
-        #expect(abs(cell.bodyFrameForTesting.minX - (cell.contentContainerFrameForTesting.minX + HushSpacing.xl)) <= 0.5)
         #expect(abs(cell.bodyFrameForTesting.maxX - (cell.contentContainerFrameForTesting.maxX - HushSpacing.xl)) <= 0.5)
+        #expect(cell.bodyFrameForTesting.minX > cell.contentContainerFrameForTesting.midX)
         #expect(abs(cell.metaFrameForTesting.minX - cell.bodyFrameForTesting.minX) <= 0.5)
         #expect(abs(cell.metaFrameForTesting.maxX - cell.bodyFrameForTesting.maxX) <= 0.5)
         #expect(cell.bodyBorderWidthForTesting == 0)

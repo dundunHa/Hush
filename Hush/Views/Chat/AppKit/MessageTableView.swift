@@ -81,7 +81,14 @@ typealias AnyMessageTableRowView = NSView & MessageTableRowView
 private enum QuickBarTranscriptMetrics {
     static let contentMaxWidth: CGFloat = 640
     static let sideInset: CGFloat = HushSpacing.xl
+    static let sideColumnGap: CGFloat = 56
     static let metaTopSpacing: CGFloat = 4
+}
+
+private enum QuickBarBodyPresentationMode: Equatable {
+    case fullWidth
+    case leadingColumn
+    case trailingColumn
 }
 
 @MainActor
@@ -3572,11 +3579,15 @@ final class QuickBarMessageCellView: NSTableCellView, MessageTableRowView {
     private var bodyBottomConstraint: NSLayoutConstraint!
     private var bodyLeadingFullWidthConstraint: NSLayoutConstraint!
     private var bodyTrailingFullWidthConstraint: NSLayoutConstraint!
+    private var bodyLeadingColumnConstraint: NSLayoutConstraint!
+    private var bodyTrailingColumnConstraint: NSLayoutConstraint!
+    private var bodyWidthConstraint: NSLayoutConstraint!
     private var previewTopConstraint: NSLayoutConstraint!
     private var previewLeadingConstraint: NSLayoutConstraint!
     private var previewTrailingConstraint: NSLayoutConstraint!
     private var previewBottomConstraint: NSLayoutConstraint!
     private var isPreviewVisible = false
+    private var currentPresentationMode: QuickBarBodyPresentationMode = .fullWidth
     private var theme: AppTheme = .graphiteGlass {
         didSet { applyPresentationPalette() }
     }
@@ -3670,6 +3681,15 @@ final class QuickBarMessageCellView: NSTableCellView, MessageTableRowView {
             equalTo: contentContainer.trailingAnchor,
             constant: -QuickBarTranscriptMetrics.sideInset
         )
+        bodyLeadingColumnConstraint = bodyTextView.leadingAnchor.constraint(
+            equalTo: contentContainer.leadingAnchor,
+            constant: QuickBarTranscriptMetrics.sideInset
+        )
+        bodyTrailingColumnConstraint = bodyTextView.trailingAnchor.constraint(
+            equalTo: contentContainer.trailingAnchor,
+            constant: -QuickBarTranscriptMetrics.sideInset
+        )
+        bodyWidthConstraint = bodyTextView.widthAnchor.constraint(equalToConstant: 0)
         previewTopConstraint = attachmentPreviewView.topAnchor.constraint(equalTo: bodyTextView.bottomAnchor, constant: HushSpacing.sm)
         previewLeadingConstraint = attachmentPreviewView.leadingAnchor.constraint(equalTo: bodyTextView.leadingAnchor)
         previewTrailingConstraint = attachmentPreviewView.trailingAnchor.constraint(equalTo: bodyTextView.trailingAnchor)
@@ -4049,7 +4069,31 @@ final class QuickBarMessageCellView: NSTableCellView, MessageTableRowView {
         MessageTableCellView.timeString(from: row.message.createdAt)
     }
 
+    private func shouldUseAssistantColumn(for row: MessageTableView.RowModel) -> Bool {
+        guard row.message.role == .assistant else { return false }
+        guard !row.isStreaming else { return false }
+        guard row.message.attachments.isEmpty else { return false }
+
+        let content = row.message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else { return false }
+        guard !MessageTableCellView.containsClosedMathSegment(content) else { return false }
+        guard !MessageTableCellView.containsStableMarkdownCue(content) else { return false }
+        return true
+    }
+
+    private func presentationMode(for row: MessageTableView.RowModel) -> QuickBarBodyPresentationMode {
+        if row.message.role == .user, row.message.attachments.isEmpty {
+            return .trailingColumn
+        }
+        if shouldUseAssistantColumn(for: row) || isAssistantWaitingState(for: row, content: row.message.content) {
+            return .leadingColumn
+        }
+        return .fullWidth
+    }
+
     private func applyPresentation(for row: MessageTableView.RowModel, maxBodyWidth: CGFloat) {
+        let mode = presentationMode(for: row)
+        currentPresentationMode = mode
         let alignment = plainTextAlignment(for: row)
         bodyTextView.alignment = alignment
         bodyTextView.textContainerInset = .zero
@@ -4063,12 +4107,36 @@ final class QuickBarMessageCellView: NSTableCellView, MessageTableRowView {
 
         bodyLeadingFullWidthConstraint.isActive = false
         bodyTrailingFullWidthConstraint.isActive = false
-        bodyLeadingFullWidthConstraint.isActive = true
-        bodyTrailingFullWidthConstraint.isActive = true
-        bodyTextView.prepareMeasurementWidth(maxBodyWidth)
+        bodyLeadingColumnConstraint.isActive = false
+        bodyTrailingColumnConstraint.isActive = false
+        bodyWidthConstraint.isActive = false
+
+        switch mode {
+        case .fullWidth:
+            bodyLeadingFullWidthConstraint.isActive = true
+            bodyTrailingFullWidthConstraint.isActive = true
+            bodyTextView.prepareMeasurementWidth(maxBodyWidth)
+        case .leadingColumn:
+            bodyLeadingColumnConstraint.isActive = true
+            bodyWidthConstraint.constant = preferredSideColumnWidth(maxBodyWidth: maxBodyWidth)
+            bodyWidthConstraint.isActive = true
+            bodyTextView.prepareMeasurementWidth(bodyWidthConstraint.constant)
+        case .trailingColumn:
+            bodyTrailingColumnConstraint.isActive = true
+            bodyWidthConstraint.constant = preferredSideColumnWidth(maxBodyWidth: maxBodyWidth)
+            bodyWidthConstraint.isActive = true
+            bodyTextView.prepareMeasurementWidth(bodyWidthConstraint.constant)
+        }
 
         updateWaitingBreathingAnimation(
             isActive: isAssistantWaitingState(for: row, content: row.message.content)
+        )
+    }
+
+    private func preferredSideColumnWidth(maxBodyWidth: CGFloat) -> CGFloat {
+        max(
+            1,
+            floor((maxBodyWidth - QuickBarTranscriptMetrics.sideColumnGap) / 2)
         )
     }
 
@@ -4102,10 +4170,14 @@ final class QuickBarMessageCellView: NSTableCellView, MessageTableRowView {
     }
 
     private func resetPresentation() {
+        currentPresentationMode = .fullWidth
         metaLabel.alignment = .left
         bodyTextView.alignment = .left
         bodyTextView.textContainerInset = .zero
         bodyTextView.cachedIntrinsicHeight = nil
+        bodyLeadingColumnConstraint?.isActive = false
+        bodyTrailingColumnConstraint?.isActive = false
+        bodyWidthConstraint?.isActive = false
         bodyLeadingFullWidthConstraint?.isActive = true
         bodyTrailingFullWidthConstraint?.isActive = true
         bodyTextView.layer?.cornerRadius = 0
