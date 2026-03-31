@@ -35,8 +35,8 @@ struct StreamingCompletePrewarmTests {
         let container = AppContainer.forTesting(
             settings: settings,
             registry: registry,
-            persistence: persistence,
-            messageRenderRuntime: runtime
+            messageRenderRuntime: runtime,
+            persistence: persistence
         )
         container.resetConversation()
         return (container, persistence, renderCache)

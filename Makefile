@@ -2,8 +2,8 @@ SHELL := /bin/bash
 
 PROJECT ?= Hush.xcodeproj
 SCHEME ?= Hush
-DERIVED_DATA ?= /tmp/hush-dd
-SPM_DIR ?= /tmp/hush-spm
+DERIVED_DATA ?= .build/DerivedData
+SPM_DIR ?= .build/SourcePackages
 APP_PATH ?= $(DERIVED_DATA)/Build/Products/Debug/Hush.app
 RELEASE_APP_PATH ?= $(DERIVED_DATA)/Build/Products/Release/Hush.app
 RELEASE_DIR ?= build/release
@@ -18,7 +18,7 @@ XCODEBUILD ?= xcodebuild
 HOST_ARCH ?= $(shell uname -m)
 XCODE_DESTINATION ?= platform=macOS,arch=$(HOST_ARCH)
 XCODE_RELEASE_DESTINATION ?= platform=macOS
-TEST_RESULTS_DIR ?= /tmp/hush-test-results
+TEST_RESULTS_DIR ?= .build/TestResults
 XCCOV ?= xcrun xccov
 XCTRACE_ARGS ?=
 SPM_CACHE_BOOTSTRAP ?= scripts/seed-source-packages.sh

@@ -101,7 +101,7 @@ extension AppContainer {
                 }
 
                 loadedSettings = jsonSettings
-            } else {
+            } else if let existingPrefs = existingPrefs {
                 let snapshot = existingPrefs.toAppPreferences()
                 loadedSettings.selectedProviderID = snapshot.selectedProviderID
                 loadedSettings.selectedModelID = snapshot.selectedModelID
@@ -179,6 +179,7 @@ extension AppContainer {
         oldestLoadedOrderIndex: Int? = nil,
         hasMoreSidebarThreads: Bool = false,
         sidebarThreadsCursor: SidebarThreadsCursor? = nil,
+        streamingPresentationPolicyOverride: StreamingPresentationPolicy? = nil,
         enableStartupPrewarm: Bool = false
     ) -> AppContainer {
         var testRegistry = registry ?? ProviderRegistry()
@@ -209,6 +210,7 @@ extension AppContainer {
             credentialResolver: credentialResolver,
             messageAssetStore: messageAssetStore
         )
+        container.streamingPresentationPolicyOverride = streamingPresentationPolicyOverride
         _ = enableStartupPrewarm
         return container
     }

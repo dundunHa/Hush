@@ -95,14 +95,14 @@ struct TailPrewarmTests {
         let container = AppContainer.forTesting(
             settings: .testDefault,
             registry: registry,
+            messageRenderRuntime: runtime,
             persistence: coordinator,
             activeConversationId: conversationA,
             messages: messagesA,
             sidebarThreads: [
                 ConversationSidebarThread(id: conversationA, title: "A", lastActivityAt: .now),
                 ConversationSidebarThread(id: conversationB, title: "B", lastActivityAt: .now)
-            ],
-            messageRenderRuntime: runtime
+            ]
         )
 
         controller.update(container: container, theme: container.settings.theme)
@@ -188,14 +188,14 @@ struct TailPrewarmTests {
         let container = AppContainer.forTesting(
             settings: .testDefault,
             registry: registry,
+            messageRenderRuntime: runtime,
             persistence: coordinator,
             activeConversationId: conversationA,
             messages: messagesA,
             sidebarThreads: [
                 ConversationSidebarThread(id: conversationA, title: "A", lastActivityAt: .now),
                 ConversationSidebarThread(id: conversationB, title: "B", lastActivityAt: .now)
-            ],
-            messageRenderRuntime: runtime
+            ]
         )
 
         controller.update(container: container, theme: container.settings.theme)
@@ -272,14 +272,14 @@ struct TailPrewarmTests {
         let container = AppContainer.forTesting(
             settings: .testDefault,
             registry: registry,
+            messageRenderRuntime: runtime,
             persistence: coordinator,
             activeConversationId: conversationA,
             messages: messagesA,
             sidebarThreads: [
                 ConversationSidebarThread(id: conversationA, title: "A", lastActivityAt: .now),
                 ConversationSidebarThread(id: conversationB, title: "B", lastActivityAt: .now)
-            ],
-            messageRenderRuntime: runtime
+            ]
         )
 
         controller.update(container: container, theme: container.settings.theme)

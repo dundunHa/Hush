@@ -40,11 +40,11 @@ struct SwitchAwayPrewarmTests {
         let container = AppContainer.forTesting(
             settings: .testDefault,
             registry: registry,
+            messageRenderRuntime: runtime,
             persistence: coordinator,
             activeConversationId: conversationA,
             messages: [],
-            sidebarThreads: sidebarThreads,
-            messageRenderRuntime: runtime
+            sidebarThreads: sidebarThreads
         )
 
         container.activateConversation(conversationId: conversationB)
@@ -117,11 +117,11 @@ struct SwitchAwayPrewarmTests {
         let container = AppContainer.forTesting(
             settings: .testDefault,
             registry: registry,
+            messageRenderRuntime: runtime,
             persistence: coordinator,
             activeConversationId: conversationA,
             messages: [],
-            sidebarThreads: sidebarThreads,
-            messageRenderRuntime: runtime
+            sidebarThreads: sidebarThreads
         )
 
         container.activateConversation(conversationId: conversationB)
