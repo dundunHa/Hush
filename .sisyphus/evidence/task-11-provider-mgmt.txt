@@ -1,0 +1,49 @@
+Task 11: Extract AppContainer+ProviderManagement.swift
+=======================================================
+
+BUILD: ** BUILD SUCCEEDED **
+
+Line counts:
+  AppContainer.swift: 2289 (was ~2678, reduced by ~389 lines)
+  AppContainer+ProviderManagement.swift: 388 (new file)
+
+Methods in new file:
+  - openAISettingsSnapshot()
+  - saveOpenAISettings(_:)
+  - saveProviderProfile(_:)
+  - setDefaultProvider(id:)
+  - removeProviderProfile(id:)
+  - selectProvider(id:)
+  - cachedModels(forProviderID:)
+  - catalogRefreshStatus(forProviderID:)
+  - availableModels(forProviderID:)
+  - previewModels(for:)
+  - refreshCatalog(forProviderID:)
+  - ensureProviderRegistered(for:)
+  - selectDeterministicFallback()
+  - fetchAgentPresets()
+  - saveAgentPreset(_:)
+  - deleteAgentPreset(id:)
+  - fetchPromptTemplates()
+  - savePromptTemplate(_:)
+  - deletePromptTemplate(id:)
+  - resolveProvider(for:)
+  - previewProvider(for:)
+  - makeProviderRuntime(id:type:)
+  - triggerCatalogRefreshIfNeeded(providerID:)
+  - selectDeterministicFallbackProvider()
+  - fallbackProviderConfiguration()
+  - normalizeEndpoint(_:)
+  - normalizedEndpoint(_:for:)
+
+Access control changes:
+  - registry: private(set) → internal(set) (needed for ProviderRegistry struct mutation from extension file)
+  - resolveProvider, previewProvider, makeProviderRuntime: private → internal
+  - triggerCatalogRefreshIfNeeded: private → internal
+  - selectDeterministicFallbackProvider: private → internal
+  - fallbackProviderConfiguration, normalizeEndpoint, normalizedEndpoint: private extension → internal
+
+Verification:
+  grep "func saveProviderProfile" → found in new file
+  grep "func fetchAgentPresets|saveAgentPreset|deleteAgentPreset" → all found in new file
+  grep count in AppContainer.swift for moved methods → 0 (all removed)

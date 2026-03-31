@@ -147,6 +147,155 @@ final class RequestCoordinator {
         }) else { return nil }
         return container.requestStates[requestID]
     }
+
+    private func shouldPersistConversation(for requestID: RequestID) -> Bool {
+        sessionSnapshots[requestID]?.persistenceBehavior == .persistent
+    }
+
+    private func shouldPersistConversation(for snapshot: QueueItemSnapshot) -> Bool {
+        snapshot.persistenceBehavior == .persistent
+    }
+}
+
+// MARK: - Message Trace
+
+extension RequestCoordinator {
+    private func initializeDebugInfo(for snapshot: QueueItemSnapshot) {
+        sessionDebugInfo[snapshot.id] = MessageDebugInfo(
+            requestID: snapshot.id.description,
+            providerID: snapshot.providerID,
+            modelID: snapshot.modelID,
+            traceEvents: [
+                makeTraceEvent(
+                    category: .lifecycle,
+                    title: "User message queued",
+                    summary: "Queued request for provider \(snapshot.providerID)",
+                    sections: traceSections([
+                        ("Prompt", trimmedDebugPreview(snapshot.prompt))
+                    ])
+                )
+            ]
+        )
+        syncDebugInfoToMessages(requestID: snapshot.id)
+    }
+
+    private func mergeDebugInfo(
+        _ debugInfo: MessageDebugInfo,
+        for requestID: RequestID
+    ) {
+        mutateDebugInfo(for: requestID) { current in
+            current = current.merged(with: debugInfo)
+        }
+    }
+
+    private func appendTraceEvent(
+        for requestID: RequestID,
+        category: MessageTraceEventCategory,
+        title: String,
+        summary: String? = nil,
+        sections: [MessageTraceSection] = []
+    ) {
+        mutateDebugInfo(for: requestID) { current in
+            current = current.appendingTraceEvent(
+                makeTraceEvent(
+                    category: category,
+                    title: title,
+                    summary: summary,
+                    sections: sections
+                )
+            )
+        }
+    }
+
+    private func mutateDebugInfo(
+        for requestID: RequestID,
+        _ mutate: (inout MessageDebugInfo) -> Void
+    ) {
+        guard var current = sessionDebugInfo[requestID]
+            ?? (sessionSnapshots[requestID] != nil ? MessageDebugInfo() : nil)
+        else {
+            return
+        }
+        mutate(&current)
+        sessionDebugInfo[requestID] = current
+        syncDebugInfoToMessages(requestID: requestID)
+    }
+
+    private func syncDebugInfoToMessages(requestID: RequestID) {
+        guard let container,
+              let snapshot = sessionSnapshots[requestID],
+              let debugInfo = sessionDebugInfo[requestID]
+        else {
+            return
+        }
+        let debugInfoJSON = debugInfo.prettyJSONString()
+        var messageIDs: [UUID] = [snapshot.userMessageID]
+        if let assistantMessageID = container.requestStates[requestID]?.assistantMessageID {
+            messageIDs.append(assistantMessageID)
+        }
+        let uniqueMessageIDs = Array(Set(messageIDs))
+        container.updateMessagesDebugInfo(
+            uniqueMessageIDs,
+            inConversation: snapshot.conversationId,
+            debugInfoJSON: debugInfoJSON
+        )
+        if shouldPersistConversation(for: requestID) {
+            for messageID in uniqueMessageIDs {
+                try? persistence?.updateMessageDebugInfo(
+                    messageId: messageID.uuidString,
+                    debugInfoJSON: debugInfoJSON
+                )
+            }
+        }
+    }
+
+    private func currentDebugInfoJSON(for requestID: RequestID) -> String? {
+        sessionDebugInfo[requestID]?.prettyJSONString()
+    }
+
+    private func finalizedDebugInfoJSON(
+        for requestID: RequestID,
+        errorDescription: String,
+        fallbackJSON: String?
+    ) -> String? {
+        if let fallback = MessageDebugInfo.decode(from: fallbackJSON) {
+            mergeDebugInfo(fallback, for: requestID)
+        }
+
+        mutateDebugInfo(for: requestID) { current in
+            current.providerError = errorDescription
+            current = current.appendingTraceEvent(
+                makeTraceEvent(
+                    category: .error,
+                    title: "Request failed",
+                    summary: errorDescription
+                )
+            )
+        }
+
+        return currentDebugInfoJSON(for: requestID) ?? fallbackJSON
+    }
+
+    private func makeTraceEvent(
+        category: MessageTraceEventCategory,
+        title: String,
+        summary: String? = nil,
+        sections: [MessageTraceSection] = []
+    ) -> MessageTraceEvent {
+        MessageTraceEvent(
+            category: category,
+            title: title,
+            summary: summary,
+            sections: sections
+        )
+    }
+
+    private func traceSections(_ pairs: [(String, String?)]) -> [MessageTraceSection] {
+        pairs.compactMap { title, content in
+            guard let content, !content.isEmpty else { return nil }
+            return MessageTraceSection(title: title, content: content)
+        }
+    }
 }
 
 // MARK: - Message Trace
@@ -337,7 +486,9 @@ extension RequestCoordinator {
         flushPendingUIUpdate(requestID: requestID, contentSource: .accumulated)
         cleanupFlushState(requestID: requestID)
 
-        if let msgID = container.requestStates[requestID]?.assistantMessageID {
+        if shouldPersistConversation(for: requestID),
+           let msgID = container.requestStates[requestID]?.assistantMessageID
+        {
             try? persistence?.finalizeAssistantMessage(
                 messageId: msgID.uuidString,
                 content: container.requestStates[requestID]?.accumulatedText ?? "",
@@ -351,7 +502,7 @@ extension RequestCoordinator {
                 debugInfoJSON: stoppedDebugInfoJSON
             )
             container.appendMessage(stoppedMessage, toConversation: owningConversationId)
-            if !owningConversationId.isEmpty {
+            if shouldPersistConversation(for: requestID), !owningConversationId.isEmpty {
                 try? persistence?.persistSystemMessage(
                     stoppedMessage,
                     conversationId: owningConversationId,
@@ -393,7 +544,9 @@ extension RequestCoordinator {
         flushPendingUIUpdate(requestID: requestID, contentSource: .accumulated)
         cleanupFlushState(requestID: requestID)
 
-        if let msgID = container.requestStates[requestID]?.assistantMessageID {
+        if shouldPersistConversation(for: requestID),
+           let msgID = container.requestStates[requestID]?.assistantMessageID
+        {
             try? persistence?.finalizeAssistantMessage(
                 messageId: msgID.uuidString,
                 content: container.requestStates[requestID]?.accumulatedText ?? "",
@@ -403,7 +556,7 @@ extension RequestCoordinator {
 
         let isBackground = owningConversationId != container.activeConversationId
         let finalAssistantContent = state.accumulatedText
-        if isBackground {
+        if isBackground, shouldPersistConversation(for: requestID) {
             container.scheduleStreamingCompletePrewarmIfNeeded(
                 conversationID: owningConversationId,
                 finalAssistantContent: finalAssistantContent
@@ -440,7 +593,9 @@ extension RequestCoordinator {
         flushPendingUIUpdate(requestID: requestID, contentSource: .accumulated)
         cleanupFlushState(requestID: requestID)
 
-        if let msgID = container.requestStates[requestID]?.assistantMessageID {
+        if shouldPersistConversation(for: requestID),
+           let msgID = container.requestStates[requestID]?.assistantMessageID
+        {
             try? persistence?.finalizeAssistantMessage(
                 messageId: msgID.uuidString,
                 content: container.requestStates[requestID]?.accumulatedText ?? "",
@@ -455,7 +610,7 @@ extension RequestCoordinator {
         )
         container.appendMessage(errorMessage, toConversation: owningConversationId)
         logger.info("[Request] Error message added to chat: \(errorDescription)")
-        if !owningConversationId.isEmpty {
+        if shouldPersistConversation(for: requestID), !owningConversationId.isEmpty {
             try? persistence?.persistSystemMessage(
                 errorMessage,
                 conversationId: owningConversationId,
@@ -778,7 +933,11 @@ extension RequestCoordinator {
             guard let state = container.requestStates[requestID], !state.isTerminal else { return }
 
             let providerElapsed = ContinuousClock.now - startTime
-            logger.info("[Image] Provider responded: text=\(response.text.prefix(50)), attachments=\(response.attachments.count), elapsed=\(providerElapsed)")
+            let responsePreview = String(response.text.prefix(50))
+            let responseSummary =
+                "[Image] Provider responded: text=\(responsePreview), "
+                    + "attachments=\(response.attachments.count), elapsed=\(providerElapsed)"
+            logger.info("\(responseSummary, privacy: .public)")
 
             let attachments: [MessageAttachment]
             let assistantMessageID = UUID()
@@ -815,7 +974,7 @@ extension RequestCoordinator {
             container.requestStates[requestID]?.assistantMessageID = assistantMessage.id
             container.appendMessage(assistantMessage, toConversation: snapshot.conversationId)
 
-            if !snapshot.conversationId.isEmpty {
+            if shouldPersistConversation(for: snapshot), !snapshot.conversationId.isEmpty {
                 try persistence?.persistSystemMessage(
                     assistantMessage,
                     conversationId: snapshot.conversationId,
@@ -823,7 +982,9 @@ extension RequestCoordinator {
                 )
             }
 
-            if snapshot.conversationId != container.activeConversationId {
+            if shouldPersistConversation(for: snapshot),
+               snapshot.conversationId != container.activeConversationId
+            {
                 container.markUnreadCompletion(forConversation: snapshot.conversationId)
             }
 
@@ -1036,7 +1197,7 @@ extension RequestCoordinator {
         let owningConversationId = container.requestStates[requestID]!.conversationId
         let isActiveConversation = owningConversationId == container.activeConversationId
 
-        if !isActiveConversation {
+        if !isActiveConversation, shouldPersistConversation(for: requestID) {
             container.markUnreadCompletion(forConversation: owningConversationId)
         }
 
@@ -1071,7 +1232,7 @@ extension RequestCoordinator {
             flushState.latestPresentedLength = initialPresented.count
         }
 
-        if !owningConversationId.isEmpty {
+        if shouldPersistConversation(for: requestID), !owningConversationId.isEmpty {
             let persistedDraft = ChatMessage(
                 id: newMessage.id,
                 role: .assistant,
@@ -1371,6 +1532,7 @@ extension RequestCoordinator {
     private func throttledStreamingFlush(requestID: RequestID, messageId: String, content _: String) {
         guard let container else { return }
         guard let flushState = sessionFlushState[requestID] else { return }
+        guard shouldPersistConversation(for: requestID) else { return }
         let now = ContinuousClock.now
         let interval = SessionFlushState.streamingFlushInterval
         if let lastFlush = flushState.lastStreamingFlush, now - lastFlush < interval {

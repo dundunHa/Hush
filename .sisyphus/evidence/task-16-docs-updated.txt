@@ -1,0 +1,156 @@
+Task 16: Update AGENTS.md documentation
+Hierarchy and architecture sections updated in root AGENTS.md, Hush/HushCore/AGENTS.md, and Hush/Views/AGENTS.md
+Verified new files presence and build success.
+On branch dev
+Your branch is ahead of 'origin/dev' by 16 commits.
+  (use "git push" to publish your local commits)
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   .sisyphus/boulder.json
+	modified:   .sisyphus/plans/hushcore-views-refactor.md
+	modified:   AGENTS.md
+	modified:   Hush/HushCore/AGENTS.md
+	modified:   Hush/Views/AGENTS.md
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	.sisyphus/evidence/task-16-docs-updated.txt
+
+no changes added to commit (use "git add" and/or "git commit -a")
+diff --git a/.sisyphus/boulder.json b/.sisyphus/boulder.json
+index a6916fa..8908040 100644
+--- a/.sisyphus/boulder.json
++++ b/.sisyphus/boulder.json
+@@ -11,7 +11,8 @@
+     "ses_2cf917962ffegSbmj232I0rKkm",
+     "ses_2cf913582ffeWXzDnL4w6GF1kW",
+     "ses_2cf90a471ffeWoIlFG7Uu2A4y5",
+-    "ses_2cf7bf6f1ffeFnx3DvdJJpuM0M"
++    "ses_2cf7bf6f1ffeFnx3DvdJJpuM0M",
++    "ses_2cf276bddffeIwT1206d19eRcP"
+   ],
+   "plan_name": "hushcore-views-refactor",
+   "agent": "atlas",
+@@ -29,10 +30,10 @@
+       "task_key": "todo:2",
+       "task_label": "2",
+       "task_title": "Delete Orphan Root HushCore/PerfTrace.swift",
+-      "session_id": "ses_2cf7bf6f1ffeFnx3DvdJJpuM0M",
++      "session_id": "ses_2cf276bddffeIwT1206d19eRcP",
+       "agent": "Sisyphus-Junior",
+-      "category": "unspecified-high",
+-      "updated_at": "2026-03-27T18:24:01.056Z"
++      "category": "quick",
++      "updated_at": "2026-03-27T19:52:02.956Z"
+     },
+     "todo:3": {
+       "task_key": "todo:3",
+diff --git a/.sisyphus/plans/hushcore-views-refactor.md b/.sisyphus/plans/hushcore-views-refactor.md
+index 128030c..3a71d56 100644
+--- a/.sisyphus/plans/hushcore-views-refactor.md
++++ b/.sisyphus/plans/hushcore-views-refactor.md
+@@ -959,7 +959,7 @@ Max Concurrent: 5 (Wave 2)
+   - Files: `AppContainer+SendPipeline.swift` (new), `AppContainer.swift` (trimmed), `Hush.xcodeproj/project.pbxproj`
+   - Pre-commit: `make build && make test`
+ 
+-- [ ] 15. Remove SwiftLint Disables + Verify File Sizes
++- [x] 15. Remove SwiftLint Disables + Verify File Sizes
+ 
+   **What to do**:
+   - Remove `// swiftlint:disable file_length type_body_length` from `Hush/AppContainer.swift` (line 7)
+diff --git a/AGENTS.md b/AGENTS.md
+index 8949b79..0ddd8d1 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -64,7 +64,12 @@ xcodebuild test \
+ Hush/
+   HushApp.swift              # @main entry, WindowGroup + Quick Bar bootstrap
+   HushAppDelegate.swift      # NSApplicationDelegate, status bar + Quick Bar panel lifecycle
+-  AppContainer.swift         # Root ObservableObject (DI container, @MainActor, 2833 lines)
++  AppContainer.swift         # Root ObservableObject (DI container, @MainActor, 810 lines)
++  AppContainer+MessageBuckets.swift # Message bucket management logic
++  AppContainer+ProviderManagement.swift # Provider lifecycle and credential logic
++  AppContainer+Catalog.swift # Provider catalog and model discovery
++  AppContainer+ConversationLifecycle.swift # Conversation CRUD and state transitions
++  AppContainer+SendPipeline.swift # Message sending and streaming coordination
+   RequestCoordinator.swift   # Multi-conversation concurrent request lifecycle & scheduling
+   QuickBarPanelController.swift  # Floating NSPanel for system-wide Quick Bar
+   QuickBarHotkeyController.swift # Global hotkey registration (Carbon HIToolbox)
+diff --git a/Hush/HushCore/AGENTS.md b/Hush/HushCore/AGENTS.md
+index 0337bee..b2b8baa 100644
+--- a/Hush/HushCore/AGENTS.md
++++ b/Hush/HushCore/AGENTS.md
+@@ -12,13 +12,13 @@ ChatWindowing.swift        # Windowed message loading for large conversations
+ ConversationSidebarThread.swift # Sidebar display model (title, preview, timestamp, activity state)
+ ModelDescriptor.swift      # Provider model metadata (id, name, capabilities)
+ ModelParameters.swift      # Temperature, topP, maxTokens, reasoning effort
+-PerfTrace.swift            # Lightweight performance tracing helpers
+ PromptTemplate.swift       # Reusable prompt templates
+ ProviderConfiguration.swift# Provider endpoint + model + credential ref
+ QuickBarSessionState.swift # Quick Bar ephemeral conversation state (messages, draft, expansion)
+ RequestLifecycle.swift     # RequestID, StreamEvent, RequestError, ActiveRequestState, QueueItemSnapshot
+ RequestScheduler.swift     # Pure-function enum: selectNext, enqueue, rebalanceForActiveSwitch, canAcceptSubmission
+ RuntimeConstants.swift     # enum namespace with static lets for all magic numbers
++SettingsDTOs.swift         # Data Transfer Objects for settings UI (OpenAISettingsSnapshot, DataStats, etc.)
+ TailFollowStateMachine.swift # Auto-scroll state machine (events: newContent, userScroll, conversationSwitched)
+ ```
+ 
+@@ -34,6 +34,7 @@ TailFollowStateMachine.swift # Auto-scroll state machine (events: newContent, us
+ | Quick Bar state | `QuickBarSessionState.swift` — ephemeral session model |
+ | Tail-follow behavior | `TailFollowStateMachine.swift` — event-driven state transitions |
+ | Quick Bar shortcut config | `AppSettings.swift` -> `QuickBarConfiguration` |
++| Settings UI Data Models | `SettingsDTOs.swift` — snapshots and input models for settings views |
+ 
+ ## Conventions
+ 
+diff --git a/Hush/Views/AGENTS.md b/Hush/Views/AGENTS.md
+index 60d5749..5cff057 100644
+--- a/Hush/Views/AGENTS.md
++++ b/Hush/Views/AGENTS.md
+@@ -7,12 +7,17 @@ SwiftUI + AppKit hybrid view layer. Chat uses NSTableView (AppKit) for performan
+ ```
+ Views/
+   RootView.swift                        # Main window root (sidebar + chat detail)
+-  ThemeChrome.swift                     # Window chrome + theme application (832 lines)
++  ThemeChrome.swift                     # Window chrome + theme application (51 lines)
+   AppThemeEnvironment.swift             # Theme environment key injection
++  GlassEffectSurfaces.swift             # Reusable glass effect view modifiers and backgrounds
++  ChromeMaterials.swift                 # Reusable window material and blur effects
+   Chat/
+     ChatDetailPane.swift                # Active conversation view container
+     ComposerDock.swift                  # Message input area (text field + send button, 519 lines)
+     ChatConfigPopover.swift             # Model/temperature config popover (512 lines)
++    ChatParameterControls.swift         # Reusable temperature/parameter sliders and inputs
++    ComposerModelService.swift          # Logic for model selection in the composer
++    ProviderModelSelector.swift         # View for selecting provider and model in composer
+     TypingIndicator.swift               # Animated typing dots
+     RenderStyle+Theme.swift             # RenderStyle theme bridge
+     AppKit/                             # NSTableView-based chat (see AppKit/AGENTS.md)
+@@ -28,13 +33,23 @@ Views/
+   Settings/
+     SettingsWorkspaceView.swift         # Settings window root
+     SettingsContentColumn.swift         # Settings content layout
+-    AgentSettingsView.swift             # Agent preset management (718 lines)
+-    ProviderSettingsView.swift          # Provider configuration + credential entry (1735 lines)
++    AgentSettingsView.swift             # Agent preset management (136 lines)
++    AgentPresetDetailSheet.swift        # Detailed editor for an agent preset
++    AgentPresetActions.swift            # Logic/Actions for agent preset management
++    ProviderSettingsView.swift          # Provider configuration + credential entry (494 lines)
++    ProviderSettingsDetailPane.swift    # Detailed editor for a provider's settings
++    ProviderSettingsActionBar.swift      # Save/Delete actions for provider settings
++    ProviderCatalogLogic.swift          # Logic for provider catalog and management
++    ProviderCatalogHelpers.swift        # Helper views and types for provider catalog
++    ProviderEditorState.swift           # State management for the provider editor
+     PromptLibraryView.swift             # Prompt template editor
+     GeneralSettingsView.swift           # App-level preferences
+     DataSettingsView.swift              # Data export/import/erase
+     ArchivedThreadsSettingsView.swift   # Archived conversation management
+     QuickBarShortcutRecorder.swift      # Hotkey recording UI for Quick Bar
++    Components/                         # Reusable settings components
++      SettingsListRow.swift             # Standardized row for settings lists
++      EmptyStateView.swift              # Reusable empty state view for settings
+   Previews/
+     PreviewSupport.swift                # SwiftUI preview fixtures
+     ChatComponentPreviews.swift         # Chat component preview definitions

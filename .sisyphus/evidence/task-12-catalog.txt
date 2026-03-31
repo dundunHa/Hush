@@ -1,0 +1,28 @@
+=== Task 12: Extract AppContainer+Catalog.swift ===
+
+--- refreshCatalog in new file ---
+    func refreshCatalog(forProviderID providerID: String) {
+
+--- refreshCatalog NOT in AppContainer.swift ---
+(not found — correct)
+
+--- refreshCatalog NOT in AppContainer+ProviderManagement.swift ---
+(not found — correct)
+
+--- All methods in new file ---
+    func refreshCatalog(forProviderID providerID: String) {
+    func ensureProviderRegistered(for config: ProviderConfiguration) -> any LLMProvider {
+    func selectDeterministicFallback() {
+    func resolveProvider(for config: ProviderConfiguration) -> any LLMProvider {
+    func previewProvider(for draft: ProviderCatalogDraftInput) -> any LLMProvider {
+    func makeProviderRuntime(id: String, type: ProviderType) -> any LLMProvider {
+    func triggerCatalogRefreshIfNeeded(providerID: String) {
+    func selectDeterministicFallbackProvider() {
+
+--- Line counts ---
+AppContainer+Catalog.swift:      100 lines
+AppContainer+ProviderManagement.swift:      295 lines (was 388)
+AppContainer.swift:     2289 lines
+
+--- Build result ---
+** BUILD SUCCEEDED **

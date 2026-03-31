@@ -64,18 +64,36 @@ struct HushThemePalette {
     let composerShellTop: Color
     let composerShellBottom: Color
     let composerShellStroke: Color
+    let quickBarSurface: Color
+    let quickBarSurfaceStroke: Color
+    let quickBarPrimaryText: Color
+    let quickBarSecondaryText: Color
+    let quickBarTertiaryText: Color
+    let quickBarControlFill: Color
+    let quickBarControlFillHover: Color
+    let quickBarControlForeground: Color
+    let quickBarControlMuted: Color
+    let quickBarButtonFill: Color
+    let quickBarButtonForeground: Color
+    let quickBarDisabledButtonFill: Color
+    let quickBarDisabledButtonForeground: Color
 }
 
 enum HushColors {
-    static func palette(for theme: AppTheme) -> HushThemePalette {
-        switch theme {
+    static func palette(
+        for theme: AppTheme,
+        surfaceStyle: ConversationSurfaceStyle = .main
+    ) -> HushThemePalette {
+        let basePalette: HushThemePalette = switch theme {
         case .graphiteGlass:
-            return graphiteGlassPalette
+            graphiteGlassPalette
         case .lightGlass:
-            return lightGlassPalette
+            lightGlassPalette
         case .ivoryGlass:
-            return ivoryGlassPalette
+            ivoryGlassPalette
         }
+
+        return basePalette.adapted(for: surfaceStyle, theme: theme)
     }
 
     private static let graphiteGlassPalette = HushThemePalette(
@@ -141,7 +159,20 @@ enum HushColors {
         codeBlockSeparator: Color(hex: 0x647282),
         composerShellTop: Color(hex: 0x363634),
         composerShellBottom: Color(hex: 0x363634),
-        composerShellStroke: Color(hex: 0xFFFFFF, opacity: 0.14)
+        composerShellStroke: Color(hex: 0xFFFFFF, opacity: 0.14),
+        quickBarSurface: Color(hex: 0x2D333D),
+        quickBarSurfaceStroke: Color(hex: 0x7E8B9C),
+        quickBarPrimaryText: Color(hex: 0xF3F6FA),
+        quickBarSecondaryText: Color(hex: 0xC2CBD4),
+        quickBarTertiaryText: Color(hex: 0x95A2B0),
+        quickBarControlFill: Color(hex: 0x445163, opacity: 0.48),
+        quickBarControlFillHover: Color(hex: 0x536278, opacity: 0.76),
+        quickBarControlForeground: Color(hex: 0xF3F6FA),
+        quickBarControlMuted: Color(hex: 0xB5C0CB),
+        quickBarButtonFill: Color(hex: 0x7295C3),
+        quickBarButtonForeground: Color(hex: 0x0F1722),
+        quickBarDisabledButtonFill: Color(hex: 0x404A56),
+        quickBarDisabledButtonForeground: Color(hex: 0x93A0AE)
     )
 
     private static let lightGlassPalette = HushThemePalette(
@@ -207,13 +238,26 @@ enum HushColors {
         codeBlockSeparator: Color(hex: 0xD3DCE7),
         composerShellTop: Color(hex: 0xFFFFFF, opacity: 0.96),
         composerShellBottom: Color(hex: 0xEEF4FB, opacity: 0.92),
-        composerShellStroke: Color(hex: 0xD6E0EC)
+        composerShellStroke: Color(hex: 0xD6E0EC),
+        quickBarSurface: Color(hex: 0xF6FAFE),
+        quickBarSurfaceStroke: Color(hex: 0xD6E1EE),
+        quickBarPrimaryText: Color(hex: 0x172235),
+        quickBarSecondaryText: Color(hex: 0x59667A),
+        quickBarTertiaryText: Color(hex: 0x8A97AA),
+        quickBarControlFill: Color(hex: 0xDCE8F7, opacity: 0.72),
+        quickBarControlFillHover: Color(hex: 0xCFE1F6, opacity: 0.92),
+        quickBarControlForeground: Color(hex: 0x1C2940),
+        quickBarControlMuted: Color(hex: 0x55657C),
+        quickBarButtonFill: Color(hex: 0x2E6FEA),
+        quickBarButtonForeground: Color(hex: 0xFFFFFF),
+        quickBarDisabledButtonFill: Color(hex: 0xD8E0EA),
+        quickBarDisabledButtonForeground: Color(hex: 0x728095)
     )
 
     private static let ivoryGlassPalette = HushThemePalette(
-        rootBackground: Color(hex: 0xF4EEE3),
+        rootBackground: Color(hex: 0xFAF9F5),
         sidebarBackground: Color(hex: 0xFBF4E9, opacity: 0.46),
-        workspaceChromeBackground: Color(hex: 0xF7F0E4),
+        workspaceChromeBackground: Color(hex: 0xFAF9F5),
         cardBackground: Color(hex: 0xFFF9F0, opacity: 0.88),
         composerBackground: Color(hex: 0xFCF5EA, opacity: 0.82),
         composerEditorBackground: Color(hex: 0xFFFDF8),
@@ -273,8 +317,119 @@ enum HushColors {
         codeBlockSeparator: Color(hex: 0xD2C4B1),
         composerShellTop: Color(hex: 0xFFF9F1, opacity: 0.97),
         composerShellBottom: Color(hex: 0xF5ECE0, opacity: 0.93),
-        composerShellStroke: Color(hex: 0xDCCFBE)
+        composerShellStroke: Color(hex: 0xDCCFBE),
+        quickBarSurface: Color(hex: 0xFBF3E7),
+        quickBarSurfaceStroke: Color(hex: 0xE2D1BD),
+        quickBarPrimaryText: Color(hex: 0x2E2923),
+        quickBarSecondaryText: Color(hex: 0x6A6055),
+        quickBarTertiaryText: Color(hex: 0x96897B),
+        quickBarControlFill: Color(hex: 0xE9D9C5, opacity: 0.72),
+        quickBarControlFillHover: Color(hex: 0xE1CDB5, opacity: 0.92),
+        quickBarControlForeground: Color(hex: 0x3B3229),
+        quickBarControlMuted: Color(hex: 0x75695D),
+        quickBarButtonFill: Color(hex: 0xC67843),
+        quickBarButtonForeground: Color(hex: 0xFFF8F1),
+        quickBarDisabledButtonFill: Color(hex: 0xDED4C7),
+        quickBarDisabledButtonForeground: Color(hex: 0x8D8275)
     )
+}
+
+private extension HushThemePalette {
+    func adapted(
+        for surfaceStyle: ConversationSurfaceStyle,
+        theme: AppTheme
+    ) -> HushThemePalette {
+        guard surfaceStyle == .quickBar else { return self }
+
+        let usesDarkAppearance = theme.usesDarkAppearance
+        let transcriptStroke = quickBarSurfaceStroke.opacity(usesDarkAppearance ? 0.18 : 0.24)
+        let transcriptHoverStroke = quickBarSurfaceStroke.opacity(usesDarkAppearance ? 0.26 : 0.30)
+        let transcriptSoftFill = quickBarSurface.opacity(usesDarkAppearance ? 0.16 : 0.24)
+        let transcriptSoftFillStrong = quickBarSurface.opacity(usesDarkAppearance ? 0.24 : 0.36)
+        let transcriptHoverFill = quickBarControlFill.opacity(usesDarkAppearance ? 0.26 : 0.42)
+        let transcriptCodeFill = quickBarSurface.opacity(usesDarkAppearance ? 0.38 : 0.50)
+        let transcriptCodeBorder = quickBarSurfaceStroke.opacity(usesDarkAppearance ? 0.22 : 0.24)
+        let transcriptCodeSeparator = quickBarSurfaceStroke.opacity(usesDarkAppearance ? 0.16 : 0.18)
+
+        return HushThemePalette(
+            rootBackground: rootBackground,
+            sidebarBackground: sidebarBackground,
+            workspaceChromeBackground: workspaceChromeBackground,
+            cardBackground: cardBackground,
+            composerBackground: composerBackground,
+            composerEditorBackground: composerEditorBackground,
+            separator: separator,
+            subtleStroke: transcriptStroke,
+            splitPaneEdgeStroke: splitPaneEdgeStroke,
+            splitPaneShadow: splitPaneShadow,
+            sidebarGlassTint: sidebarGlassTint,
+            sidebarGlassStroke: sidebarGlassStroke,
+            sidebarGlassHighlight: sidebarGlassHighlight,
+            sidebarGlassShadow: sidebarGlassShadow,
+            primaryText: quickBarPrimaryText.opacity(usesDarkAppearance ? 0.96 : 0.94),
+            secondaryText: quickBarSecondaryText.opacity(usesDarkAppearance ? 0.92 : 0.94),
+            tertiaryText: quickBarTertiaryText.opacity(usesDarkAppearance ? 0.88 : 0.92),
+            accent: accent,
+            accentMutedBackground: accentMutedBackground,
+            accentMutedStroke: accentMutedStroke,
+            hoverFill: transcriptHoverFill,
+            hoverStroke: transcriptHoverStroke,
+            selectionFill: selectionFill,
+            selectionStroke: selectionStroke,
+            softFill: transcriptSoftFill,
+            softFillStrong: transcriptSoftFillStrong,
+            primaryActionBackground: primaryActionBackground,
+            primaryActionForeground: primaryActionForeground,
+            disabledActionBackground: disabledActionBackground,
+            disabledActionForeground: disabledActionForeground,
+            destructiveActionBackground: destructiveActionBackground,
+            destructiveActionForeground: destructiveActionForeground,
+            controlForeground: quickBarControlForeground.opacity(usesDarkAppearance ? 0.94 : 0.96),
+            controlForegroundMuted: quickBarControlMuted.opacity(usesDarkAppearance ? 0.86 : 0.90),
+            debugOverlayBackground: debugOverlayBackground,
+            debugOverlayForeground: debugOverlayForeground,
+            errorText: errorText,
+            successText: successText,
+            badgeRunning: badgeRunning,
+            badgeQueued: badgeQueued,
+            badgeUnread: badgeUnread,
+            userBubble: userBubble,
+            userBubbleStroke: userBubbleStroke,
+            toolBubble: toolBubble,
+            toolBubbleStroke: toolBubbleStroke,
+            systemBubble: systemBubble,
+            systemBubbleStroke: systemBubbleStroke,
+            markdownBody: quickBarPrimaryText.opacity(usesDarkAppearance ? 0.94 : 0.92),
+            markdownHeading: quickBarPrimaryText,
+            markdownCode: quickBarPrimaryText.opacity(usesDarkAppearance ? 0.90 : 0.88),
+            markdownCodeBackground: transcriptCodeFill,
+            markdownLink: quickBarButtonFill,
+            markdownBlockquote: quickBarSecondaryText.opacity(usesDarkAppearance ? 0.90 : 0.92),
+            markdownBlockquoteBar: transcriptStroke,
+            markdownMathFallback: quickBarButtonFill.opacity(usesDarkAppearance ? 0.94 : 1),
+            markdownTableHeader: quickBarPrimaryText.opacity(usesDarkAppearance ? 0.92 : 0.90),
+            markdownTableBorder: transcriptStroke,
+            codeBlockBackground: transcriptCodeFill,
+            codeBlockBorder: transcriptCodeBorder,
+            codeBlockSeparator: transcriptCodeSeparator,
+            composerShellTop: composerShellTop,
+            composerShellBottom: composerShellBottom,
+            composerShellStroke: composerShellStroke,
+            quickBarSurface: quickBarSurface,
+            quickBarSurfaceStroke: quickBarSurfaceStroke,
+            quickBarPrimaryText: quickBarPrimaryText,
+            quickBarSecondaryText: quickBarSecondaryText,
+            quickBarTertiaryText: quickBarTertiaryText,
+            quickBarControlFill: quickBarControlFill,
+            quickBarControlFillHover: quickBarControlFillHover,
+            quickBarControlForeground: quickBarControlForeground,
+            quickBarControlMuted: quickBarControlMuted,
+            quickBarButtonFill: quickBarButtonFill,
+            quickBarButtonForeground: quickBarButtonForeground,
+            quickBarDisabledButtonFill: quickBarDisabledButtonFill,
+            quickBarDisabledButtonForeground: quickBarDisabledButtonForeground
+        )
+    }
 }
 
 private extension Color {

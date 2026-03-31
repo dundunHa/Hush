@@ -1,0 +1,6 @@
+Task 2 evidence
+
+- Deleted root-level orphan file: `HushCore/PerfTrace.swift`
+- Kept real file untouched: `Hush/HushCore/PerfTrace.swift`
+- Project reference check: `grep -c "HushCore/PerfTrace" Hush.xcodeproj/project.pbxproj` returned `0`
+- Build verification: `make build` ended with `** BUILD SUCCEEDED **`

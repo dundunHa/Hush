@@ -1,0 +1,42 @@
+{
+  "active_plan": "/Users/lxp/Library/CloudStorage/Dropbox/code-space/mygitspace/Hush/.sisyphus/plans/quickbar-edge-spacing-fix.md",
+  "started_at": "2026-03-28T10:26:50.320Z",
+  "session_ids": [
+    "ses_2cc245117ffef0OAmbmydZZ57N",
+    "ses_2cc02ac89ffeByR87fLRNAuDl3",
+    "ses_2cbfac0c7ffe3RNGYOmuEfI033",
+    "ses_2cbfb8933ffeHVQ7owpVIsYuVp",
+    "ses_2cbfb1fc2ffeSwcnBphi5Ctl0C"
+  ],
+  "plan_name": "quickbar-edge-spacing-fix",
+  "agent": "atlas",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "建立 Quick Bar outer-edge 对称性测量辅助",
+      "session_id": "ses_2cc02ac89ffeByR87fLRNAuDl3",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-03-28T10:33:13.273Z"
+    },
+    "todo:4": {
+      "task_key": "todo:4",
+      "task_label": "4",
+      "task_title": "评估并按需补充 debug-only 投影访问器",
+      "session_id": "ses_2cc245117ffef0OAmbmydZZ57N",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-03-28T10:38:39.374Z"
+    },
+    "todo:2": {
+      "task_key": "todo:2",
+      "task_label": "2",
+      "task_title": "补 compact plain-text 对称性 RED 测试",
+      "session_id": "ses_2cbfb8933ffeHVQ7owpVIsYuVp",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-03-28T10:41:27.108Z"
+    }
+  }
+}

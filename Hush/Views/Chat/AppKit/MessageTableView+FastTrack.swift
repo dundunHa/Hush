@@ -17,7 +17,7 @@ extension MessageTableView {
         )
 
         guard tableView.numberOfColumns > 0 else { return }
-        guard let cell = tableView.view(atColumn: 0, row: rowIndex, makeIfNecessary: false) as? MessageTableCellView else {
+        guard let cell = tableView.view(atColumn: 0, row: rowIndex, makeIfNecessary: false) as? AnyMessageTableRowView else {
             return
         }
 
@@ -51,7 +51,7 @@ extension MessageTableView {
 
         for row in visible.location ..< (visible.location + visible.length) {
             guard row >= 0, row < tableView.numberOfRows else { continue }
-            guard let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? MessageTableCellView else {
+            guard let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? AnyMessageTableRowView else {
                 continue
             }
             cell.cancelRenderWork()

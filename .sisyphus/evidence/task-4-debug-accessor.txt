@@ -1,0 +1,10 @@
+Task 4: debug-only projection accessor review
+Finding: existing getters are sufficient; no code changes needed.
+
+Evidence:
+- `bodyFrameForTesting` returns `convert(bodyTextView.frame, from: contentContainer)`, so it is already in the cell coordinate system.
+- `visibleTextFrameForTesting` returns `convert(bodyTextView.visibleTextBounds(), from: bodyTextView)`, so it is also in cell coordinates.
+- `contentContainerFrameForTesting` exposes the container frame in cell coordinates, and existing tests already derive outer gaps via `minX` / `maxX` math.
+- In the Quick Bar smoke setup, the cell is constrained to the host container on all edges, so cell coordinates match container coordinates for outer-edge measurements.
+
+Conclusion: T2/T3 can compute outer-edge gaps without any new DEBUG accessor.

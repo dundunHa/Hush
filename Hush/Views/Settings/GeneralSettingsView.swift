@@ -16,6 +16,7 @@ struct GeneralSettingsView: View {
                     .font(HushTypography.heading)
 
                 appearanceSection
+                quickBarSection
                 typographySection
                 concurrencySection
             }
@@ -138,6 +139,34 @@ struct GeneralSettingsView: View {
         )
     }
 
+    private var quickBarSection: some View {
+        VStack(alignment: .leading, spacing: HushSpacing.md) {
+            Text("Quick Bar")
+                .font(HushTypography.captionBold)
+                .foregroundStyle(themePalette.secondaryText)
+
+            VStack(alignment: .leading, spacing: HushSpacing.sm) {
+                Text("Global shortcut")
+                    .font(HushTypography.scaled(14, weight: .semibold))
+
+                QuickBarShortcutRecorder(configuration: quickBarConfigurationBinding)
+            }
+
+            Text(
+                "Quick Bar uses a system-wide hotkey. Click the shortcut field and press the new shortcut. " +
+                    "The preview updates as you hold it and saves when you release. " +
+                    "Press Esc to cancel, and keep at least one modifier. Default: \(QuickBarConfiguration.standard.displayString)."
+            )
+            .font(HushTypography.caption)
+            .foregroundStyle(themePalette.secondaryText)
+        }
+        .padding(HushSpacing.lg)
+        .cardStyle(
+            background: themePalette.cardBackground,
+            stroke: themePalette.subtleStroke
+        )
+    }
+
     private var concurrencySection: some View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
             Text("Concurrency")
@@ -174,6 +203,15 @@ struct GeneralSettingsView: View {
         Binding(
             get: { container.settings.fontSettings.normalizedFamilyName },
             set: { container.settings.fontSettings.familyName = $0 }
+        )
+    }
+
+    private var quickBarConfigurationBinding: Binding<QuickBarConfiguration> {
+        Binding(
+            get: { container.settings.quickBar.validated() },
+            set: { newValue in
+                container.settings.quickBar = newValue.validated(fallback: container.settings.quickBar.validated())
+            }
         )
     }
 

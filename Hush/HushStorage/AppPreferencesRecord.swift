@@ -96,7 +96,7 @@ public struct AppPreferencesSnapshot: Sendable, Equatable {
         self.selectedProviderID = selectedProviderID
         self.selectedModelID = selectedModelID
         self.parameters = parameters
-        self.quickBar = quickBar
+        self.quickBar = quickBar.validated()
         self.theme = theme
         self.fontSettings = fontSettings
         self.maxConcurrentRequests = maxConcurrentRequests
@@ -132,7 +132,7 @@ public extension AppPreferencesRecord {
             quickBar: QuickBarConfiguration(
                 key: quickBarKey,
                 modifiers: parsedModifiers
-            ),
+            ).validated(),
             theme: parsedTheme,
             fontSettings: AppFontSettings(
                 familyName: fontFamilyName,

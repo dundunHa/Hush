@@ -1,48 +1,82 @@
 # Views
 
-SwiftUI + AppKit hybrid view layer. Chat uses NSTableView (AppKit) for performance; everything else is SwiftUI.
+SwiftUI + AppKit hybrid view layer. Chat uses NSTableView (AppKit) for performance; everything else is SwiftUI. Includes Quick Bar (floating panel) with its own conversation surface.
 
 ## Structure
 
 ```
 Views/
+  RootView.swift                        # Main window root (sidebar + chat detail)
+  ThemeChrome.swift                     # Window chrome + theme application (51 lines)
+  AppThemeEnvironment.swift             # Theme environment key injection
+  GlassEffectSurfaces.swift             # Reusable glass effect view modifiers and backgrounds
+  ChromeMaterials.swift                 # Reusable window material and blur effects
   Chat/
-    AppKit/
-      HotScenePoolRepresentable.swift   # SwiftUI bridge to the AppKit hot-scene-pool host
-      HotScenePoolController.swift      # AppKit parent controller managing attached hot scenes
-      HotScenePool.swift                # LRU pool for conversation scenes
-      ConversationViewController.swift  # NSViewController hosting NSTableView for messages
-      MessageTableView.swift            # NSTableView subclass for message list
-    ComposerDock.swift                  # Message input area (text field + send button)
-  Sidebar/                              # Conversation list sidebar
-  TopBar/                               # Window top bar controls
+    ChatDetailPane.swift                # Active conversation view container
+    ComposerDock.swift                  # Message input area (text field + send button, 519 lines)
+    ChatConfigPopover.swift             # Model/temperature config popover (512 lines)
+    ChatParameterControls.swift         # Reusable temperature/parameter sliders and inputs
+    ComposerModelService.swift          # Logic for model selection in the composer
+    ProviderModelSelector.swift         # View for selecting provider and model in composer
+    TypingIndicator.swift               # Animated typing dots
+    RenderStyle+Theme.swift             # RenderStyle theme bridge
+    AppKit/                             # NSTableView-based chat (see AppKit/AGENTS.md)
+    QuickBar/
+      QuickBarPanelView.swift           # Quick Bar SwiftUI root view
+      QuickBarComposer.swift            # Quick Bar message input (604 lines)
+      QuickBarComposerSupport.swift     # Composer helper types
+      QuickConversationSurface.swift    # Quick Bar message display surface
+  Sidebar/
+    ConversationSidebarView.swift       # Conversation list sidebar
+  TopBar/
+    UnifiedTopBar.swift                 # Window top bar controls
   Settings/
-    AgentSettingsView.swift             # Agent preset management
-    ProviderSettingsView.swift          # Provider configuration + credential entry
-    PromptSettingsView.swift            # Prompt template editor
+    SettingsWorkspaceView.swift         # Settings window root
+    SettingsContentColumn.swift         # Settings content layout
+    AgentSettingsView.swift             # Agent preset management (136 lines)
+    AgentPresetDetailSheet.swift        # Detailed editor for an agent preset
+    AgentPresetActions.swift            # Logic/Actions for agent preset management
+    ProviderSettingsView.swift          # Provider configuration + credential entry (494 lines)
+    ProviderSettingsDetailPane.swift    # Detailed editor for a provider's settings
+    ProviderSettingsActionBar.swift      # Save/Delete actions for provider settings
+    ProviderCatalogLogic.swift          # Logic for provider catalog and management
+    ProviderCatalogHelpers.swift        # Helper views and types for provider catalog
+    ProviderEditorState.swift           # State management for the provider editor
+    PromptLibraryView.swift             # Prompt template editor
     GeneralSettingsView.swift           # App-level preferences
     DataSettingsView.swift              # Data export/import/erase
-  PreviewSupport.swift                  # SwiftUI preview fixtures (316 lines)
+    ArchivedThreadsSettingsView.swift   # Archived conversation management
+    QuickBarShortcutRecorder.swift      # Hotkey recording UI for Quick Bar
+    Components/                         # Reusable settings components
+      SettingsListRow.swift             # Standardized row for settings lists
+      EmptyStateView.swift              # Reusable empty state view for settings
+  Previews/
+    PreviewSupport.swift                # SwiftUI preview fixtures
+    ChatComponentPreviews.swift         # Chat component preview definitions
 ```
 
 ## Where to Look
 
 | Task | File |
 |------|------|
-| Message display/layout | `Chat/AppKit/MessageTableView.swift` + `MessageTableCellView` |
+| Message display/layout | `Chat/AppKit/MessageTableView.swift` (see AppKit/AGENTS.md) |
 | Scroll behavior | `Chat/AppKit/MessageTableView.swift` + `TailFollowStateMachine` |
-| Message input | `ComposerDock.swift` |
-| AppKit message list | `Chat/AppKit/HotScenePoolRepresentable.swift` + `HotScenePoolController.swift` + `ConversationViewController.swift` |
+| Message input (main) | `Chat/ComposerDock.swift` |
+| Message input (Quick Bar) | `Chat/QuickBar/QuickBarComposer.swift` |
+| Quick Bar UI | `Chat/QuickBar/QuickBarPanelView.swift` + `QuickConversationSurface.swift` |
 | Settings UI | `Settings/<Feature>SettingsView.swift` |
-| Preview data | `PreviewSupport.swift` — shared fixtures for all previews |
+| Window chrome/theme | `ThemeChrome.swift` |
+| Preview data | `Previews/PreviewSupport.swift` — shared fixtures for all previews |
 
 ## Conventions
 
 - **@EnvironmentObject**: All views access `AppContainer` via `@EnvironmentObject`.
 - **Theme tokens only**: Colors from `HushColors`, spacing from `HushSpacing`, fonts from `HushTypography`. Never hardcode.
 - **Dark mode only**: Single `AppTheme.dark`. No light mode support.
-- **AppKit for chat**: chat conversation rendering is AppKit single-path through `HotScenePoolRepresentable` and pooled `ConversationViewController` scenes.
-- **Tail follow**: auto-scroll/follow semantics are handled by `TailFollowStateMachine` in `MessageTableView`.
+- **ConversationSurfaceStyle**: Distinguishes main window (`.mainChat`) vs Quick Bar (`.quickBar`) rendering contexts.
+- **AppKit for chat**: Chat conversation rendering is AppKit single-path through `HotScenePoolRepresentable` and pooled `ConversationViewController` scenes.
+- **Tail follow**: Auto-scroll/follow semantics handled by `TailFollowStateMachine` in `MessageTableView`.
+- **Quick Bar**: Separate composer (`QuickBarComposer`) and conversation surface (`QuickConversationSurface`) optimized for compact floating panel.
 
 ## Anti-Patterns
 

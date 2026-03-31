@@ -1,0 +1,9 @@
+Task 3 evidence
+
+- New file: Hush/HushCore/SettingsDTOs.swift
+- Removed DTOs from Hush/AppContainer.swift
+- Project file updated: Hush.xcodeproj/project.pbxproj
+- Build: `make build 2>&1 | grep "BUILD"` -> `** BUILD SUCCEEDED **`
+- Verify new file contains OpenAISettingsSnapshot: yes
+- Verify AppContainer no longer contains OpenAISettingsSnapshot: yes
+- Verify AppContainer still contains private ConversationPageSnapshot: yes

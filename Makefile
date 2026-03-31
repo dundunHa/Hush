@@ -21,6 +21,7 @@ XCODE_RELEASE_DESTINATION ?= platform=macOS
 TEST_RESULTS_DIR ?= /tmp/hush-test-results
 XCCOV ?= xcrun xccov
 XCTRACE_ARGS ?=
+SPM_CACHE_BOOTSTRAP ?= scripts/seed-source-packages.sh
 
 .PHONY: help setup check-tools resolve build check-xcode release version test test-cov run fmt crash-context xctrace-memory clean
 
@@ -44,6 +45,7 @@ check-tools: ## Verify required local tools are installed
 
 resolve: ## Resolve Swift Package dependencies
 	@mkdir -p "$(DERIVED_DATA)" "$(SPM_DIR)"
+	@bash "$(SPM_CACHE_BOOTSTRAP)" "$(SPM_DIR)"
 	@$(XCODEBUILD) -resolvePackageDependencies \
 		-project "$(PROJECT)" \
 		-scheme "$(SCHEME)" \
@@ -61,6 +63,7 @@ setup: ## Install formatter/lint/watch tools and resolve SPM dependencies
 
 build: ## Build Debug app for scheme $(SCHEME)
 	@mkdir -p "$(DERIVED_DATA)" "$(SPM_DIR)"
+	@bash "$(SPM_CACHE_BOOTSTRAP)" "$(SPM_DIR)"
 	@xattr -cr "$(DERIVED_DATA)" 2>/dev/null || true
 	@$(XCODEBUILD) \
 		-project "$(PROJECT)" \
@@ -77,6 +80,7 @@ build: ## Build Debug app for scheme $(SCHEME)
 
 check-xcode: ## Run Xcode diagnostics build with strict concurrency
 	@mkdir -p "$(DERIVED_DATA)" "$(SPM_DIR)"
+	@bash "$(SPM_CACHE_BOOTSTRAP)" "$(SPM_DIR)"
 	@xattr -cr "$(DERIVED_DATA)" 2>/dev/null || true
 	@$(XCODEBUILD) \
 		-project "$(PROJECT)" \
@@ -94,6 +98,7 @@ version: ## Show the centrally managed marketing/build versions
 
 release: ## Build Release app and package into a DMG installer
 	@mkdir -p "$(DERIVED_DATA)" "$(SPM_DIR)" "$(RELEASE_DIR)"
+	@bash "$(SPM_CACHE_BOOTSTRAP)" "$(SPM_DIR)"
 	@xattr -cr "$(DERIVED_DATA)" 2>/dev/null || true
 	@echo "==> Building Release configuration $(APP_VERSION) ($(APP_BUILD_VERSION))..."
 	@$(XCODEBUILD) \
@@ -136,6 +141,7 @@ release: ## Build Release app and package into a DMG installer
 
 test: ## Run all unit tests for scheme $(SCHEME)
 	@mkdir -p "$(DERIVED_DATA)" "$(SPM_DIR)"
+	@bash "$(SPM_CACHE_BOOTSTRAP)" "$(SPM_DIR)"
 	@xattr -cr "$(DERIVED_DATA)" 2>/dev/null || true
 	@$(XCODEBUILD) \
 		-project "$(PROJECT)" \
@@ -154,6 +160,7 @@ test: ## Run all unit tests for scheme $(SCHEME)
 
 test-cov: ## Run all unit tests with code coverage report
 	@mkdir -p "$(DERIVED_DATA)" "$(SPM_DIR)" "$(TEST_RESULTS_DIR)"
+	@bash "$(SPM_CACHE_BOOTSTRAP)" "$(SPM_DIR)"
 	@xattr -cr "$(DERIVED_DATA)" 2>/dev/null || true
 	@RESULT_BUNDLE="$(TEST_RESULTS_DIR)/$(SCHEME)-$$(date +%Y%m%d%H%M%S).xcresult"; \
 	$(XCODEBUILD) \
@@ -180,6 +187,7 @@ run: clean build ## Clean, rebuild, launch app and stream rendering logs
 	launchctl setenv HUSH_SWITCH_DEBUG "$$HUSH_SWITCH_VALUE"; \
 	launchctl setenv HUSH_CONTENT_DEBUG "$$HUSH_CONTENT_VALUE"; \
 	trap 'launchctl unsetenv HUSH_RENDER_DEBUG >/dev/null 2>&1 || true; launchctl unsetenv HUSH_SWITCH_DEBUG >/dev/null 2>&1 || true; launchctl unsetenv HUSH_CONTENT_DEBUG >/dev/null 2>&1 || true' EXIT INT TERM; \
+	pkill -x "$(SCHEME)" >/dev/null 2>&1 || true; \
 	open -n "$(APP_PATH)"; \
 	log stream --style compact --level debug --predicate 'subsystem == "com.hush.app" && (category == "Rendering" || category == "PerfTrace" || category == "SwitchRender" || category == "SwitchScroll" || category == "SwitchRenderScheduler" || category == "SwitchBubble")'
 

@@ -12,6 +12,7 @@
 		D5RD00042F5E00010046A153 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = D5RD00022F5E00010046A153 /* Markdown */; };
 		D5RD00052F5E00010046A153 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = D5RD00032F5E00010046A153 /* Markdown */; };
 		D5RD00082F5E00010046A153 /* SwiftMath in Frameworks */ = {isa = PBXBuildFile; productRef = D5RD00072F5E00010046A153 /* SwiftMath */; };
+		D7A900012F3D00010046A153 /* SettingsDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A900022F3D00010046A153 /* SettingsDTOs.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -26,13 +27,31 @@
 
 /* Begin PBXFileReference section */
 		D58CE3F62F3C42520046A153 /* Hush.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hush.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D7A900022F3D00010046A153 /* SettingsDTOs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hush/HushCore/SettingsDTOs.swift; sourceTree = SOURCE_ROOT; };
 		D5TE50012F3C42530046A153 /* HushTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HushTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D6A100000000000000000001 /* Versions.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Versions.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D7A900042F3D00010046A153 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				HushCore/SettingsDTOs.swift,
+			);
+			target = D58CE3F52F3C42520046A153 /* Hush */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		D58CE3F82F3C42520046A153 /* Hush */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D7A900042F3D00010046A153 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
 			path = Hush;
 			sourceTree = "<group>";
 		};
@@ -71,9 +90,18 @@
 			children = (
 				D6A100000000000000000001 /* Versions.xcconfig */,
 				D58CE3F82F3C42520046A153 /* Hush */,
+				D7A900032F3D00010046A153 /* HushCore */,
 				D5TE50052F3C42530046A153 /* HushTests */,
 				D58CE3F72F3C42520046A153 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		D7A900032F3D00010046A153 /* HushCore */ = {
+			isa = PBXGroup;
+			children = (
+				D7A900022F3D00010046A153 /* SettingsDTOs.swift */,
+			);
+			name = HushCore;
 			sourceTree = "<group>";
 		};
 		D58CE3F72F3C42520046A153 /* Products */ = {
@@ -216,6 +244,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D7A900012F3D00010046A153 /* SettingsDTOs.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -4,14 +4,14 @@ import SwiftUI
 struct ChatConfigDrawer: View {
     @Binding var parameters: ModelParameters
     var onClose: () -> Void = {}
-    @Environment(\.hushThemePalette) private var palette
+    @Environment(\.hushThemePalette) var palette
 
-    private enum Limits {
+    enum Limits {
         static let contextMessages = 1 ... 30
         static let maxTokens = 0 ... 8192
     }
 
-    private enum Layout {
+    enum Layout {
         static let drawerWidth: CGFloat = 356
         static let valueFieldWidth: CGFloat = 68
         static let sectionCornerRadius: CGFloat = 22
@@ -38,93 +38,21 @@ struct ChatConfigDrawer: View {
         return formatter
     }()
 
-    private var contextLimitValueBinding: Binding<Int> {
-        Binding(
-            get: {
-                clampContextMessageLimit(
-                    parameters.contextMessageLimit ?? ModelParameters.standard.contextMessageLimit ?? 10
-                )
-            },
-            set: { parameters.contextMessageLimit = clampContextMessageLimit($0) }
-        )
-    }
-
-    private var contextLimitSliderBinding: Binding<Double> {
-        Binding(
-            get: { Double(contextLimitValueBinding.wrappedValue) },
-            set: { contextLimitValueBinding.wrappedValue = Int($0.rounded()) }
-        )
-    }
-
-    private var temperatureBinding: Binding<Double> {
-        Binding(
-            get: { parameters.temperature },
-            set: {
-                parameters.useModelDefaults = false
-                parameters.temperature = $0
-            }
-        )
-    }
-
-    private var topPBinding: Binding<Double> {
-        Binding(
-            get: { parameters.topP },
-            set: {
-                parameters.useModelDefaults = false
-                parameters.topP = $0
-            }
-        )
-    }
-
-    private var topKBinding: Binding<Double> {
-        Binding(
-            get: { Double(parameters.topK ?? 0) },
-            set: {
-                parameters.useModelDefaults = false
-                parameters.topK = $0 > 0 ? Int($0) : nil
-            }
-        )
-    }
-
-    private var maxTokensValueBinding: Binding<Int> {
-        Binding(
-            get: { clampMaxTokens(parameters.maxTokens) },
-            set: {
-                parameters.useModelDefaults = false
-                parameters.maxTokens = clampMaxTokens($0)
-            }
-        )
-    }
-
-    private var maxTokensSliderBinding: Binding<Double> {
-        Binding(
-            get: { Double(maxTokensValueBinding.wrappedValue) },
-            set: { maxTokensValueBinding.wrappedValue = Int($0.rounded()) }
-        )
-    }
-
-    private var hasCustomizedVisibleParameters: Bool {
-        let standard = ModelParameters.standard
-        let standardContext = standard.contextMessageLimit ?? 10
-
-        return contextLimitValueBinding.wrappedValue != standardContext ||
-            maxTokensValueBinding.wrappedValue != standard.maxTokens ||
-            abs(parameters.temperature - standard.temperature) > 0.001 ||
-            abs(parameters.topP - standard.topP) > 0.001 ||
-            parameters.topK != standard.topK
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: HushSpacing.lg) {
             headerView
             summaryStrip
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: HushSpacing.md) {
-                    configSection(title: "History & Budget") {
+                    configSection(
+                        title: "History & Budget",
+                        subtitle: "Carry enough context without letting each request sprawl."
+                    ) {
                         parameterRow(
                             icon: "text.bubble",
                             title: "Context Messages",
-                            value: contextMessagesText
+                            value: contextMessagesText,
+                            description: "How many earlier turns travel with the next prompt."
                         ) {
                             HStack(spacing: HushSpacing.md) {
                                 Slider(
@@ -147,7 +75,8 @@ struct ChatConfigDrawer: View {
                         parameterRow(
                             icon: "text.alignleft",
                             title: "Max Tokens",
-                            value: maxTokensText
+                            value: maxTokensText,
+                            description: "Output budget cap for the next assistant reply."
                         ) {
                             HStack(spacing: HushSpacing.md) {
                                 Slider(
@@ -166,11 +95,15 @@ struct ChatConfigDrawer: View {
                         }
                     }
 
-                    configSection(title: "Sampling") {
+                    configSection(
+                        title: "Sampling",
+                        subtitle: "Shape whether the next replies feel steady, broad, or exploratory."
+                    ) {
                         parameterRow(
                             icon: "dial.medium",
                             title: "Temperature",
-                            value: temperatureText
+                            value: temperatureText,
+                            description: "Lower is steadier. Higher allows more variation."
                         ) {
                             Slider(value: temperatureBinding, in: 0 ... 2, step: 0.05)
                                 .accessibilityLabel("Temperature")
@@ -181,7 +114,8 @@ struct ChatConfigDrawer: View {
                         parameterRow(
                             icon: "circle.lefthalf.filled",
                             title: "Top P",
-                            value: topPText
+                            value: topPText,
+                            description: "Keep only the most likely probability mass."
                         ) {
                             Slider(value: topPBinding, in: 0 ... 1, step: 0.05)
                                 .accessibilityLabel("Top P")
@@ -192,12 +126,15 @@ struct ChatConfigDrawer: View {
                         parameterRow(
                             icon: "line.3.horizontal.decrease.circle",
                             title: "Top K",
-                            value: topKText
+                            value: topKText,
+                            description: "Candidate cap. Set to 0 when you want it off."
                         ) {
                             Slider(value: topKBinding, in: 0 ... 100, step: 1)
                                 .accessibilityLabel("Top K")
                         }
                     }
+
+                    footerView
                 }
                 .padding(.vertical, HushSpacing.xs)
             }
@@ -212,11 +149,16 @@ struct ChatConfigDrawer: View {
 
 private extension ChatConfigDrawer {
     private var headerView: some View {
-        HStack(alignment: .center, spacing: HushSpacing.md) {
-            VStack(alignment: .leading, spacing: 0) {
+        HStack(alignment: .top, spacing: HushSpacing.md) {
+            VStack(alignment: .leading, spacing: HushSpacing.xs) {
                 Text("Chat Tuning")
                     .font(HushTypography.heading)
                     .foregroundStyle(palette.primaryText)
+
+                Text("Low-frequency controls for history and sampling, moved out of the composer.")
+                    .font(HushTypography.footnote)
+                    .foregroundStyle(palette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: 0)
@@ -272,6 +214,19 @@ private extension ChatConfigDrawer {
         }
     }
 
+    private var footerView: some View {
+        HStack(alignment: .center, spacing: HushSpacing.sm) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(palette.tertiaryText)
+
+            Text("These controls affect upcoming requests. Model and reasoning stay in the composer.")
+                .font(HushTypography.caption)
+                .foregroundStyle(palette.secondaryText)
+        }
+        .padding(.top, HushSpacing.xs)
+    }
+
     private var popoverBackground: some View {
         RoundedRectangle(cornerRadius: Layout.panelCornerRadius, style: .continuous)
             .fill(
@@ -288,40 +243,6 @@ private extension ChatConfigDrawer {
                 RoundedRectangle(cornerRadius: Layout.panelCornerRadius, style: .continuous)
                     .stroke(palette.splitPaneEdgeStroke, lineWidth: 1)
             )
-    }
-
-    private var contextMessagesText: String {
-        "\(contextLimitValueBinding.wrappedValue)"
-    }
-
-    private var temperatureText: String {
-        String(format: "%.2f", parameters.temperature)
-    }
-
-    private var topPText: String {
-        String(format: "%.2f", parameters.topP)
-    }
-
-    private var topKText: String {
-        parameters.topK.map(String.init) ?? "Off"
-    }
-
-    private var maxTokensText: String {
-        let value = maxTokensValueBinding.wrappedValue
-        return value == 0 ? "Unlimited" : "\(value)"
-    }
-
-    private func clampContextMessageLimit(_ value: Int) -> Int {
-        min(max(value, Limits.contextMessages.lowerBound), Limits.contextMessages.upperBound)
-    }
-
-    private func clampMaxTokens(_ value: Int) -> Int {
-        min(max(value, Limits.maxTokens.lowerBound), Limits.maxTokens.upperBound)
-    }
-
-    private func compactTokenCount(_ value: Int) -> String {
-        guard value >= 1000 else { return "\(value)" }
-        return String(format: "%.1fK", Double(value) / 1000)
     }
 
     private var sectionDivider: some View {
@@ -357,7 +278,7 @@ private extension ChatConfigDrawer {
 
     private func configSection<Content: View>(
         title: String,
-        subtitle: String? = nil,
+        subtitle: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: HushSpacing.md) {
@@ -366,11 +287,9 @@ private extension ChatConfigDrawer {
                     .font(HushTypography.captionBold)
                     .foregroundStyle(palette.primaryText)
 
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(HushTypography.caption)
-                        .foregroundStyle(palette.secondaryText)
-                }
+                Text(subtitle)
+                    .font(HushTypography.caption)
+                    .foregroundStyle(palette.secondaryText)
             }
 
             VStack(alignment: .leading, spacing: HushSpacing.sm) {
@@ -386,100 +305,5 @@ private extension ChatConfigDrawer {
                         .stroke(palette.subtleStroke, lineWidth: 1)
                 )
         )
-    }
-
-    private func parameterRow<Control: View>(
-        icon: String,
-        title: String,
-        value: String,
-        description: String? = nil,
-        @ViewBuilder control: () -> Control
-    ) -> some View {
-        VStack(alignment: .leading, spacing: HushSpacing.sm) {
-            HStack(alignment: .top, spacing: HushSpacing.sm) {
-                ZStack {
-                    Circle()
-                        .fill(palette.softFillStrong)
-                        .overlay(
-                            Circle()
-                                .stroke(palette.subtleStroke, lineWidth: 1)
-                        )
-
-                    Image(systemName: icon)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(palette.controlForeground)
-                }
-                .frame(width: Layout.iconSize, height: Layout.iconSize)
-
-                VStack(alignment: .leading, spacing: description == nil ? 0 : 3) {
-                    Text(title)
-                        .font(HushTypography.body.weight(.medium))
-                        .foregroundStyle(palette.primaryText)
-
-                    if let description, !description.isEmpty {
-                        Text(description)
-                            .font(HushTypography.caption)
-                            .foregroundStyle(palette.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                Spacer(minLength: HushSpacing.md)
-
-                valueBadge(value)
-            }
-
-            control()
-        }
-    }
-
-    private func resetVisibleParameters() {
-        let standard = ModelParameters.standard
-        parameters.contextMessageLimit = standard.contextMessageLimit
-        parameters.maxTokens = standard.maxTokens
-        parameters.temperature = standard.temperature
-        parameters.topP = standard.topP
-        parameters.topK = standard.topK
-    }
-
-    private func valueBadge(_ value: String) -> some View {
-        Text(value)
-            .font(HushTypography.captionBold)
-            .monospacedDigit()
-            .foregroundStyle(palette.primaryText)
-            .padding(.horizontal, HushSpacing.sm)
-            .padding(.vertical, HushSpacing.xs + 2)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(palette.softFillStrong)
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(palette.subtleStroke, lineWidth: 1)
-                    )
-            )
-    }
-
-    private func numberField(
-        value: Binding<Int>,
-        formatter: NumberFormatter,
-        title: String
-    ) -> some View {
-        TextField("", value: value, formatter: formatter)
-            .textFieldStyle(.plain)
-            .font(HushTypography.footnote.weight(.semibold))
-            .monospacedDigit()
-            .multilineTextAlignment(.center)
-            .foregroundStyle(palette.primaryText)
-            .padding(.horizontal, HushSpacing.sm)
-            .frame(width: Layout.valueFieldWidth, height: 36)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(palette.softFillStrong)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(palette.subtleStroke, lineWidth: 1)
-                    )
-            )
-            .accessibilityLabel(title)
     }
 }

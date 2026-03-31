@@ -276,6 +276,87 @@
                 promptTemplateRepository: promptTemplateRepo
             )
         }
+
+        @MainActor
+        static func makeQuickBarPreviewContainer(
+            theme: AppTheme = .graphiteGlass,
+            messages: [ChatMessage] = [],
+            draft: String = "",
+            isExpanded: Bool,
+            isSending: Bool = false,
+            hasConfiguredProvider: Bool = true
+        ) -> AppContainer {
+            var settings = AppSettings.default
+            settings.theme = theme
+            settings.providerConfigurations = hasConfiguredProvider ? [.mockDefault()] : []
+            settings.selectedProviderID = hasConfiguredProvider ? "mock" : ""
+            settings.selectedModelID = hasConfiguredProvider ? "mock-text-1" : ""
+
+            var registry = ProviderRegistry()
+            if hasConfiguredProvider {
+                registry.register(PreviewQuickBarProvider(id: "mock"))
+            }
+
+            let container = AppContainer.forTesting(
+                settings: settings,
+                registry: registry,
+                messageRenderRuntime: MessageRenderRuntime(),
+                enableStartupPrewarm: false
+            )
+            container.configureQuickBarPreview(
+                messages: messages,
+                draft: draft,
+                isExpanded: isExpanded,
+                isSending: isSending,
+                providerID: hasConfiguredProvider ? "mock" : "",
+                modelID: hasConfiguredProvider ? "mock-text-1" : ""
+            )
+            return container
+        }
+    }
+
+    private actor PreviewQuickBarProvider: LLMProvider {
+        nonisolated let id: String
+
+        init(id: String) {
+            self.id = id
+        }
+
+        nonisolated func availableModels(
+            context _: ProviderInvocationContext
+        ) async throws -> [ModelDescriptor] {
+            [
+                ModelDescriptor(
+                    id: "mock-text-1",
+                    displayName: "Preview model",
+                    capabilities: [.text]
+                )
+            ]
+        }
+
+        nonisolated func send(
+            messages _: [ChatMessage],
+            modelID _: String,
+            parameters _: ModelParameters,
+            context _: ProviderInvocationContext
+        ) async throws -> ProviderResponse {
+            ProviderResponse(text: "Preview response")
+        }
+
+        nonisolated func sendStreaming(
+            messages _: [ChatMessage],
+            modelID _: String,
+            parameters _: ModelParameters,
+            requestID: RequestID,
+            context _: ProviderInvocationContext
+        ) -> AsyncThrowingStream<StreamEvent, Error> {
+            AsyncThrowingStream { continuation in
+                continuation.yield(.started(requestID: requestID))
+                continuation.yield(.delta(requestID: requestID, text: "Preview response"))
+                continuation.yield(.completed(requestID: requestID))
+                continuation.finish()
+            }
+        }
     }
 
 #endif

@@ -1,0 +1,10 @@
+Task 15 evidence
+
+Checks:
+- Removed // swiftlint:disable file_length type_body_length from Hush/AppContainer.swift
+- Removed matching // swiftlint:enable file_length type_body_length from Hush/AppContainer.swift
+- Hush/AppContainer.swift lines: 811 (wc -l)
+- Hush/Views max lines: 4982 (MessageTableView.swift; pre-existing and outside the requested check result)
+- make fmt: failed because pre-existing SwiftLint violations remain in unrelated files
+- make build 2>&1 | grep "BUILD": ** BUILD SUCCEEDED **
+- Current git diff: Hush/AppContainer.swift only

@@ -9,6 +9,93 @@ private struct ScrollAnchor {
     let offsetInRow: CGFloat
 }
 
+private enum MessageBodyPresentationMode: Equatable {
+    case fullWidth
+    case trailingCompactText
+    case leadingCompactText
+}
+
+@MainActor
+struct MessageTableRowConfigurationContext {
+    let row: MessageTableView.RowModel
+    let runtime: MessageRenderRuntime
+    let availableWidth: CGFloat
+    let theme: AppTheme
+    let surfaceStyle: ConversationSurfaceStyle
+    let container: AppContainer?
+    let owningTableView: NSTableView?
+    let rowIndex: Int?
+    let messageTableView: MessageTableView?
+}
+
+@MainActor
+protocol MessageTableRowView: AnyObject {
+    func configure(using context: MessageTableRowConfigurationContext)
+    func updateStreamingText(_ content: String)
+    func cancelRenderWork()
+    var bodyIntrinsicHeight: CGFloat { get }
+}
+
+typealias AnyMessageTableRowView = MessageTableRowView & NSView
+
+#if DEBUG
+    // swiftlint:disable identifier_name
+    @MainActor
+    protocol MessageTableTestingRowView: MessageTableRowView {
+        var attributedStringForTesting: NSAttributedString { get }
+        var bodyTextAlignmentForTesting: NSTextAlignment { get }
+        var metaTextAlignmentForTesting: NSTextAlignment { get }
+        var metaFrameForTesting: NSRect { get }
+        var bodyFrameForTesting: NSRect { get }
+        var visibleTextFrameForTesting: NSRect { get }
+        var bodyBackgroundAlphaForTesting: CGFloat { get }
+        var bodyBorderWidthForTesting: CGFloat { get }
+        var waitingBreathingAnimationActiveForTesting: Bool { get }
+        var contentContainerFrameForTesting: NSRect { get }
+        var streamingDisplayedLengthForTesting: Int { get }
+        var currentVisiblePlainTextForTesting: String { get }
+        var streamingUpdateAssignmentCountForTesting: Int { get }
+        var attachmentPreviewVisibleForTesting: Bool { get }
+        var attachmentPreviewHasImageForTesting: Bool { get }
+        var attachmentPreviewShowsPlaceholderForTesting: Bool { get }
+        var attachmentPreviewRenderedHeightForTesting: CGFloat { get }
+        var debugButtonVisibleForTesting: Bool { get }
+        var copyButtonVisibleForTesting: Bool { get }
+        var actionBarActiveForTesting: Bool { get }
+        var hasRenderControllerForTesting: Bool { get }
+        var renderControllerCurrentPlainTextForTesting: String? { get }
+        var cachedIntrinsicHeightForTesting: CGFloat? { get }
+        var renderRequestCountForTesting: Int { get }
+        var richOutputHeightInvalidationCountForTesting: Int { get }
+        var usesQuickBarRowPresentationForTesting: Bool { get }
+        func shouldApplyOutputForTesting(
+            plainText: String,
+            observedRow: MessageTableView.RowModel
+        ) -> Bool
+    }
+
+    typealias AnyMessageTableTestingRowView = MessageTableTestingRowView & NSView
+    // swiftlint:enable identifier_name
+#endif
+
+private enum QuickBarTranscriptMetrics {
+    static let contentMaxWidth: CGFloat =
+        QuickBarPanelReleaseMetrics.width
+            - (HushSpacing.sm + 2) * 2
+            - HushSpacing.xs * 2
+    static let sideInset: CGFloat = HushSpacing.xl
+    static let trailingCompactInset: CGFloat = HushSpacing.xl + HushSpacing.sm
+    static let metaTopSpacing: CGFloat = 4
+    static let compactTextMaxWidthRatio: CGFloat = 0.76
+    static let compactTextMinWidth: CGFloat = 220
+}
+
+private enum QuickBarBodyPresentationMode: Equatable {
+    case fullWidth
+    case leadingColumn
+    case trailingColumn
+}
+
 @MainActor
 private final class HorizontalLockedClipView: NSClipView {
     override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
@@ -202,8 +289,12 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     private var runtime: MessageRenderRuntime?
     private weak var container: AppContainer?
     private var theme: AppTheme = .graphiteGlass
+    private var surfaceStyle: ConversationSurfaceStyle = .main
     private var fontSettings: AppFontSettings = .default
     private var lastGeneration: UInt64?
+    private var lastAppliedTheme: AppTheme?
+    private var lastAppliedSurfaceStyle: ConversationSurfaceStyle?
+    private var lastAppliedFontSettings: AppFontSettings?
     private var tailFollowState = TailFollowState()
     private let tailFollowConfig = TailFollowConfig()
     private var boundsChangeObserver: NSObjectProtocol?
@@ -235,6 +326,15 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         let createdAt: Date
     }
 
+    private static func maxContentWidth(for surfaceStyle: ConversationSurfaceStyle) -> CGFloat {
+        switch surfaceStyle {
+        case .main:
+            HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+        case .quickBar:
+            QuickBarTranscriptMetrics.contentMaxWidth
+        }
+    }
+
     private var lastScrollDirection: ScrollDirection = .none
     private var lastOlderLoadTriggerAt: Date = .distantPast
     private var lastKnownFirstMessageID: UUID?
@@ -263,7 +363,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     #endif
 
     private var palette: HushThemePalette {
-        HushColors.palette(for: theme)
+        HushColors.palette(for: theme, surfaceStyle: surfaceStyle)
     }
 
     private var renderStyle: RenderStyle {
@@ -410,6 +510,11 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         super.layout()
         guard tableView.numberOfColumns > 0 else { return }
         let targetWidth = max(1, bounds.width.rounded(.down))
+        var tableFrame = tableView.frame
+        if abs(tableFrame.width - targetWidth) > 0.5 {
+            tableFrame.size.width = targetWidth
+            tableView.frame = tableFrame
+        }
         let currentWidth = tableView.tableColumns[0].width
         if abs(currentWidth - targetWidth) > 0.5 {
             tableView.tableColumns[0].width = targetWidth
@@ -444,6 +549,7 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         isActiveConversationSending: Bool,
         switchGeneration: UInt64,
         theme: AppTheme,
+        surfaceStyle: ConversationSurfaceStyle = .main,
         runtime: MessageRenderRuntime,
         container: AppContainer,
         forceFullReload: Bool = false
@@ -451,7 +557,13 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         self.runtime = runtime
         self.container = container
         self.theme = theme
-        fontSettings = container.settings.fontSettings
+        self.surfaceStyle = surfaceStyle
+        let nextFontSettings = container.settings.fontSettings
+        let presentationChanged =
+            lastAppliedTheme != theme
+                || lastAppliedSurfaceStyle != surfaceStyle
+                || lastAppliedFontSettings != nextFontSettings
+        fontSettings = nextFontSettings
 
         let previousRows = rows
         let previousMessageCount = previousRows.filter { !$0.isWaitingPlaceholder }.count
@@ -521,9 +633,12 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
             newRows: newRows,
             generationChanged: generationChanged,
             didPrependOlder: didPrependOlder,
-            forceFullReload: forceFullReload
+            forceFullReload: forceFullReload || presentationChanged
         )
         rows = newRows
+        lastAppliedTheme = theme
+        lastAppliedSurfaceStyle = surfaceStyle
+        lastAppliedFontSettings = nextFontSettings
 
         PerfTrace.count(PerfTrace.Event.visibleRecompute)
         applyTableUpdate(mode: updateMode)
@@ -620,24 +735,48 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
         guard row >= 0, row < rows.count else { return nil }
         guard tableColumn != nil else { return nil }
 
-        let identifier = NSUserInterfaceItemIdentifier("MessageTableCellView")
-        let cell = (tableView.makeView(withIdentifier: identifier, owner: nil) as? MessageTableCellView)
-            ?? MessageTableCellView(identifier: identifier)
-
+        let rowView = makeRowView(in: tableView, surfaceStyle: surfaceStyle)
         if let runtime {
-            let availableWidth = effectiveAvailableWidth()
-            cell.configure(
+            rowView.configure(using: MessageTableRowConfigurationContext(
                 row: rows[row],
                 runtime: runtime,
-                availableWidth: availableWidth,
+                availableWidth: effectiveAvailableWidth(),
                 theme: theme,
+                surfaceStyle: surfaceStyle,
                 container: container,
                 owningTableView: tableView,
                 rowIndex: row,
                 messageTableView: self
-            )
+            ))
+            applyColumnWidthFrame(to: rowView, in: tableView)
         }
-        return cell
+        return rowView
+    }
+
+    private func makeRowView(in tableView: NSTableView, surfaceStyle: ConversationSurfaceStyle) -> AnyMessageTableRowView {
+        switch surfaceStyle {
+        case .main:
+            let identifier = NSUserInterfaceItemIdentifier("MessageTableCellView")
+            return (tableView.makeView(withIdentifier: identifier, owner: nil) as? (NSView & MessageTableRowView))
+                ?? MessageTableCellView(identifier: identifier)
+        case .quickBar:
+            let identifier = NSUserInterfaceItemIdentifier("QuickBarMessageCellView")
+            return (tableView.makeView(withIdentifier: identifier, owner: nil) as? (NSView & MessageTableRowView))
+                ?? QuickBarMessageCellView(identifier: identifier)
+        }
+    }
+
+    private func applyColumnWidthFrame(to cell: NSView, in tableView: NSTableView) {
+        let targetWidth = max(1, tableView.bounds.width.rounded(.down))
+        var frame = cell.frame
+        frame.origin.x = 0
+        frame.size.width = targetWidth
+        if frame.size.height <= 0 {
+            frame.size.height = max(1, cell.fittingSize.height.rounded(.up))
+        }
+        if cell.frame != frame {
+            cell.frame = frame
+        }
     }
 
     private func resolveUpdateMode(
@@ -1306,8 +1445,8 @@ final class MessageTableView: NSView, NSTableViewDataSource, NSTableViewDelegate
     private func effectiveAvailableWidth() -> CGFloat {
         let raw = bounds.width > 1
             ? bounds.width
-            : (HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2)
-        return min(raw, HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2)
+            : Self.maxContentWidth(for: surfaceStyle)
+        return min(raw, Self.maxContentWidth(for: surfaceStyle))
     }
 
     #if DEBUG
@@ -1628,6 +1767,19 @@ final class MessageBodyTextView: NSTextView {
         finalizeTextMutation()
     }
 
+    func prepareMeasurementWidth(_ width: CGFloat) {
+        guard let textContainer else { return }
+
+        let targetWidth = max(1, floor(width) - textContainerInset.width * 2)
+        let nextSize = NSSize(width: targetWidth, height: CGFloat.greatestFiniteMagnitude)
+        if abs(textContainer.containerSize.width - nextSize.width) > 0.5 {
+            textContainer.containerSize = nextSize
+            cachedIntrinsicHeight = nil
+        }
+
+        layoutManager?.ensureLayout(for: textContainer)
+    }
+
     func finalizeTextMutation() {
         if let layoutManager, let textContainer {
             layoutManager.ensureLayout(for: textContainer)
@@ -1658,6 +1810,21 @@ final class MessageBodyTextView: NSTextView {
             nextPadding = max(nextPadding, CodeBlockMetrics.backgroundVerticalPadding + HushSpacing.xs)
         }
         return max(1, ceil(usedRect.height + nextPadding + textContainerInset.height * 2))
+    }
+
+    func visibleTextBounds() -> NSRect {
+        guard let layoutManager, let textContainer else { return .zero }
+        layoutManager.ensureLayout(for: textContainer)
+
+        let usedRect = layoutManager.usedRect(for: textContainer).integral
+        guard usedRect.width > 0, usedRect.height > 0 else { return .zero }
+
+        return NSRect(
+            x: textContainerInset.width + usedRect.origin.x,
+            y: textContainerInset.height + usedRect.origin.y,
+            width: usedRect.width,
+            height: usedRect.height
+        )
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -1909,7 +2076,7 @@ final class MessageBodyTextView: NSTextView {
 }
 
 @MainActor
-final class MessageTableCellView: NSTableCellView {
+final class MessageTableCellView: NSTableCellView, MessageTableRowView {
     private struct RenderInputFingerprint: Equatable {
         let messageID: UUID
         let contentHash: Int
@@ -1919,12 +2086,7 @@ final class MessageTableCellView: NSTableCellView {
         let isStreaming: Bool
         let contentWidth: Int
         let styleKey: Int
-    }
-
-    private enum BodyPresentationMode: Equatable {
-        case fullWidth
-        case trailingCompactText
-        case leadingCompactText
+        let surfaceStyle: ConversationSurfaceStyle
     }
 
     private let contentContainer = NSView()
@@ -1950,6 +2112,11 @@ final class MessageTableCellView: NSTableCellView {
     private var isMouseHovering = false
     private var metaLeadingConstraint: NSLayoutConstraint!
     private var metaTrailingConstraint: NSLayoutConstraint!
+    private var metaLeadingToBodyConstraint: NSLayoutConstraint!
+    private var metaTrailingToBodyConstraint: NSLayoutConstraint!
+    private var bodyTopConstraint: NSLayoutConstraint!
+    private var contentContainerPreferredWidthConstraint: NSLayoutConstraint!
+    private var contentContainerMaxWidthConstraint: NSLayoutConstraint!
     private var bodyLeadingFullWidthConstraint: NSLayoutConstraint!
     private var bodyTrailingFullWidthConstraint: NSLayoutConstraint!
     private var bodyLeadingBubbleConstraint: NSLayoutConstraint!
@@ -1987,23 +2154,24 @@ final class MessageTableCellView: NSTableCellView {
     private var currentVisiblePlainText: String = ""
     private var currentContentWidth: CGFloat = 0
     private var isShowingStreamingRichOutput = false
-    private var currentBodyPresentationMode: BodyPresentationMode = .fullWidth
+    private var currentBodyPresentationMode: MessageBodyPresentationMode = .fullWidth
+    private var surfaceStyle: ConversationSurfaceStyle = .main {
+        didSet {
+            applyPresentationPalette()
+            applyContentContainerWidthConstraints()
+            updateBodyPresentationGeometry()
+        }
+    }
+
     private var theme: AppTheme = .graphiteGlass {
         didSet {
-            metaLabel.textColor = NSColor(palette.secondaryText)
-            bodyTextView.themePalette = palette
-            debugButton.themePalette = palette
-            copyButton.themePalette = palette
+            applyPresentationPalette()
         }
     }
 
     private var fontSettings: AppFontSettings = .default {
         didSet {
-            metaLabel.font = HushFontResolver.contentFont(
-                settings: fontSettings,
-                referenceSize: 11,
-                weight: .semibold
-            )
+            applyPresentationPalette()
         }
     }
 
@@ -2013,6 +2181,39 @@ final class MessageTableCellView: NSTableCellView {
 
     private var renderStyle: RenderStyle {
         RenderStyle.fromPalette(palette, fontSettings: fontSettings)
+    }
+
+    private func applyPresentationPalette() {
+        applyMetaLabelAppearance()
+        bodyTextView.themePalette = palette
+        debugButton.themePalette = palette
+        copyButton.themePalette = palette
+    }
+
+    private func applyMetaLabelAppearance() {
+        metaLabel.font = HushFontResolver.contentFont(
+            settings: fontSettings,
+            referenceSize: 11,
+            weight: .semibold
+        )
+        metaLabel.textColor = NSColor(palette.secondaryText)
+        bodyTopConstraint?.constant = HushSpacing.xs
+    }
+
+    private static let maxContentWidth = HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+
+    private static func maxContentWidth(for _: ConversationSurfaceStyle) -> CGFloat {
+        maxContentWidth
+    }
+
+    private func applyContentContainerWidthConstraints() {
+        let maxContentWidth = Self.maxContentWidth(for: surfaceStyle)
+        contentContainerPreferredWidthConstraint?.constant = maxContentWidth
+        contentContainerMaxWidthConstraint?.constant = maxContentWidth
+    }
+
+    private func clampedAvailableWidth(_ availableWidth: CGFloat) -> CGFloat {
+        min(availableWidth, Self.maxContentWidth(for: surfaceStyle))
     }
 
     private func plainTextAttributes(
@@ -2031,7 +2232,7 @@ final class MessageTableCellView: NSTableCellView {
     }
 
     private static let compactTextMaxWidthRatio: CGFloat = 0.76
-    private static let compactTextMinWidth: CGFloat = 44
+    fileprivate static let compactTextMinWidth: CGFloat = 44
     private static let assistantWaitingBreathingAnimationKey = "assistantWaitingBreathing"
     private static let assistantWaitingBreathingDuration: CFTimeInterval = 1.18
     private static let assistantWaitingRestingOpacity: Float = 0.88
@@ -2049,18 +2250,20 @@ final class MessageTableCellView: NSTableCellView {
     init(identifier: NSUserInterfaceItemIdentifier) {
         super.init(frame: .zero)
         self.identifier = identifier
-        translatesAutoresizingMaskIntoConstraints = false
 
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
+        contentContainer.setContentHuggingPriority(.required, for: .horizontal)
+        contentContainer.setContentCompressionResistancePriority(.required, for: .horizontal)
         addSubview(contentContainer)
 
-        let maxContentWidth = HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+        let maxContentWidth = Self.maxContentWidth(for: surfaceStyle)
         let fillLeading = contentContainer.leadingAnchor.constraint(equalTo: leadingAnchor)
         fillLeading.priority = .defaultLow
         let fillTrailing = contentContainer.trailingAnchor.constraint(equalTo: trailingAnchor)
         fillTrailing.priority = .defaultLow
-        let preferredWidth = contentContainer.widthAnchor.constraint(equalToConstant: maxContentWidth)
-        preferredWidth.priority = .defaultHigh
+        contentContainerPreferredWidthConstraint = contentContainer.widthAnchor.constraint(equalToConstant: maxContentWidth)
+        contentContainerPreferredWidthConstraint.priority = NSLayoutConstraint.Priority(999)
+        contentContainerMaxWidthConstraint = contentContainer.widthAnchor.constraint(lessThanOrEqualToConstant: maxContentWidth)
 
         NSLayoutConstraint.activate([
             contentContainer.topAnchor.constraint(equalTo: topAnchor),
@@ -2068,18 +2271,12 @@ final class MessageTableCellView: NSTableCellView {
             contentContainer.centerXAnchor.constraint(equalTo: centerXAnchor),
             contentContainer.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor),
             contentContainer.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
-            contentContainer.widthAnchor.constraint(lessThanOrEqualToConstant: maxContentWidth),
+            contentContainerMaxWidthConstraint,
             fillLeading,
             fillTrailing,
-            preferredWidth
+            contentContainerPreferredWidthConstraint
         ])
 
-        metaLabel.font = HushFontResolver.contentFont(
-            settings: fontSettings,
-            referenceSize: 11,
-            weight: .semibold
-        )
-        metaLabel.textColor = NSColor(palette.secondaryText)
         metaLabel.translatesAutoresizingMaskIntoConstraints = false
 
         bodyTextView.translatesAutoresizingMaskIntoConstraints = false
@@ -2154,6 +2351,8 @@ final class MessageTableCellView: NSTableCellView {
             equalTo: contentContainer.trailingAnchor,
             constant: -HushSpacing.xl
         )
+        metaLeadingToBodyConstraint = metaLabel.leadingAnchor.constraint(equalTo: bodyTextView.leadingAnchor)
+        metaTrailingToBodyConstraint = metaLabel.trailingAnchor.constraint(equalTo: bodyTextView.trailingAnchor)
         bodyLeadingFullWidthConstraint = bodyTextView.leadingAnchor.constraint(
             equalTo: contentContainer.leadingAnchor,
             constant: HushSpacing.xl
@@ -2171,6 +2370,7 @@ final class MessageTableCellView: NSTableCellView {
             constant: -HushSpacing.xl
         )
         bodyWidthConstraint = bodyTextView.widthAnchor.constraint(equalToConstant: 0)
+        bodyTopConstraint = bodyTextView.topAnchor.constraint(equalTo: metaLabel.bottomAnchor, constant: HushSpacing.xs)
         bodyLeadingBubbleConstraint.priority = .defaultHigh
         bodyTrailingBubbleConstraint.priority = .defaultHigh
 
@@ -2180,9 +2380,10 @@ final class MessageTableCellView: NSTableCellView {
             metaLabel.topAnchor.constraint(equalTo: contentContainer.topAnchor, constant: HushSpacing.sm),
             bodyLeadingFullWidthConstraint,
             bodyTrailingFullWidthConstraint,
-            bodyTextView.topAnchor.constraint(equalTo: metaLabel.bottomAnchor, constant: HushSpacing.xs),
+            bodyTopConstraint,
             bodyBottomWithoutActionBar
         ])
+        applyPresentationPalette()
     }
 
     // swiftlint:enable function_body_length
@@ -2194,14 +2395,13 @@ final class MessageTableCellView: NSTableCellView {
 
     override func setFrameSize(_ newSize: NSSize) {
         let oldWidth = frame.size.width
-        let previousHeight = bodyIntrinsicHeight
         super.setFrameSize(newSize)
         if abs(oldWidth - newSize.width) > 0.5 {
             needsUpdateConstraints = true
             contentContainer.needsUpdateConstraints = true
             contentContainer.needsLayout = true
             needsLayout = true
-            refreshAttachmentPreviewForCurrentWidth(previousHeight: previousHeight)
+            bodyTextView.cachedIntrinsicHeight = nil
         }
     }
 
@@ -2209,7 +2409,13 @@ final class MessageTableCellView: NSTableCellView {
         let previousHeight = bodyIntrinsicHeight
         super.layout()
         updateBodyPresentationGeometry()
-        refreshAttachmentPreviewForCurrentWidth(previousHeight: previousHeight)
+        refreshAttachmentPreviewForCurrentWidth()
+        invalidateOwningRowHeightIfNeeded(
+            owningTableView: owningTableView,
+            rowIndex: currentRowIndex,
+            previousHeight: previousHeight,
+            messageTableView: messageTableView
+        )
     }
 
     override func prepareForReuse() {
@@ -2369,7 +2575,10 @@ final class MessageTableCellView: NSTableCellView {
     }
 
     private func plainTextAlignment(for row: MessageTableView.RowModel) -> NSTextAlignment {
-        row.message.role == .user ? .right : .left
+        if row.message.role == .user {
+            return .right
+        }
+        return .left
     }
 
     private func plainTextColor(for row: MessageTableView.RowModel) -> NSColor {
@@ -2392,6 +2601,10 @@ final class MessageTableCellView: NSTableCellView {
         )
     }
 
+    private func metaString(for row: MessageTableView.RowModel) -> String {
+        return roleDisplayName(row.message.role) + "  " + Self.timeString(from: row.message.createdAt)
+    }
+
     private func isStreamingWaitingOutput(
         _ output: MessageRenderOutput,
         for row: MessageTableView.RowModel
@@ -2401,7 +2614,7 @@ final class MessageTableCellView: NSTableCellView {
             && output.plainText == RenderConstants.assistantWaitingPlaceholder
     }
 
-    private static func containsClosedMathSegment(_ content: String) -> Bool {
+    fileprivate static func containsClosedMathSegment(_ content: String) -> Bool {
         guard content.contains("$") else { return false }
         return MathSegmenter.segment(content).contains { segment in
             switch segment {
@@ -2413,7 +2626,7 @@ final class MessageTableCellView: NSTableCellView {
         }
     }
 
-    private static func containsStableMarkdownCue(_ content: String) -> Bool {
+    fileprivate static func containsStableMarkdownCue(_ content: String) -> Bool {
         if containsPairedDelimiter("**", in: content)
             || containsPairedDelimiter("__", in: content)
             || containsPairedDelimiter("~~", in: content)
@@ -2664,7 +2877,11 @@ final class MessageTableCellView: NSTableCellView {
         return wasShowingStreamingRichOutput
     }
 
-    private func bodyPresentationMode(for row: MessageTableView.RowModel) -> BodyPresentationMode {
+    private func rowShowsTranscriptActions(for _: MessageTableView.RowModel) -> Bool {
+        true
+    }
+
+    private func bodyPresentationMode(for row: MessageTableView.RowModel) -> MessageBodyPresentationMode {
         if row.message.role == .user {
             return .trailingCompactText
         }
@@ -2677,30 +2894,39 @@ final class MessageTableCellView: NSTableCellView {
     private func applyBodyPresentation(for row: MessageTableView.RowModel, maxBodyWidth: CGFloat) {
         let mode = bodyPresentationMode(for: row)
         currentBodyPresentationMode = mode
-        metaLabel.alignment = row.message.role == .user ? .right : .left
+        if row.message.role == .user {
+            metaLabel.alignment = .right
+        } else {
+            metaLabel.alignment = .left
+        }
         let textAlignment = plainTextAlignment(for: row)
 
         switch mode {
         case .fullWidth:
-            bodyTextView.textContainerInset = .zero
+            metaLeadingConstraint.isActive = true
+            metaTrailingConstraint.isActive = true
+            metaLeadingToBodyConstraint.isActive = false
+            metaTrailingToBodyConstraint.isActive = false
+            bodyTextView.textContainerInset = fullWidthTextInsets(for: row)
             bodyTextView.alignment = textAlignment
-            bodyTextView.layer?.cornerRadius = 0
-            bodyTextView.layer?.borderWidth = 0
-            bodyTextView.layer?.backgroundColor = NSColor.clear.cgColor
-            bodyTextView.layer?.borderColor = NSColor.clear.cgColor
+            bodyTextView.cachedIntrinsicHeight = nil
+            applyFullWidthDecoration(for: row)
             bodyLeadingBubbleConstraint.isActive = false
             bodyTrailingBubbleConstraint.isActive = false
             bodyWidthConstraint.isActive = false
             bodyLeadingFullWidthConstraint.isActive = true
             bodyTrailingFullWidthConstraint.isActive = true
+            bodyTextView.prepareMeasurementWidth(maxBodyWidth)
         case .trailingCompactText:
             applyCompactTextPresentation(
+                for: row,
                 alignTrailing: true,
                 maxBodyWidth: maxBodyWidth,
                 textAlignment: textAlignment
             )
         case .leadingCompactText:
             applyCompactTextPresentation(
+                for: row,
                 alignTrailing: false,
                 maxBodyWidth: maxBodyWidth,
                 textAlignment: textAlignment
@@ -2711,41 +2937,94 @@ final class MessageTableCellView: NSTableCellView {
     }
 
     private func applyCompactTextPresentation(
+        for row: MessageTableView.RowModel,
         alignTrailing: Bool,
         maxBodyWidth: CGFloat,
         textAlignment: NSTextAlignment
     ) {
-        bodyTextView.textContainerInset = .zero
+        metaLeadingConstraint.isActive = false
+        metaTrailingConstraint.isActive = false
+        metaLeadingToBodyConstraint.isActive = true
+        metaTrailingToBodyConstraint.isActive = true
+        let compactInsets = compactTextInsets(for: row, alignTrailing: alignTrailing)
+        bodyTextView.textContainerInset = compactInsets
         bodyTextView.alignment = textAlignment
         bodyTextView.cachedIntrinsicHeight = nil
-        bodyTextView.layer?.cornerRadius = 0
-        bodyTextView.layer?.borderWidth = 0
-        bodyTextView.layer?.backgroundColor = NSColor.clear.cgColor
-        bodyTextView.layer?.borderColor = NSColor.clear.cgColor
+        applyCompactTextDecoration(for: row, alignTrailing: alignTrailing)
         bodyLeadingFullWidthConstraint.isActive = false
         bodyTrailingFullWidthConstraint.isActive = false
         bodyLeadingBubbleConstraint.isActive = !alignTrailing
         bodyTrailingBubbleConstraint.isActive = alignTrailing
-        bodyWidthConstraint.constant = preferredCompactTextWidth(maxBodyWidth: maxBodyWidth)
+        let horizontalInset = compactInsets.width * 2
+        bodyWidthConstraint.constant = preferredCompactTextWidth(
+            for: row,
+            maxBodyWidth: maxBodyWidth,
+            widthRatio: compactTextWidthRatio(for: row, alignTrailing: alignTrailing),
+            horizontalInset: horizontalInset
+        )
         bodyWidthConstraint.isActive = true
+        bodyTextView.prepareMeasurementWidth(bodyWidthConstraint.constant)
     }
 
-    private func preferredCompactTextWidth(maxBodyWidth: CGFloat) -> CGFloat {
+    private func fullWidthTextInsets(for _: MessageTableView.RowModel) -> NSSize {
+        return .zero
+    }
+
+    private func applyFullWidthDecoration(for _: MessageTableView.RowModel) {
+        bodyTextView.layer?.cornerRadius = 0
+        bodyTextView.layer?.borderWidth = 0
+        bodyTextView.layer?.masksToBounds = false
+        bodyTextView.layer?.backgroundColor = NSColor.clear.cgColor
+        bodyTextView.layer?.borderColor = NSColor.clear.cgColor
+    }
+
+    private func compactTextInsets(
+        for _: MessageTableView.RowModel,
+        alignTrailing _: Bool
+    ) -> NSSize {
+        return .zero
+    }
+
+    private func compactTextWidthRatio(
+        for _: MessageTableView.RowModel,
+        alignTrailing _: Bool
+    ) -> CGFloat {
+        return Self.compactTextMaxWidthRatio
+    }
+
+    private func applyCompactTextDecoration(
+        for _: MessageTableView.RowModel,
+        alignTrailing _: Bool
+    ) {
+        bodyTextView.layer?.cornerRadius = 0
+        bodyTextView.layer?.borderWidth = 0
+        bodyTextView.layer?.masksToBounds = false
+        bodyTextView.layer?.backgroundColor = NSColor.clear.cgColor
+        bodyTextView.layer?.borderColor = NSColor.clear.cgColor
+    }
+
+    private func preferredCompactTextWidth(
+        for _: MessageTableView.RowModel,
+        maxBodyWidth: CGFloat,
+        widthRatio: CGFloat,
+        horizontalInset: CGFloat
+    ) -> CGFloat {
         let maxCompactWidth = min(
             maxBodyWidth,
-            max(180, floor(maxBodyWidth * Self.compactTextMaxWidthRatio))
+            max(180 + horizontalInset, floor(maxBodyWidth * widthRatio) + horizontalInset)
         )
-        let minCompactWidth = min(maxCompactWidth, Self.compactTextMinWidth)
+        let maxTextWidth = max(1, maxCompactWidth - horizontalInset)
+        let minCompactWidth = min(maxCompactWidth, Self.compactTextMinWidth + horizontalInset)
         guard let storage = bodyTextView.textStorage, storage.length > 0 else {
             return minCompactWidth
         }
 
-        let measurementWidth = max(1, maxCompactWidth)
+        let measurementWidth = max(1, maxTextWidth)
         let bounds = storage.boundingRect(
             with: NSSize(width: measurementWidth, height: CGFloat.greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading]
         )
-        let contentWidth = ceil(bounds.width)
+        let contentWidth = ceil(bounds.width) + horizontalInset
         return max(minCompactWidth, min(maxCompactWidth, contentWidth))
     }
 
@@ -2781,6 +3060,10 @@ final class MessageTableCellView: NSTableCellView {
 
     private func resetBodyPresentation() {
         metaLabel.alignment = .left
+        metaLeadingConstraint?.isActive = true
+        metaTrailingConstraint?.isActive = true
+        metaLeadingToBodyConstraint?.isActive = false
+        metaTrailingToBodyConstraint?.isActive = false
         bodyTextView.textContainerInset = .zero
         bodyTextView.alignment = .left
         bodyTextView.cachedIntrinsicHeight = nil
@@ -2855,12 +3138,27 @@ final class MessageTableCellView: NSTableCellView {
         #endif
     }
 
+    func configure(using context: MessageTableRowConfigurationContext) {
+        configure(
+            row: context.row,
+            runtime: context.runtime,
+            availableWidth: context.availableWidth,
+            theme: context.theme,
+            surfaceStyle: context.surfaceStyle,
+            container: context.container,
+            owningTableView: context.owningTableView,
+            rowIndex: context.rowIndex,
+            messageTableView: context.messageTableView
+        )
+    }
+
     // swiftlint:disable:next function_body_length
     func configure(
         row: MessageTableView.RowModel,
         runtime: MessageRenderRuntime,
         availableWidth: CGFloat,
         theme: AppTheme = .graphiteGlass,
+        surfaceStyle: ConversationSurfaceStyle = .main,
         container: AppContainer?,
         owningTableView: NSTableView? = nil,
         rowIndex: Int? = nil,
@@ -2871,9 +3169,10 @@ final class MessageTableCellView: NSTableCellView {
         currentRowIndex = rowIndex
         renderRuntime = runtime
         self.theme = theme
+        self.surfaceStyle = surfaceStyle
         fontSettings = container?.settings.fontSettings ?? .default
 
-        let contentWidth = max(1, availableWidth - HushSpacing.xl * 2)
+        let contentWidth = max(1, clampedAvailableWidth(availableWidth) - HushSpacing.xl * 2)
         currentContentWidth = contentWidth
         let fingerprint = RenderInputFingerprint(
             messageID: row.message.id,
@@ -2883,9 +3182,11 @@ final class MessageTableCellView: NSTableCellView {
             generation: row.renderHint.switchGeneration,
             isStreaming: row.isStreaming,
             contentWidth: Int(contentWidth.rounded(.down)),
-            styleKey: renderStyle.cacheKey
+            styleKey: renderStyle.cacheKey,
+            surfaceStyle: surfaceStyle
         )
         if fingerprint == lastFingerprint {
+            updateBodyPresentationGeometry()
             return
         }
         lastFingerprint = fingerprint
@@ -2895,16 +3196,20 @@ final class MessageTableCellView: NSTableCellView {
         self.container = container
         currentRow = row
 
-        metaLabel.stringValue = roleDisplayName(row.message.role) + "  " + Self.timeString(from: row.message.createdAt)
+        metaLabel.stringValue = metaString(for: row)
         outputObservation?.cancel()
         outputObservation = nil
         bodyTextView.cachedIntrinsicHeight = nil
 
+        let allowsTranscriptActions = rowShowsTranscriptActions(for: row)
         let supportsTraceButton = row.message.role == .assistant || row.message.role == .user
-        let shouldShowDebugButton = supportsTraceButton
+        let shouldShowDebugButton = allowsTranscriptActions
+            && supportsTraceButton
             && !row.isStreaming
             && row.message.debugInfoJSON != nil
-        let shouldShowCopyButton = row.message.role == .assistant && !row.isStreaming
+        let shouldShowCopyButton = allowsTranscriptActions
+            && row.message.role == .assistant
+            && !row.isStreaming
         let shouldShowActionBar = shouldShowDebugButton || shouldShowCopyButton
         let renderableAttachment = row.message.attachments.first(where: { $0.kind == .image })
         updateAttachmentPreview(attachment: renderableAttachment, availableWidth: contentWidth)
@@ -3038,7 +3343,7 @@ final class MessageTableCellView: NSTableCellView {
         )
     }
 
-    private func refreshAttachmentPreviewForCurrentWidth(previousHeight: CGFloat) {
+    private func refreshAttachmentPreviewForCurrentWidth() {
         guard let row = currentRow,
               row.message.attachments.contains(where: { $0.kind == .image }),
               !attachmentPreviewView.isHidden
@@ -3046,20 +3351,13 @@ final class MessageTableCellView: NSTableCellView {
             return
         }
 
-        let maxAvailableWidth = HushSpacing.chatContentMaxWidth + HushSpacing.xl * 2
+        let maxAvailableWidth = Self.maxContentWidth(for: surfaceStyle)
         let clampedAvailableWidth = min(bounds.width, maxAvailableWidth)
         let nextContentWidth = max(1, (clampedAvailableWidth - HushSpacing.xl * 2).rounded(.down))
         guard abs(nextContentWidth - currentContentWidth) > 0.5 else { return }
 
         currentContentWidth = nextContentWidth
-        if attachmentPreviewView.updateAvailableWidth(nextContentWidth) {
-            invalidateOwningRowHeightIfNeeded(
-                owningTableView: owningTableView,
-                rowIndex: currentRowIndex,
-                previousHeight: previousHeight,
-                messageTableView: messageTableView
-            )
-        }
+        _ = attachmentPreviewView.updateAvailableWidth(nextContentWidth)
     }
 
     private func updateActionBarLayout(
@@ -3216,7 +3514,7 @@ final class MessageTableCellView: NSTableCellView {
         return formatter
     }()
 
-    private static func timeString(from date: Date) -> String {
+    fileprivate static func timeString(from date: Date) -> String {
         timeFormatter.string(from: date)
     }
 
@@ -3231,6 +3529,973 @@ final class MessageTableCellView: NSTableCellView {
         case .user:
             return "You"
         }
+    }
+
+    private static func attachmentHash(_ attachments: [MessageAttachment]) -> Int {
+        attachments
+            .map {
+                [
+                    $0.id.uuidString,
+                    $0.kind.rawValue,
+                    $0.localRelativePath,
+                    $0.mimeType,
+                    $0.pixelWidth.map(String.init) ?? "",
+                    $0.pixelHeight.map(String.init) ?? "",
+                    $0.sha256,
+                    $0.sourcePrompt,
+                    $0.providerMetadataJSON ?? ""
+                ].joined(separator: "|")
+            }
+            .joined(separator: "::")
+            .hashValue
+    }
+}
+
+@MainActor
+final class QuickBarMessageCellView: NSTableCellView, MessageTableRowView {
+    private struct RenderInputFingerprint: Equatable {
+        let messageID: UUID
+        let contentHash: Int
+        let attachmentHash: Int
+        let generation: UInt64
+        let isStreaming: Bool
+        let contentWidth: Int
+        let styleKey: Int
+    }
+
+    private let contentContainer = NSView()
+    private let metaLabel = NSTextField(labelWithString: "")
+    private let bodyTextView = MessageBodyTextView()
+    private let attachmentPreviewView = MessageAttachmentPreviewView()
+    private weak var owningTableView: NSTableView?
+    private weak var messageTableView: MessageTableView?
+    private weak var container: AppContainer?
+    private var renderRuntime: MessageRenderRuntime?
+    private var renderController: RenderController?
+    private var outputObservation: AnyCancellable?
+    private var currentRow: MessageTableView.RowModel?
+    private var currentRowIndex: Int?
+    private var lastFingerprint: RenderInputFingerprint?
+    private var currentContentWidth: CGFloat = 0
+    private var streamingDisplayedLength: Int = 0
+    private var currentVisiblePlainText: String = ""
+    private var isShowingStreamingRichOutput = false
+    private var contentContainerPreferredWidthConstraint: NSLayoutConstraint!
+    private var contentContainerMaxWidthConstraint: NSLayoutConstraint!
+    private var bodyTopConstraint: NSLayoutConstraint!
+    private var bodyBottomConstraint: NSLayoutConstraint!
+    private var bodyLeadingFullWidthConstraint: NSLayoutConstraint!
+    private var bodyTrailingFullWidthConstraint: NSLayoutConstraint!
+    private var bodyLeadingColumnConstraint: NSLayoutConstraint!
+    private var bodyTrailingColumnConstraint: NSLayoutConstraint!
+    private var bodyWidthConstraint: NSLayoutConstraint!
+    private var previewTopConstraint: NSLayoutConstraint!
+    private var previewLeadingConstraint: NSLayoutConstraint!
+    private var previewTrailingConstraint: NSLayoutConstraint!
+    private var previewBottomConstraint: NSLayoutConstraint!
+    private var isPreviewVisible = false
+    private var theme: AppTheme = .graphiteGlass {
+        didSet { applyPresentationPalette() }
+    }
+
+    private var fontSettings: AppFontSettings = .default {
+        didSet { applyPresentationPalette() }
+    }
+
+    private var palette: HushThemePalette {
+        HushColors.palette(for: theme)
+    }
+
+    private var renderStyle: RenderStyle {
+        RenderStyle.fromPalette(palette, fontSettings: fontSettings)
+    }
+
+    private static let assistantWaitingBreathingAnimationKey = "quickBarAssistantWaitingBreathing"
+    private static let assistantWaitingBreathingDuration: CFTimeInterval = 1.18
+    private static let assistantWaitingRestingOpacity: Float = 0.88
+    private static let assistantWaitingMinimumOpacity: Float = 0.42
+
+    #if DEBUG
+        // swiftlint:disable identifier_name
+        private(set) var renderRequestCountForTesting = 0
+        private(set) var streamingUpdateAssignmentsForTesting = 0
+        private(set) var richOutputHeightInvalidationCountForTesting = 0
+        // swiftlint:enable identifier_name
+    #endif
+
+    init(identifier: NSUserInterfaceItemIdentifier) {
+        super.init(frame: .zero)
+        self.identifier = identifier
+
+        contentContainer.translatesAutoresizingMaskIntoConstraints = false
+        contentContainer.setContentHuggingPriority(.required, for: .horizontal)
+        contentContainer.setContentCompressionResistancePriority(.required, for: .horizontal)
+        addSubview(contentContainer)
+
+        let maxContentWidth = QuickBarTranscriptMetrics.contentMaxWidth
+        let fillLeading = contentContainer.leadingAnchor.constraint(equalTo: leadingAnchor)
+        fillLeading.priority = .defaultLow
+        let fillTrailing = contentContainer.trailingAnchor.constraint(equalTo: trailingAnchor)
+        fillTrailing.priority = .defaultLow
+        contentContainerPreferredWidthConstraint = contentContainer.widthAnchor.constraint(equalToConstant: maxContentWidth)
+        contentContainerPreferredWidthConstraint.priority = NSLayoutConstraint.Priority(999)
+        contentContainerMaxWidthConstraint = contentContainer.widthAnchor.constraint(lessThanOrEqualToConstant: maxContentWidth)
+
+        NSLayoutConstraint.activate([
+            contentContainer.topAnchor.constraint(equalTo: topAnchor),
+            contentContainer.bottomAnchor.constraint(equalTo: bottomAnchor),
+            contentContainer.centerXAnchor.constraint(equalTo: centerXAnchor),
+            contentContainer.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor),
+            contentContainer.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+            contentContainerMaxWidthConstraint,
+            fillLeading,
+            fillTrailing,
+            contentContainerPreferredWidthConstraint
+        ])
+
+        metaLabel.translatesAutoresizingMaskIntoConstraints = false
+        metaLabel.lineBreakMode = .byTruncatingTail
+        metaLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        metaLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        bodyTextView.translatesAutoresizingMaskIntoConstraints = false
+        bodyTextView.wantsLayer = true
+        bodyTextView.setContentHuggingPriority(.required, for: .horizontal)
+        bodyTextView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        bodyTextView.setContentCompressionResistancePriority(.required, for: .vertical)
+        bodyTextView.setContentHuggingPriority(.required, for: .vertical)
+
+        attachmentPreviewView.translatesAutoresizingMaskIntoConstraints = false
+        attachmentPreviewView.isHidden = true
+
+        contentContainer.addSubview(metaLabel)
+        contentContainer.addSubview(bodyTextView)
+        contentContainer.addSubview(attachmentPreviewView)
+
+        bodyTopConstraint = bodyTextView.topAnchor.constraint(
+            equalTo: metaLabel.bottomAnchor,
+            constant: QuickBarTranscriptMetrics.metaTopSpacing
+        )
+        bodyBottomConstraint = bodyTextView.bottomAnchor.constraint(
+            equalTo: contentContainer.bottomAnchor,
+            constant: -HushSpacing.sm
+        )
+        bodyLeadingFullWidthConstraint = bodyTextView.leadingAnchor.constraint(
+            equalTo: contentContainer.leadingAnchor,
+            constant: QuickBarTranscriptMetrics.sideInset
+        )
+        bodyTrailingFullWidthConstraint = bodyTextView.trailingAnchor.constraint(
+            equalTo: contentContainer.trailingAnchor,
+            constant: -QuickBarTranscriptMetrics.sideInset
+        )
+        bodyLeadingColumnConstraint = bodyTextView.leadingAnchor.constraint(
+            equalTo: contentContainer.leadingAnchor,
+            constant: QuickBarTranscriptMetrics.sideInset
+        )
+        bodyTrailingColumnConstraint = bodyTextView.trailingAnchor.constraint(
+            equalTo: contentContainer.trailingAnchor,
+            constant: -QuickBarTranscriptMetrics.trailingCompactInset
+        )
+        bodyWidthConstraint = bodyTextView.widthAnchor.constraint(equalToConstant: 0)
+        previewTopConstraint = attachmentPreviewView.topAnchor.constraint(equalTo: bodyTextView.bottomAnchor, constant: HushSpacing.sm)
+        previewLeadingConstraint = attachmentPreviewView.leadingAnchor.constraint(equalTo: bodyTextView.leadingAnchor)
+        previewTrailingConstraint = attachmentPreviewView.trailingAnchor.constraint(equalTo: bodyTextView.trailingAnchor)
+        previewBottomConstraint = attachmentPreviewView.bottomAnchor.constraint(
+            equalTo: contentContainer.bottomAnchor,
+            constant: -HushSpacing.sm
+        )
+
+        NSLayoutConstraint.activate([
+            metaLabel.topAnchor.constraint(equalTo: contentContainer.topAnchor, constant: HushSpacing.sm),
+            metaLabel.leadingAnchor.constraint(equalTo: bodyTextView.leadingAnchor),
+            metaLabel.trailingAnchor.constraint(equalTo: bodyTextView.trailingAnchor),
+            bodyTopConstraint,
+            bodyLeadingFullWidthConstraint,
+            bodyTrailingFullWidthConstraint,
+            bodyBottomConstraint
+        ])
+
+        applyPresentationPalette()
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        nil
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let oldWidth = frame.size.width
+        super.setFrameSize(newSize)
+        if abs(oldWidth - newSize.width) > 0.5 {
+            needsUpdateConstraints = true
+            contentContainer.needsUpdateConstraints = true
+            contentContainer.needsLayout = true
+            needsLayout = true
+            bodyTextView.cachedIntrinsicHeight = nil
+        }
+    }
+
+    override func layout() {
+        let previousHeight = bodyIntrinsicHeight
+        super.layout()
+        updatePresentationGeometry()
+        refreshAttachmentPreviewForCurrentWidth()
+        invalidateOwningRowHeightIfNeeded(
+            owningTableView: owningTableView,
+            rowIndex: currentRowIndex,
+            previousHeight: previousHeight,
+            messageTableView: messageTableView
+        )
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        cancelRenderWork()
+        currentRow = nil
+        currentRowIndex = nil
+        renderRuntime = nil
+        container = nil
+        owningTableView = nil
+        messageTableView = nil
+        lastFingerprint = nil
+        streamingDisplayedLength = 0
+        currentVisiblePlainText = ""
+        currentContentWidth = 0
+        isShowingStreamingRichOutput = false
+        isPreviewVisible = false
+        attachmentPreviewView.reset()
+        NSLayoutConstraint.deactivate([
+            previewTopConstraint,
+            previewLeadingConstraint,
+            previewTrailingConstraint,
+            previewBottomConstraint
+        ])
+        bodyBottomConstraint.isActive = true
+        resetPresentation()
+        setBodyText(NSAttributedString(), cachedHeight: nil, visiblePlainText: "")
+    }
+
+    func configure(using context: MessageTableRowConfigurationContext) {
+        configure(
+            row: context.row,
+            runtime: context.runtime,
+            availableWidth: context.availableWidth,
+            theme: context.theme,
+            container: context.container,
+            owningTableView: context.owningTableView,
+            rowIndex: context.rowIndex,
+            messageTableView: context.messageTableView
+        )
+    }
+
+    // swiftlint:disable:next function_body_length
+    func configure(
+        row: MessageTableView.RowModel,
+        runtime: MessageRenderRuntime,
+        availableWidth: CGFloat,
+        theme: AppTheme = .graphiteGlass,
+        container: AppContainer?,
+        owningTableView: NSTableView? = nil,
+        rowIndex: Int? = nil,
+        messageTableView: MessageTableView? = nil
+    ) {
+        self.container = container
+        self.owningTableView = owningTableView
+        self.messageTableView = messageTableView
+        currentRowIndex = rowIndex
+        renderRuntime = runtime
+        self.theme = theme
+        fontSettings = container?.settings.fontSettings ?? .default
+
+        let contentWidth = max(1, min(availableWidth, QuickBarTranscriptMetrics.contentMaxWidth) - QuickBarTranscriptMetrics.sideInset * 2)
+        currentContentWidth = contentWidth
+        let fingerprint = RenderInputFingerprint(
+            messageID: row.message.id,
+            contentHash: row.message.content.hashValue,
+            attachmentHash: Self.attachmentHash(row.message.attachments),
+            generation: row.renderHint.switchGeneration,
+            isStreaming: row.isStreaming,
+            contentWidth: Int(contentWidth.rounded(.down)),
+            styleKey: renderStyle.cacheKey
+        )
+        if fingerprint == lastFingerprint {
+            updatePresentationGeometry()
+            return
+        }
+        lastFingerprint = fingerprint
+
+        let previousRow = currentRow
+        let wasShowingStreamingRichOutput = isShowingStreamingRichOutput
+        currentRow = row
+        metaLabel.stringValue = metaString(for: row)
+        outputObservation?.cancel()
+        outputObservation = nil
+        bodyTextView.cachedIntrinsicHeight = nil
+
+        let renderableAttachment = row.message.attachments.first(where: { $0.kind == .image })
+        updateAttachmentPreview(attachment: renderableAttachment, availableWidth: contentWidth)
+        updatePreviewLayout(showPreview: renderableAttachment != nil)
+
+        guard row.message.role == .assistant else {
+            applyPlainText(row.message.content, for: row, cachedHeight: nil)
+            applyPresentation(for: row, maxBodyWidth: contentWidth)
+            streamingDisplayedLength = 0
+            cancelRenderWork(resetFingerprint: false)
+            return
+        }
+
+        if row.isStreaming {
+            let shouldRenderStreamingRich = shouldUseStreamingRichRender(for: row.message.content)
+            let shouldSkipStreamingFallback =
+                previousRow?.isStreaming == true
+                    && row.message.content.count < streamingDisplayedLength
+            if !shouldSkipStreamingFallback, !isShowingStreamingRichOutput {
+                applyPlainText(
+                    streamingFallbackText(for: row.message.content),
+                    for: row,
+                    cachedHeight: nil
+                )
+                streamingDisplayedLength = row.message.content.count
+            }
+            applyPresentation(for: row, maxBodyWidth: contentWidth)
+
+            guard shouldRenderStreamingRich else {
+                cancelRenderWork(resetFingerprint: false)
+                return
+            }
+
+            ensureRenderController(
+                runtime: runtime,
+                observedRow: row,
+                contentWidth: contentWidth,
+                owningTableView: owningTableView,
+                rowIndex: rowIndex,
+                messageTableView: messageTableView
+            )
+            if !shouldSkipStreamingFallback || isShowingStreamingRichOutput {
+                requestStreamingRichRender(content: row.message.content)
+            }
+            return
+        }
+
+        let shouldPreserveVisibleOutput = shouldPreserveVisibleOutputForFinalTransition(
+            previousRow: previousRow,
+            nextRow: row,
+            wasShowingStreamingRichOutput: wasShowingStreamingRichOutput
+        )
+        isShowingStreamingRichOutput = false
+
+        let input = MessageRenderInput(
+            content: row.message.content,
+            availableWidth: contentWidth,
+            style: renderStyle,
+            isStreaming: false
+        )
+        if let cached = runtime.cachedOutput(for: input) {
+            let previousHeight = bodyIntrinsicHeight
+            setBodyText(
+                cached.attributedString,
+                cachedHeight: runtime.cachedRowHeight(for: input),
+                visiblePlainText: cached.plainText
+            )
+            invalidateOwningRowHeightIfNeeded(
+                owningTableView: owningTableView,
+                rowIndex: rowIndex,
+                previousHeight: previousHeight,
+                messageTableView: messageTableView
+            )
+            applyPresentation(for: row, maxBodyWidth: contentWidth)
+            streamingDisplayedLength = 0
+            container?.reportActiveConversationRichRenderReadyIfNeeded()
+            cancelRenderWork(resetFingerprint: false)
+            return
+        }
+
+        if !shouldPreserveVisibleOutput {
+            applyPlainText(row.message.content, for: row, cachedHeight: nil)
+        }
+        applyPresentation(for: row, maxBodyWidth: contentWidth)
+        streamingDisplayedLength = 0
+
+        if renderController == nil {
+            renderController = runtime.makeRenderController()
+        }
+
+        ensureRenderController(
+            runtime: runtime,
+            observedRow: row,
+            contentWidth: contentWidth,
+            owningTableView: owningTableView,
+            rowIndex: rowIndex,
+            messageTableView: messageTableView
+        )
+
+        #if DEBUG
+            renderRequestCountForTesting += 1
+        #endif
+        guard let renderController else { return }
+        renderController.requestRender(
+            content: row.message.content,
+            availableWidth: contentWidth,
+            style: renderStyle,
+            isStreaming: false,
+            hint: row.renderHint
+        )
+    }
+
+    func cancelRenderWork() {
+        cancelRenderWork(resetFingerprint: true)
+    }
+
+    private func cancelRenderWork(resetFingerprint: Bool) {
+        outputObservation?.cancel()
+        outputObservation = nil
+        if let renderController {
+            renderController.cancel()
+            self.renderController = nil
+        }
+        isShowingStreamingRichOutput = false
+        if resetFingerprint {
+            lastFingerprint = nil
+        }
+    }
+
+    var bodyIntrinsicHeight: CGFloat {
+        bodyTextView.intrinsicContentSize.height + attachmentPreviewView.renderedHeight
+    }
+
+    func updateStreamingText(_ content: String) {
+        updateCurrentRowContent(content)
+
+        let shouldRenderStreamingRich = shouldUseStreamingRichRender(for: content)
+        if !isShowingStreamingRichOutput {
+            applyStreamingPlainText(content)
+            updatePresentationGeometry()
+        }
+
+        guard shouldRenderStreamingRich else { return }
+        if let runtime = renderRuntime, let currentRow {
+            ensureRenderController(
+                runtime: runtime,
+                observedRow: currentRow,
+                contentWidth: currentContentWidth,
+                owningTableView: owningTableView,
+                rowIndex: currentRowIndex,
+                messageTableView: messageTableView
+            )
+        }
+        requestStreamingRichRender(content: content)
+    }
+
+    private func applyPresentationPalette() {
+        metaLabel.font = HushFontResolver.contentFont(
+            settings: fontSettings,
+            referenceSize: 10,
+            weight: .regular
+        )
+        metaLabel.textColor = NSColor(
+            palette.quickBarTertiaryText.opacity(
+                theme.usesDarkAppearance ? 0.84 : 0.88
+            )
+        )
+        bodyTextView.themePalette = palette
+    }
+
+    private func plainTextAttributes(
+        alignment: NSTextAlignment = .left,
+        foregroundColor: NSColor? = nil
+    ) -> [NSAttributedString.Key: Any] {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = alignment
+        paragraphStyle.lineBreakMode = .byWordWrapping
+
+        return [
+            .font: HushFontResolver.contentFont(settings: fontSettings, referenceSize: 14),
+            .foregroundColor: foregroundColor ?? NSColor(palette.primaryText),
+            .paragraphStyle: paragraphStyle
+        ]
+    }
+
+    private func updateCurrentRowContent(_ content: String) {
+        guard let currentRow else { return }
+        guard currentRow.message.content != content else { return }
+
+        let updatedMessage = currentRow.message.updatingContent(content)
+        self.currentRow = MessageTableView.RowModel(
+            message: updatedMessage,
+            isStreaming: currentRow.isStreaming,
+            isWaitingPlaceholder: currentRow.isWaitingPlaceholder,
+            renderHint: currentRow.renderHint
+        )
+    }
+
+    private static func shouldShowStreamingWaitingState(for content: String) -> Bool {
+        content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func streamingFallbackText(for content: String) -> String {
+        Self.shouldShowStreamingWaitingState(for: content)
+            ? RenderConstants.assistantWaitingPlaceholder
+            : content
+    }
+
+    private func isAssistantWaitingState(
+        for row: MessageTableView.RowModel,
+        content: String
+    ) -> Bool {
+        row.message.role == .assistant
+            && row.isStreaming
+            && Self.shouldShowStreamingWaitingState(for: content)
+    }
+
+    private func plainTextAlignment(for row: MessageTableView.RowModel) -> NSTextAlignment {
+        row.message.role == .user ? .right : .left
+    }
+
+    private func plainTextColor(for row: MessageTableView.RowModel) -> NSColor {
+        if isAssistantWaitingState(for: row, content: row.message.content) {
+            return NSColor(palette.tertiaryText)
+        }
+        return NSColor(palette.primaryText)
+    }
+
+    private func attributedPlainText(
+        _ content: String,
+        for row: MessageTableView.RowModel
+    ) -> NSAttributedString {
+        NSAttributedString(
+            string: content,
+            attributes: plainTextAttributes(
+                alignment: plainTextAlignment(for: row),
+                foregroundColor: plainTextColor(for: row)
+            )
+        )
+    }
+
+    private func metaString(for row: MessageTableView.RowModel) -> String {
+        MessageTableCellView.timeString(from: row.message.createdAt)
+    }
+
+    private func shouldUseAssistantColumn(for row: MessageTableView.RowModel) -> Bool {
+        guard row.message.role == .assistant else { return false }
+        guard !row.isStreaming else { return false }
+        guard row.message.attachments.isEmpty else { return false }
+
+        let content = row.message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else { return false }
+        guard !MessageTableCellView.containsClosedMathSegment(content) else { return false }
+        guard !MessageTableCellView.containsStableMarkdownCue(content) else { return false }
+        return true
+    }
+
+    private func presentationMode(for row: MessageTableView.RowModel) -> QuickBarBodyPresentationMode {
+        if row.message.role == .user, row.message.attachments.isEmpty {
+            return .trailingColumn
+        }
+        if shouldUseAssistantColumn(for: row) || isAssistantWaitingState(for: row, content: row.message.content) {
+            return .leadingColumn
+        }
+        return .fullWidth
+    }
+
+    private func applyPresentation(for row: MessageTableView.RowModel, maxBodyWidth: CGFloat) {
+        let mode = presentationMode(for: row)
+        let alignment = plainTextAlignment(for: row)
+        bodyTextView.alignment = alignment
+        bodyTextView.textContainerInset = .zero
+        bodyTextView.cachedIntrinsicHeight = nil
+        bodyTextView.layer?.cornerRadius = 0
+        bodyTextView.layer?.borderWidth = 0
+        bodyTextView.layer?.borderColor = NSColor.clear.cgColor
+        bodyTextView.layer?.backgroundColor = NSColor.clear.cgColor
+        bodyTextView.layer?.masksToBounds = false
+        metaLabel.alignment = alignment
+
+        bodyLeadingFullWidthConstraint.isActive = false
+        bodyTrailingFullWidthConstraint.isActive = false
+        bodyLeadingColumnConstraint.isActive = false
+        bodyTrailingColumnConstraint.isActive = false
+        bodyWidthConstraint.isActive = false
+
+        switch mode {
+        case .fullWidth:
+            bodyLeadingFullWidthConstraint.isActive = true
+            bodyTrailingFullWidthConstraint.isActive = true
+            bodyTextView.prepareMeasurementWidth(maxBodyWidth)
+        case .leadingColumn:
+            bodyLeadingColumnConstraint.isActive = true
+            bodyWidthConstraint.constant = preferredSideColumnWidth(maxBodyWidth: maxBodyWidth)
+            bodyWidthConstraint.isActive = true
+            bodyTextView.prepareMeasurementWidth(bodyWidthConstraint.constant)
+        case .trailingColumn:
+            bodyTrailingColumnConstraint.isActive = true
+            bodyWidthConstraint.constant = preferredSideColumnWidth(maxBodyWidth: maxBodyWidth)
+            bodyWidthConstraint.isActive = true
+            bodyTextView.prepareMeasurementWidth(bodyWidthConstraint.constant)
+        }
+
+        updateWaitingBreathingAnimation(
+            isActive: isAssistantWaitingState(for: row, content: row.message.content)
+        )
+    }
+
+    private func preferredSideColumnWidth(maxBodyWidth: CGFloat) -> CGFloat {
+        let maxCompactWidth = max(1, maxBodyWidth - QuickBarTranscriptMetrics.sideInset * 2)
+        let preferredCompactWidth = max(
+            CGFloat(QuickBarTranscriptMetrics.compactTextMinWidth),
+            floor(maxCompactWidth * QuickBarTranscriptMetrics.compactTextMaxWidthRatio)
+        )
+        let minCompactWidth = min(CGFloat(QuickBarTranscriptMetrics.compactTextMinWidth), maxCompactWidth)
+        guard let storage = bodyTextView.textStorage, storage.length > 0 else {
+            return minCompactWidth
+        }
+
+        let measurementWidth = max(1, preferredCompactWidth)
+        let bounds = storage.boundingRect(
+            with: NSSize(width: measurementWidth, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+        let contentWidth = ceil(bounds.width)
+
+        return max(minCompactWidth, min(maxCompactWidth, contentWidth))
+    }
+
+    private func updateWaitingBreathingAnimation(isActive: Bool) {
+        guard let layer = bodyTextView.layer else { return }
+        layer.opacity = isActive ? Self.assistantWaitingRestingOpacity : 1
+
+        guard isActive else {
+            layer.removeAnimation(forKey: Self.assistantWaitingBreathingAnimationKey)
+            return
+        }
+
+        guard layer.animation(forKey: Self.assistantWaitingBreathingAnimationKey) == nil else { return }
+
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = Self.assistantWaitingMinimumOpacity
+        animation.toValue = Self.assistantWaitingRestingOpacity
+        animation.duration = Self.assistantWaitingBreathingDuration
+        animation.autoreverses = true
+        animation.repeatCount = .greatestFiniteMagnitude
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(animation, forKey: Self.assistantWaitingBreathingAnimationKey)
+    }
+
+    private func updatePresentationGeometry() {
+        guard let currentRow else {
+            resetPresentation()
+            return
+        }
+        applyPresentation(for: currentRow, maxBodyWidth: max(1, currentContentWidth))
+    }
+
+    private func resetPresentation() {
+        metaLabel.alignment = .left
+        bodyTextView.alignment = .left
+        bodyTextView.textContainerInset = .zero
+        bodyTextView.cachedIntrinsicHeight = nil
+        bodyLeadingColumnConstraint?.isActive = false
+        bodyTrailingColumnConstraint?.isActive = false
+        bodyWidthConstraint?.isActive = false
+        bodyLeadingFullWidthConstraint?.isActive = true
+        bodyTrailingFullWidthConstraint?.isActive = true
+        bodyTextView.layer?.cornerRadius = 0
+        bodyTextView.layer?.borderWidth = 0
+        bodyTextView.layer?.backgroundColor = NSColor.clear.cgColor
+        bodyTextView.layer?.borderColor = NSColor.clear.cgColor
+        updateWaitingBreathingAnimation(isActive: false)
+    }
+
+    private func shouldUseStreamingRichRender(for content: String) -> Bool {
+        isShowingStreamingRichOutput
+            || MessageTableCellView.containsClosedMathSegment(content)
+            || MessageTableCellView.containsStableMarkdownCue(content)
+    }
+
+    private func ensureRenderController(
+        runtime: MessageRenderRuntime,
+        observedRow: MessageTableView.RowModel,
+        contentWidth: CGFloat,
+        owningTableView: NSTableView?,
+        rowIndex: Int?,
+        messageTableView: MessageTableView?
+    ) {
+        if renderController == nil {
+            renderController = runtime.makeRenderController()
+        }
+
+        guard let renderController else { return }
+        outputObservation?.cancel()
+        outputObservation = renderController.$currentOutput.sink { [weak self, weak messageTableView] output in
+            guard let self, let output else { return }
+            guard let activeRow = self.validatedRowForOutput(output, observedRow: observedRow) else { return }
+
+            let previousHeight = self.bodyIntrinsicHeight
+            let cachedHeight: CGFloat?
+            if activeRow.isStreaming {
+                let isWaitingOutput = self.isStreamingWaitingOutput(output, for: activeRow)
+                cachedHeight = nil
+                self.streamingDisplayedLength = isWaitingOutput
+                    ? activeRow.message.content.count
+                    : max(self.streamingDisplayedLength, output.plainText.count)
+                self.isShowingStreamingRichOutput = !isWaitingOutput
+            } else {
+                let heightInput = MessageRenderInput(
+                    content: activeRow.message.content,
+                    availableWidth: contentWidth,
+                    style: self.renderStyle,
+                    isStreaming: false
+                )
+                cachedHeight = runtime.cachedRowHeight(for: heightInput)
+                self.streamingDisplayedLength = 0
+                self.isShowingStreamingRichOutput = false
+            }
+
+            self.setBodyText(
+                output.attributedString,
+                cachedHeight: cachedHeight,
+                visiblePlainText: output.plainText
+            )
+            self.applyPresentation(for: activeRow, maxBodyWidth: contentWidth)
+            self.invalidateOwningRowHeightIfNeeded(
+                owningTableView: owningTableView,
+                rowIndex: rowIndex,
+                previousHeight: previousHeight,
+                messageTableView: messageTableView
+            )
+
+            if !activeRow.isStreaming {
+                self.container?.reportActiveConversationRichRenderReadyIfNeeded()
+            }
+        }
+    }
+
+    private func requestStreamingRichRender(content: String) {
+        guard let runtime = renderRuntime else { return }
+        guard currentContentWidth > 0 else { return }
+        guard let currentRow else { return }
+
+        if renderController == nil {
+            renderController = runtime.makeRenderController()
+        }
+        guard let renderController else { return }
+
+        #if DEBUG
+            renderRequestCountForTesting += 1
+        #endif
+        renderController.requestRender(
+            content: content,
+            availableWidth: currentContentWidth,
+            style: renderStyle,
+            isStreaming: true,
+            hint: currentRow.renderHint
+        )
+    }
+
+    private func applyStreamingPlainText(_ content: String) {
+        guard let currentRow else {
+            if bodyTextView.textStorage?.string != content {
+                setBodyText(
+                    NSAttributedString(string: content, attributes: plainTextAttributes()),
+                    cachedHeight: nil,
+                    visiblePlainText: content
+                )
+                #if DEBUG
+                    streamingUpdateAssignmentsForTesting += 1
+                #endif
+            }
+            streamingDisplayedLength = content.count
+            return
+        }
+
+        let fallbackText = streamingFallbackText(for: content)
+        let existing = bodyTextView.textStorage?.string ?? ""
+        if existing == fallbackText {
+            streamingDisplayedLength = max(streamingDisplayedLength, content.count)
+            return
+        }
+
+        if fallbackText == content,
+           !existing.isEmpty,
+           content.hasPrefix(existing),
+           let textStorage = bodyTextView.textStorage
+        {
+            let delta = String(content.dropFirst(existing.count))
+            if !delta.isEmpty {
+                textStorage.beginEditing()
+                textStorage.append(attributedPlainText(delta, for: currentRow))
+                textStorage.endEditing()
+                bodyTextView.cachedIntrinsicHeight = nil
+                currentVisiblePlainText = content
+                bodyTextView.finalizeTextMutation()
+                #if DEBUG
+                    streamingUpdateAssignmentsForTesting += 1
+                #endif
+            }
+        } else {
+            setBodyText(
+                attributedPlainText(fallbackText, for: currentRow),
+                cachedHeight: nil,
+                visiblePlainText: content
+            )
+            #if DEBUG
+                streamingUpdateAssignmentsForTesting += 1
+            #endif
+        }
+
+        streamingDisplayedLength = content.count
+    }
+
+    private func applyPlainText(
+        _ content: String,
+        for row: MessageTableView.RowModel,
+        cachedHeight: CGFloat?
+    ) {
+        setBodyText(
+            attributedPlainText(content, for: row),
+            cachedHeight: cachedHeight,
+            visiblePlainText: content
+        )
+    }
+
+    private func setBodyText(
+        _ text: NSAttributedString,
+        cachedHeight: CGFloat?,
+        visiblePlainText: String
+    ) {
+        bodyTextView.setAttributedText(text, cachedHeight: cachedHeight)
+        currentVisiblePlainText = visiblePlainText
+    }
+
+    private func isStreamingWaitingOutput(
+        _ output: MessageRenderOutput,
+        for row: MessageTableView.RowModel
+    ) -> Bool {
+        row.isStreaming
+            && Self.shouldShowStreamingWaitingState(for: row.message.content)
+            && output.plainText == RenderConstants.assistantWaitingPlaceholder
+    }
+
+    private func shouldPreserveVisibleOutputForFinalTransition(
+        previousRow: MessageTableView.RowModel?,
+        nextRow: MessageTableView.RowModel,
+        wasShowingStreamingRichOutput: Bool
+    ) -> Bool {
+        guard let previousRow else { return false }
+        guard previousRow.message.id == nextRow.message.id else { return false }
+        guard previousRow.isStreaming, !nextRow.isStreaming else { return false }
+        return wasShowingStreamingRichOutput
+    }
+
+    private static func expectedRenderedPlainText(for content: String) -> String {
+        if content.count > RenderConstants.maxRichRenderLength {
+            return String(content.prefix(RenderConstants.maxRichRenderLength))
+        }
+        return content
+    }
+
+    private func validatedRowForOutput(
+        _ output: MessageRenderOutput,
+        observedRow: MessageTableView.RowModel
+    ) -> MessageTableView.RowModel? {
+        guard let activeRow = currentRow else { return nil }
+        guard activeRow.message.id == observedRow.message.id else { return nil }
+
+        if activeRow.isStreaming {
+            let minimumLength = min(
+                streamingDisplayedLength,
+                RenderConstants.maxRichRenderLength
+            )
+            guard output.plainText.count >= minimumLength else { return nil }
+            return activeRow
+        }
+
+        let expectedPlainText = Self.expectedRenderedPlainText(for: activeRow.message.content)
+        guard output.plainText == expectedPlainText else { return nil }
+        return activeRow
+    }
+
+    private func updateAttachmentPreview(attachment: MessageAttachment?, availableWidth: CGFloat) {
+        guard let attachment else {
+            attachmentPreviewView.reset()
+            return
+        }
+        attachmentPreviewView.configure(
+            attachment: attachment,
+            resolvedURL: container?.resolveURL(for: attachment),
+            availableWidth: availableWidth,
+            palette: palette
+        )
+    }
+
+    private func updatePreviewLayout(showPreview: Bool) {
+        guard showPreview != isPreviewVisible else { return }
+        isPreviewVisible = showPreview
+
+        NSLayoutConstraint.deactivate([
+            previewTopConstraint,
+            previewLeadingConstraint,
+            previewTrailingConstraint,
+            previewBottomConstraint
+        ])
+
+        if showPreview {
+            bodyBottomConstraint.isActive = false
+            NSLayoutConstraint.activate([
+                previewTopConstraint,
+                previewLeadingConstraint,
+                previewTrailingConstraint,
+                previewBottomConstraint
+            ])
+        } else {
+            bodyBottomConstraint.isActive = true
+        }
+    }
+
+    private func refreshAttachmentPreviewForCurrentWidth() {
+        guard currentRow?.message.attachments.contains(where: { $0.kind == .image }) == true,
+              !attachmentPreviewView.isHidden
+        else {
+            return
+        }
+
+        let clampedAvailableWidth = min(bounds.width, QuickBarTranscriptMetrics.contentMaxWidth)
+        let nextContentWidth = max(1, (clampedAvailableWidth - QuickBarTranscriptMetrics.sideInset * 2).rounded(.down))
+        guard abs(nextContentWidth - currentContentWidth) > 0.5 else { return }
+
+        currentContentWidth = nextContentWidth
+        _ = attachmentPreviewView.updateAvailableWidth(nextContentWidth)
+    }
+
+    private func invalidateOwningRowHeightIfNeeded(
+        owningTableView: NSTableView?,
+        rowIndex: Int?,
+        previousHeight: CGFloat,
+        messageTableView: MessageTableView? = nil
+    ) {
+        guard let owningTableView, let rowIndex else { return }
+        guard rowIndex >= 0, rowIndex < owningTableView.numberOfRows else { return }
+        guard owningTableView.numberOfColumns > 0 else { return }
+        guard let viewAtRow = owningTableView.view(atColumn: 0, row: rowIndex, makeIfNecessary: false),
+              viewAtRow === self
+        else { return }
+
+        let nextHeight = bodyIntrinsicHeight
+        guard abs(nextHeight - previousHeight) > .ulpOfOne else { return }
+
+        if let messageTableView, messageTableView.shouldDeferPinnedRowHeightInvalidation {
+            messageTableView.enqueuePinnedRowHeightInvalidation(rowIndex: rowIndex)
+            return
+        }
+
+        if let messageTableView {
+            messageTableView.requestRowHeightInvalidation(rowIndex: rowIndex)
+        } else {
+            owningTableView.noteHeightOfRows(withIndexesChanged: IndexSet(integer: rowIndex))
+        }
+        #if DEBUG
+            richOutputHeightInvalidationCountForTesting += 1
+        #endif
     }
 
     private static func attachmentHash(_ attachments: [MessageAttachment]) -> Int {
@@ -3421,6 +4686,10 @@ private final class MessageAttachmentPreviewView: NSView {
             bottomReservedHeight
         }
 
+        var surfaceStyleForTesting: ConversationSurfaceStyle {
+            surfaceStyle
+        }
+
         func setScrollOriginYForTesting(_ y: CGFloat) {
             guard scrollView.documentView != nil else { return }
             let target = NSPoint(x: 0, y: min(max(0, y), maxScrollableOriginY))
@@ -3441,42 +4710,53 @@ private final class MessageAttachmentPreviewView: NSView {
         }
 
         @discardableResult
-        func prepareCellForTesting(row: Int) -> MessageTableCellView? {
+        func prepareCellForTesting(row: Int) -> AnyMessageTableTestingRowView? {
             guard tableView.numberOfColumns > 0 else { return nil }
             guard row >= 0, row < tableView.numberOfRows else { return nil }
             return testingCellForRow(row)
         }
 
-        func visibleCellForTesting(row: Int) -> MessageTableCellView? {
+        func visibleCellForTesting(row: Int) -> AnyMessageTableTestingRowView? {
             guard tableView.numberOfColumns > 0 else { return nil }
             guard row >= 0, row < tableView.numberOfRows else { return nil }
             return testingCellForRow(row)
         }
 
-        private func testingCellForRow(_ row: Int) -> MessageTableCellView? {
-            if let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: true) as? MessageTableCellView {
+        private func testingCellForRow(_ row: Int) -> AnyMessageTableTestingRowView? {
+            if let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: true) as? AnyMessageTableTestingRowView {
+                applyColumnWidthFrame(to: cell, in: tableView)
                 return cell
             }
             guard let runtime else { return nil }
             guard row >= 0, row < rows.count else { return nil }
-            let identifier = NSUserInterfaceItemIdentifier("MessageTableCellView.testing")
-            let cell = MessageTableCellView(identifier: identifier)
-            cell.configure(
+            let cell = makeTestingRowView(for: surfaceStyle)
+            cell.configure(using: MessageTableRowConfigurationContext(
                 row: rows[row],
                 runtime: runtime,
                 availableWidth: effectiveAvailableWidth(),
                 theme: theme,
+                surfaceStyle: surfaceStyle,
                 container: container,
                 owningTableView: tableView,
                 rowIndex: row,
                 messageTableView: self
-            )
+            ))
+            applyColumnWidthFrame(to: cell, in: tableView)
             return cell
+        }
+
+        private func makeTestingRowView(for surfaceStyle: ConversationSurfaceStyle) -> AnyMessageTableTestingRowView {
+            switch surfaceStyle {
+            case .main:
+                MessageTableCellView(identifier: NSUserInterfaceItemIdentifier("MessageTableCellView.testing"))
+            case .quickBar:
+                QuickBarMessageCellView(identifier: NSUserInterfaceItemIdentifier("QuickBarMessageCellView.testing"))
+            }
         }
         // swiftlint:enable identifier_name
     }
 
-    extension MessageTableCellView {
+    extension MessageTableCellView: MessageTableTestingRowView {
         // swiftlint:disable identifier_name
         var hasRenderControllerForTesting: Bool {
             renderController != nil
@@ -3515,8 +4795,16 @@ private final class MessageAttachmentPreviewView: NSView {
             metaLabel.alignment
         }
 
+        var metaFrameForTesting: NSRect {
+            convert(metaLabel.frame, from: contentContainer)
+        }
+
         var bodyFrameForTesting: NSRect {
             convert(bodyTextView.frame, from: contentContainer)
+        }
+
+        var visibleTextFrameForTesting: NSRect {
+            convert(bodyTextView.visibleTextBounds(), from: bodyTextView)
         }
 
         var bodyBackgroundAlphaForTesting: CGFloat {
@@ -3570,6 +4858,138 @@ private final class MessageAttachmentPreviewView: NSView {
 
         var debugButtonVisibleForTesting: Bool {
             !debugButton.isHidden
+        }
+
+        var copyButtonVisibleForTesting: Bool {
+            !copyButton.isHidden
+        }
+
+        var actionBarActiveForTesting: Bool {
+            isActionBarActive
+        }
+
+        var usesQuickBarRowPresentationForTesting: Bool {
+            false
+        }
+        // swiftlint:enable identifier_name
+    }
+
+    extension QuickBarMessageCellView: MessageTableTestingRowView {
+        // swiftlint:disable identifier_name
+        var attributedStringForTesting: NSAttributedString {
+            guard let storage = bodyTextView.textStorage else { return NSAttributedString() }
+            return NSAttributedString(attributedString: storage)
+        }
+
+        var bodyTextAlignmentForTesting: NSTextAlignment {
+            bodyTextView.alignment
+        }
+
+        var metaTextAlignmentForTesting: NSTextAlignment {
+            metaLabel.alignment
+        }
+
+        var metaFrameForTesting: NSRect {
+            let alignmentRect = metaLabel.alignmentRect(forFrame: metaLabel.frame)
+            return convert(alignmentRect, from: contentContainer)
+        }
+
+        var bodyFrameForTesting: NSRect {
+            convert(bodyTextView.frame, from: contentContainer)
+        }
+
+        var visibleTextFrameForTesting: NSRect {
+            let visibleBounds = bodyTextView.visibleTextBounds()
+            return convert(visibleBounds, from: bodyTextView)
+        }
+
+        var bodyBackgroundAlphaForTesting: CGFloat {
+            guard let cgColor = bodyTextView.layer?.backgroundColor,
+                  let color = NSColor(cgColor: cgColor)
+            else {
+                return 0
+            }
+            return color.alphaComponent
+        }
+
+        var bodyBorderWidthForTesting: CGFloat {
+            bodyTextView.layer?.borderWidth ?? 0
+        }
+
+        var waitingBreathingAnimationActiveForTesting: Bool {
+            bodyTextView.layer?.animation(forKey: Self.assistantWaitingBreathingAnimationKey) != nil
+        }
+
+        var contentContainerFrameForTesting: NSRect {
+            contentContainer.frame
+        }
+
+        var streamingDisplayedLengthForTesting: Int {
+            streamingDisplayedLength
+        }
+
+        var currentVisiblePlainTextForTesting: String {
+            currentVisiblePlainText
+        }
+
+        var streamingUpdateAssignmentCountForTesting: Int {
+            streamingUpdateAssignmentsForTesting
+        }
+
+        var attachmentPreviewVisibleForTesting: Bool {
+            !attachmentPreviewView.isHidden
+        }
+
+        var attachmentPreviewHasImageForTesting: Bool {
+            attachmentPreviewView.hasLoadedImageForTesting
+        }
+
+        var attachmentPreviewShowsPlaceholderForTesting: Bool {
+            attachmentPreviewView.showsPlaceholderForTesting
+        }
+
+        var attachmentPreviewRenderedHeightForTesting: CGFloat {
+            attachmentPreviewView.renderedHeightForTesting
+        }
+
+        var debugButtonVisibleForTesting: Bool {
+            false
+        }
+
+        var copyButtonVisibleForTesting: Bool {
+            false
+        }
+
+        var actionBarActiveForTesting: Bool {
+            false
+        }
+
+        var hasRenderControllerForTesting: Bool {
+            renderController != nil
+        }
+
+        var renderControllerCurrentPlainTextForTesting: String? {
+            renderController?.currentOutput?.plainText
+        }
+
+        func shouldApplyOutputForTesting(
+            plainText: String,
+            observedRow: MessageTableView.RowModel
+        ) -> Bool {
+            let output = MessageRenderOutput(
+                attributedString: NSAttributedString(string: plainText),
+                plainText: plainText,
+                diagnostics: []
+            )
+            return validatedRowForOutput(output, observedRow: observedRow) != nil
+        }
+
+        var cachedIntrinsicHeightForTesting: CGFloat? {
+            bodyTextView.cachedIntrinsicHeight
+        }
+
+        var usesQuickBarRowPresentationForTesting: Bool {
+            true
         }
         // swiftlint:enable identifier_name
     }

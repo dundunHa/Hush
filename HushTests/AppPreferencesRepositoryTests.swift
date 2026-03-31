@@ -106,6 +106,20 @@ struct AppPreferencesRepositoryTests {
         #expect(prefs.quickBar.modifiers == ["command", "shift"])
     }
 
+    @Test("invalid quickBar configuration is normalized on load")
+    func invalidQuickBarConfigurationLoadsAsStandard() throws {
+        let repo = try makeRepo()
+
+        var settings = AppSettings.default
+        settings.quickBar = QuickBarConfiguration(key: "", modifiers: [])
+
+        try repo.save(settings)
+        let loaded = try repo.fetch()
+        let prefs = try #require(loaded?.toAppPreferences())
+
+        #expect(prefs.quickBar == .standard)
+    }
+
     @Test("Non-default maxConcurrentRequests round-trips correctly")
     func maxConcurrentRequestsRoundTrip() throws {
         let repo = try makeRepo()

@@ -4,8 +4,10 @@ import AppKit
 final class ConversationViewController: NSViewController {
     private var container: AppContainer
     private var theme: AppTheme
+    private var surfaceStyle: ConversationSurfaceStyle
     private var bottomReservedHeight: CGFloat
     private let messageTableView = MessageTableView()
+    private var hasAppliedConversationState = false
     private var lastLayoutReadyGeneration: UInt64?
     var needsReload: Bool = false
     #if DEBUG
@@ -18,10 +20,12 @@ final class ConversationViewController: NSViewController {
     init(
         container: AppContainer,
         theme: AppTheme,
+        surfaceStyle: ConversationSurfaceStyle = .main,
         bottomReservedHeight: CGFloat = HushSpacing.xl + HushSpacing.sm
     ) {
         self.container = container
         self.theme = theme
+        self.surfaceStyle = surfaceStyle
         self.bottomReservedHeight = bottomReservedHeight
         super.init(nibName: nil, bundle: nil)
     }
@@ -47,19 +51,35 @@ final class ConversationViewController: NSViewController {
 
         messageTableView.setBottomReservedHeight(bottomReservedHeight)
         view = rootView
-        renderConversationState()
+        if !hasAppliedConversationState {
+            renderConversationState()
+        }
     }
 
     func update(
         container: AppContainer,
         theme: AppTheme,
+        surfaceStyle: ConversationSurfaceStyle = .main,
         bottomReservedHeight: CGFloat = HushSpacing.xl + HushSpacing.sm
     ) {
         self.container = container
+        updatePresentation(
+            theme: theme,
+            surfaceStyle: surfaceStyle,
+            bottomReservedHeight: bottomReservedHeight
+        )
+        renderConversationState()
+    }
+
+    func updatePresentation(
+        theme: AppTheme,
+        surfaceStyle: ConversationSurfaceStyle = .main,
+        bottomReservedHeight: CGFloat = HushSpacing.xl + HushSpacing.sm
+    ) {
         self.theme = theme
+        self.surfaceStyle = surfaceStyle
         self.bottomReservedHeight = bottomReservedHeight
         messageTableView.setBottomReservedHeight(bottomReservedHeight)
-        renderConversationState()
     }
 
     func updateBottomReservedHeight(_ bottomReservedHeight: CGFloat) {
@@ -77,6 +97,7 @@ final class ConversationViewController: NSViewController {
         forceFullReload: Bool = false
     ) {
         needsReload = false
+        hasAppliedConversationState = true
         #if DEBUG
             applyCountForTesting += 1
         #endif
@@ -86,6 +107,7 @@ final class ConversationViewController: NSViewController {
             isActiveConversationSending: isSending,
             switchGeneration: generation,
             theme: theme,
+            surfaceStyle: surfaceStyle,
             runtime: container.messageRenderRuntime,
             container: container,
             forceFullReload: forceFullReload

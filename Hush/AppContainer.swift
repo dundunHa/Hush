@@ -4,126 +4,6 @@ import Foundation
 import os
 import SwiftUI
 
-// swiftlint:disable file_length type_body_length
-
-struct OpenAISettingsSnapshot: Equatable {
-    var endpoint: String
-    var defaultModelID: String
-    var isEnabled: Bool
-    var hasCredential: Bool
-}
-
-struct OpenAISettingsInput: Equatable {
-    static let providerID = "openai"
-
-    var endpoint: String
-    var defaultModelID: String
-    var isEnabled: Bool
-    var apiKey: String
-}
-
-struct ProviderCatalogDraftInput: Equatable {
-    var providerID: String
-    var type: ProviderType
-    var endpoint: String
-    var apiKey: String
-    var persistedAPIKey: String?
-}
-
-enum OpenAISettingsSaveError: Error, Equatable {
-    case defaultModelRequired
-    case credentialRequired
-}
-
-extension OpenAISettingsSaveError: LocalizedError {
-    var errorDescription: String? {
-        switch self {
-        case .defaultModelRequired:
-            return "Default Model is required."
-        case .credentialRequired:
-            return "OpenAI is enabled but no API key is available. Enter an API key or keep it disabled."
-        }
-    }
-}
-
-struct DataStats {
-    let databaseSizeBytes: UInt64
-    let conversationCount: Int
-    let messageCount: Int
-}
-
-private struct ConversationPageSnapshot {
-    let messages: [ChatMessage]
-    let hasMoreOlderMessages: Bool
-    let oldestLoadedOrderIndex: Int?
-}
-
-private struct ConversationMessageStats {
-    let messageCount: Int
-    let assistantCount: Int
-    let longAssistantCount: Int
-    let totalChars: Int
-}
-
-private struct ConversationSwitchTrace {
-    let generation: UInt64
-    let conversationId: String
-    let startedAt: Date
-    var snapshotAppliedAt: Date?
-    var layoutReadyAt: Date?
-    var didLogRichRenderReady: Bool
-    var didLogPresentedRendered: Bool
-    var didLogRenderCacheHitRate: Bool
-}
-
-private enum ConversationSwitchDebug {
-    private static let logger = Logger(subsystem: "com.hush.app", category: "SwitchRender")
-
-    static var isEnabled: Bool {
-        #if DEBUG
-            guard let raw = ProcessInfo.processInfo.environment["HUSH_SWITCH_DEBUG"]?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-            else {
-                return false
-            }
-            return raw == "1" || raw == "true" || raw == "yes"
-        #else
-            return false
-        #endif
-    }
-
-    static func log(_ message: String) {
-        guard isEnabled else { return }
-        logger.debug("\(message, privacy: .public)")
-        #if DEBUG
-            print("[SwitchDebug] \(message)")
-        #endif
-    }
-}
-
-private func makeConversationMessageStats(_ messages: [ChatMessage]) -> ConversationMessageStats {
-    var assistantCount = 0
-    var longAssistantCount = 0
-    var totalChars = 0
-
-    for message in messages {
-        totalChars += message.content.count
-        guard message.role == .assistant else { continue }
-        assistantCount += 1
-        if message.content.count > RenderConstants.progressiveRenderThresholdChars {
-            longAssistantCount += 1
-        }
-    }
-
-    return ConversationMessageStats(
-        messageCount: messages.count,
-        assistantCount: assistantCount,
-        longAssistantCount: longAssistantCount,
-        totalChars: totalChars
-    )
-}
-
 @MainActor
 final class AppContainer: ObservableObject {
     // MARK: - Published State
@@ -139,29 +19,30 @@ final class AppContainer: ObservableObject {
 
     @Published var messages: [ChatMessage]
     @Published var sidebarThreads: [ConversationSidebarThread]
-    @Published private(set) var isLoadingOlderMessages: Bool
-    @Published private(set) var hasMoreOlderMessages: Bool
-    @Published private(set) var isLoadingMoreSidebarThreads: Bool
-    @Published private(set) var hasMoreSidebarThreads: Bool
-    @Published private(set) var isActiveConversationLoading: Bool = false
-    @Published private(set) var activeConversationLoadError: String?
+    @Published var isLoadingOlderMessages: Bool
+    @Published var hasMoreOlderMessages: Bool
+    @Published var isLoadingMoreSidebarThreads: Bool
+    @Published var hasMoreSidebarThreads: Bool
+    @Published var isActiveConversationLoading: Bool = false
+    @Published var activeConversationLoadError: String?
 
     @Published var showQuickBar: Bool = false
+    @Published var quickBarState: QuickBarSessionState = .empty
     @Published var statusMessage: String = "Ready"
 
     // MARK: - Request Lifecycle State (managed by RequestCoordinator)
 
     var requestStates: [RequestID: ActiveRequestState] = [:]
-    @Published private(set) var runningConversationIds: Set<String> = []
-    @Published private(set) var queuedConversationCounts: [String: Int] = [:]
-    @Published private(set) var unreadCompletions: Set<String> = []
+    @Published var runningConversationIds: Set<String> = []
+    @Published var queuedConversationCounts: [String: Int] = [:]
+    @Published var unreadCompletions: Set<String> = []
     @Published var catalogRefreshingProviderIDs: Set<String> = []
     @Published var catalogRefreshErrors: [String: String] = [:]
 
     // MARK: - Message Buckets
 
-    private var messagesByConversationId: [String: [ChatMessage]] = [:]
-    private weak var hotScenePool: HotScenePool?
+    var messagesByConversationId: [String: [ChatMessage]] = [:]
+    weak var hotScenePool: HotScenePool?
 
     // MARK: - Computed
 
@@ -172,6 +53,11 @@ final class AppContainer: ObservableObject {
     var isActiveConversationSending: Bool {
         guard let activeId = activeConversationId else { return false }
         return runningConversationIds.contains(activeId)
+    }
+
+    var isQuickBarSending: Bool {
+        guard let conversationId = quickBarState.conversationId else { return false }
+        return runningConversationIds.contains(conversationId)
     }
 
     var isQueueFull: Bool {
@@ -193,8 +79,8 @@ final class AppContainer: ObservableObject {
 
     // MARK: - Internal
 
-    private let preferencesRepository: GRDBAppPreferencesRepository?
-    private(set) var registry: ProviderRegistry
+    let preferencesRepository: GRDBAppPreferencesRepository?
+    var registry: ProviderRegistry
     private(set) var requestCoordinator: RequestCoordinator!
     let messageRenderRuntime: MessageRenderRuntime
 
@@ -217,27 +103,28 @@ final class AppContainer: ObservableObject {
 
     // MARK: - Persistence
 
-    private let persistence: ChatPersistenceCoordinator?
-    private let messageAssetStore: (any MessageAssetStore)?
-    @Published private(set) var activeConversationId: String?
-    @Published private(set) var activeConversationRenderGeneration: UInt64 = 0
+    let persistence: ChatPersistenceCoordinator?
+    let messageAssetStore: (any MessageAssetStore)?
+    @Published var activeConversationId: String?
+    @Published var activeConversationRenderGeneration: UInt64 = 0
 
     // MARK: - Debounce State
 
-    private var debounceTask: Task<Void, Never>?
-    private(set) var isDirty: Bool = false
-    private var conversationLoadTask: Task<Void, Never>?
-    private var conversationLoadGeneration: UInt64 = 0
-    private var oldestLoadedOrderIndex: Int?
-    private var sidebarThreadsCursor: SidebarThreadsCursor?
-    private var sidebarThreadsLoadGeneration: UInt64 = 0
-    private var conversationPageCache: [String: ConversationPageSnapshot] = [:]
-    private var conversationPageCacheOrder: [String] = []
-    private let conversationPageCacheCapacity = 8
-    private var startupPrewarmTask: Task<Void, Never>?
-    private var switchAwayPrewarmTask: Task<Void, Never>?
-    private var idlePrewarmTask: Task<Void, Never>?
-    private var activeConversationSwitchTrace: ConversationSwitchTrace?
+    var debounceTask: Task<Void, Never>?
+    var isDirty: Bool = false
+    var conversationLoadTask: Task<Void, Never>?
+    var conversationLoadGeneration: UInt64 = 0
+    var oldestLoadedOrderIndex: Int?
+    var sidebarThreadsCursor: SidebarThreadsCursor?
+    var sidebarThreadsLoadGeneration: UInt64 = 0
+    var conversationPageCache: [String: ConversationPageSnapshot] = [:]
+    var conversationPageCacheOrder: [String] = []
+    let conversationPageCacheCapacity = 8
+    var startupPrewarmTask: Task<Void, Never>?
+    var switchAwayPrewarmTask: Task<Void, Never>?
+    var idlePrewarmTask: Task<Void, Never>?
+    var activeConversationSwitchTrace: ConversationSwitchTrace?
+    var quickBarGeneration: UInt64 = 0
 
     // MARK: - Testing Overrides (forwarded to coordinator)
 
@@ -254,95 +141,6 @@ final class AppContainer: ObservableObject {
     var streamingPresentationPolicyOverride: StreamingPresentationPolicy? {
         get { requestCoordinator?.streamingPresentationPolicyOverride }
         set { requestCoordinator?.streamingPresentationPolicyOverride = newValue }
-    }
-
-    // MARK: - Message Bucket Interface
-
-    func registerHotScenePool(_ pool: HotScenePool?) {
-        hotScenePool = pool
-    }
-
-    func messagesForConversation(_ conversationId: String) -> [ChatMessage] {
-        if conversationId == activeConversationId {
-            return messages
-        }
-        return messagesByConversationId[conversationId] ?? []
-    }
-
-    func appendMessage(_ message: ChatMessage, toConversation conversationId: String) {
-        if conversationId == activeConversationId {
-            messages.append(message)
-        }
-        messagesByConversationId[conversationId, default: []].append(message)
-        hotScenePool?.markNeedsReload(conversationID: conversationId)
-    }
-
-    func updateMessage(at index: Int, inConversation conversationId: String, content: String) {
-        if conversationId == activeConversationId, index < messages.count {
-            let existing = messages[index]
-            messages[index] = existing.updatingContent(content)
-        }
-        if var bucket = messagesByConversationId[conversationId], index < bucket.count {
-            let existing = bucket[index]
-            bucket[index] = existing.updatingContent(content)
-            messagesByConversationId[conversationId] = bucket
-        }
-        hotScenePool?.markNeedsReload(conversationID: conversationId)
-    }
-
-    func updateMessagesDebugInfo(
-        _ messageIDs: [UUID],
-        inConversation conversationId: String,
-        debugInfoJSON: String?
-    ) {
-        guard !messageIDs.isEmpty else { return }
-        let messageIDSet = Set(messageIDs)
-
-        if conversationId == activeConversationId {
-            messages = messages.map { message in
-                guard messageIDSet.contains(message.id) else { return message }
-                return message.updatingDebugInfo(debugInfoJSON)
-            }
-        }
-
-        if let bucket = messagesByConversationId[conversationId] {
-            messagesByConversationId[conversationId] = bucket.map { message in
-                guard messageIDSet.contains(message.id) else { return message }
-                return message.updatingDebugInfo(debugInfoJSON)
-            }
-        }
-
-        hotScenePool?.markNeedsReload(conversationID: conversationId)
-    }
-
-    func resolveURL(for attachment: MessageAttachment) -> URL? {
-        messageAssetStore?.url(forRelativePath: attachment.localRelativePath)
-    }
-
-    func pushStreamingContent(conversationId: String, messageID: UUID, content: String) {
-        guard conversationId == activeConversationId else { return }
-        guard let scene = hotScenePool?.sceneFor(conversationID: conversationId) else { return }
-        scene.pushStreamingContent(messageID: messageID, content: content)
-    }
-
-    func markUnreadCompletion(forConversation conversationId: String) {
-        guard conversationId != activeConversationId else { return }
-        unreadCompletions.insert(conversationId)
-    }
-
-    func clearUnreadCompletion(forConversation conversationId: String) {
-        unreadCompletions.remove(conversationId)
-    }
-
-    func clearActiveConversationUnreadIfAtTail() {
-        guard let conversationId = activeConversationId else { return }
-        clearUnreadCompletion(forConversation: conversationId)
-    }
-
-    func syncPublishedSchedulerState() {
-        guard let coordinator = requestCoordinator else { return }
-        runningConversationIds = coordinator.conversationsWithRunning()
-        queuedConversationCounts = coordinator.conversationsWithQueued()
     }
 
     var sidebarThreadsLoadApplyDelayOverride: Duration?
@@ -645,7 +443,87 @@ final class AppContainer: ObservableObject {
     // MARK: - UI Actions
 
     func toggleQuickBar() {
-        showQuickBar.toggle()
+        if showQuickBar {
+            showQuickBar = false
+        } else {
+            prepareQuickBarSessionIfNeeded()
+            showQuickBar = true
+        }
+    }
+
+    func closeQuickBar() {
+        showQuickBar = false
+    }
+
+    func updateQuickBarDraft(_ draft: String) {
+        mutateQuickBarState { state in
+            state.draft = draft
+        }
+    }
+
+    func selectQuickBarModel(id: String) {
+        prepareQuickBarSessionIfNeeded()
+        mutateQuickBarState { state in
+            state.selectedModelID = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    func selectQuickBarProvider(id: String) {
+        prepareQuickBarSessionIfNeeded()
+        guard let config = settings.providerConfigurations.first(where: {
+            $0.id == id && $0.isEnabled
+        }) else {
+            return
+        }
+
+        let defaultModelID = config.defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        mutateQuickBarState { state in
+            state.providerID = id
+            state.selectedModelID = defaultModelID
+        }
+    }
+
+    func resetQuickBarConversation() {
+        guard !isQuickBarSending else { return }
+        prepareQuickBarSessionIfNeeded(forceReset: true)
+    }
+
+    func continueQuickBarInMainChat() {
+        guard !isQuickBarSending else { return }
+        guard let quickBarConversationId = quickBarState.conversationId,
+              !quickBarState.messages.isEmpty
+        else {
+            return
+        }
+
+        cacheCurrentConversationSnapshotIfNeeded()
+        let messages = quickBarState.messages
+        messagesByConversationId[quickBarConversationId] = messages
+        let titleSeed = messages.first(where: { $0.role == .user })?.content
+        let resolvedTitle = ConversationSidebarTitleFormatter.makeTitle(
+            conversationTitle: nil,
+            firstUserContent: titleSeed
+        )
+        let lastActivityAt = messages.last?.createdAt ?? .now
+        upsertSidebarThread(
+            conversationId: quickBarConversationId,
+            title: resolvedTitle,
+            lastActivityAt: lastActivityAt
+        )
+
+        let snapshot = ConversationPageSnapshot(
+            messages: messages,
+            hasMoreOlderMessages: false,
+            oldestLoadedOrderIndex: nil
+        )
+        activateConversationSnapshot(
+            snapshot,
+            conversationId: quickBarConversationId,
+            status: "Quick Bar chat opened in main window"
+        )
+
+        showQuickBar = false
+        NotificationCenter.default.post(name: .hushActivateMainWindow, object: nil)
     }
 
     func addPlaceholderProvider() {
@@ -676,1147 +554,11 @@ final class AppContainer: ObservableObject {
         }
     }
 
-    // MARK: - Settings Workspace
-
-    func openAISettingsSnapshot() -> OpenAISettingsSnapshot {
-        let providerConfiguration = settings.providerConfigurations.first(where: { $0.id == OpenAISettingsInput.providerID })
-
-        return OpenAISettingsSnapshot(
-            endpoint: normalizeEndpoint(providerConfiguration?.endpoint ?? OpenAIProvider.defaultEndpoint),
-            defaultModelID: providerConfiguration?.defaultModelID ?? "",
-            isEnabled: providerConfiguration?.isEnabled ?? false,
-            hasCredential: providerConfiguration?.hasPersistedAPIKey ?? false
-        )
-    }
-
-    func saveOpenAISettings(_ input: OpenAISettingsInput) throws -> OpenAISettingsSnapshot {
-        let normalizedModelID = input.defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !input.isEnabled || !normalizedModelID.isEmpty else {
-            throw OpenAISettingsSaveError.defaultModelRequired
-        }
-
-        let existingIndex = settings.providerConfigurations.firstIndex(where: { $0.id == OpenAISettingsInput.providerID })
-        let existingConfiguration = existingIndex.map { settings.providerConfigurations[$0] }
-        let trimmedAPIKey = input.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let persistedAPIKey = trimmedAPIKey.isEmpty ? existingConfiguration?.apiKey ?? "" : trimmedAPIKey
-        let hasCredential = !persistedAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        if input.isEnabled, !hasCredential {
-            throw OpenAISettingsSaveError.credentialRequired
-        }
-
-        let nextConfiguration = ProviderConfiguration(
-            id: OpenAISettingsInput.providerID,
-            name: existingConfiguration?.name ?? "OpenAI",
-            type: .openAI,
-            endpoint: normalizeEndpoint(input.endpoint),
-            apiKeyEnvironmentVariable: existingConfiguration?.apiKeyEnvironmentVariable ?? "",
-            defaultModelID: normalizedModelID,
-            isEnabled: input.isEnabled,
-            apiKey: persistedAPIKey,
-            credentialRef: existingConfiguration?.credentialRef,
-            pinnedModelIDs: existingConfiguration?.pinnedModelIDs ?? []
-        )
-
-        if let index = existingIndex {
-            settings.providerConfigurations[index] = nextConfiguration
-        } else {
-            settings.providerConfigurations.append(nextConfiguration)
-        }
-
-        // Persist to SQLite
-        try? providerConfigRepository?.upsert(nextConfiguration)
-
-        if settings.selectedProviderID == OpenAISettingsInput.providerID, input.isEnabled {
-            settings.selectedModelID = normalizedModelID
-        } else if !input.isEnabled, settings.selectedProviderID == OpenAISettingsInput.providerID {
-            if let fallbackProvider = fallbackProviderConfiguration() {
-                settings.selectedProviderID = fallbackProvider.id
-                let fallbackModel = fallbackProvider.defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !fallbackModel.isEmpty {
-                    settings.selectedModelID = fallbackModel
-                }
-            } else {
-                settings.selectedProviderID = ""
-                settings.selectedModelID = ""
-            }
-        }
-
-        // Trigger catalog refresh when provider is enabled with credentials
-        if input.isEnabled, hasCredential {
-            refreshCatalog(forProviderID: OpenAISettingsInput.providerID)
-        }
-
-        return OpenAISettingsSnapshot(
-            endpoint: nextConfiguration.endpoint,
-            defaultModelID: nextConfiguration.defaultModelID,
-            isEnabled: nextConfiguration.isEnabled,
-            hasCredential: hasCredential
-        )
-    }
-
-    // MARK: - Multi-Provider Profile Management
-
-    /// Saves or updates a provider profile by its stable ID.
-    func saveProviderProfile(_ profile: ProviderConfiguration) {
-        let wasSelectedProvider = settings.selectedProviderID == profile.id
-
-        if let index = settings.providerConfigurations.firstIndex(where: { $0.id == profile.id }) {
-            settings.providerConfigurations[index] = profile
-        } else {
-            settings.providerConfigurations.append(profile)
-        }
-
-        // Persist to SQLite
-        try? providerConfigRepository?.upsert(profile)
-
-        if wasSelectedProvider {
-            if !profile.isEnabled {
-                selectDeterministicFallbackProvider()
-            } else {
-                let normalizedModel = profile.defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !normalizedModel.isEmpty {
-                    settings.selectedModelID = normalizedModel
-                }
-            }
-        }
-    }
-
-    /// Sets a provider as the default (selected) provider.
-    /// Automatically selects its default model.
-    func setDefaultProvider(id: String) {
-        guard let config = settings.providerConfigurations.first(where: { $0.id == id }) else { return }
-        settings.selectedProviderID = id
-        let model = config.defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !model.isEmpty {
-            settings.selectedModelID = model
-        }
-        triggerCatalogRefreshIfNeeded(providerID: id)
-    }
-
-    /// Removes a provider profile and cleans up its catalog cache.
-    func removeProviderProfile(id: String) {
-        settings.providerConfigurations.removeAll { $0.id == id }
-
-        // Persist deletion to SQLite
-        try? providerConfigRepository?.delete(id: id)
-
-        // Clean up catalog cache (best-effort, no secrets involved)
-        try? catalogRepository?.removeCatalog(forProviderID: id)
-
-        // Deterministic fallback if removed provider was selected
-        if settings.selectedProviderID == id {
-            selectDeterministicFallbackProvider()
-        }
-    }
-
-    /// Selects a provider and its default model, triggering catalog refresh if needed.
-    func selectProvider(id: String) {
-        guard let config = settings.providerConfigurations.first(where: { $0.id == id }) else { return }
-        guard config.isEnabled else { return }
-
-        settings.selectedProviderID = id
-
-        // Try to use defaultModelID as initial selection
-        let defaultModel = config.defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !defaultModel.isEmpty {
-            settings.selectedModelID = defaultModel
-        }
-
-        // Trigger catalog refresh if no usable cache exists
-        triggerCatalogRefreshIfNeeded(providerID: id)
-    }
-
-    /// Returns cached catalog models for a provider, or empty array if unavailable.
-    func cachedModels(forProviderID providerID: String) -> [ModelDescriptor] {
-        (try? catalogRepository?.models(forProviderID: providerID)) ?? []
-    }
-
-    /// Returns the catalog refresh status for a provider.
-    func catalogRefreshStatus(forProviderID providerID: String) -> ProviderCatalogRefreshStatus? {
-        try? catalogRepository?.refreshStatus(forProviderID: providerID)
-    }
-
-    /// Resolves available models for a provider asynchronously.
-    /// Uses cache if available; otherwise fetches from provider API and caches the result.
-    /// Returns sorted models and whether they came from cache.
-    func availableModels(forProviderID providerID: String) async -> (models: [ModelDescriptor], fromCache: Bool, error: String?) {
-        guard let service = catalogRefreshService else {
-            return ([], false, "Catalog service unavailable")
-        }
-
-        guard let config = settings.providerConfigurations.first(where: { $0.id == providerID }) else {
-            return ([], false, "Provider not configured")
-        }
-
-        let provider = resolveProvider(for: config)
-
-        let context = ProviderInvocationContext(
-            endpoint: config.endpoint,
-            bearerToken: config.normalizedAPIKey
-        )
-
-        let (models, fromCache) = await service.resolveModels(
-            providerID: providerID,
-            context: context,
-            providerOverride: provider
-        )
-
-        let sortedModels = models.sorted {
-            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-        }
-
-        if sortedModels.isEmpty {
-            return ([], fromCache, "Model catalog unavailable")
-        }
-
-        return (sortedModels, fromCache, nil)
-    }
-
-    /// Resolves model catalog data from the current draft provider settings without persisting it.
-    func previewModels(for draft: ProviderCatalogDraftInput) async -> (models: [ModelDescriptor], error: String?) {
-        let provider = previewProvider(for: draft)
-        let trimmedAPIKey = draft.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let bearerToken: String?
-        if !trimmedAPIKey.isEmpty {
-            bearerToken = trimmedAPIKey
-        } else if let persistedAPIKey = draft.persistedAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines), !persistedAPIKey.isEmpty {
-            bearerToken = persistedAPIKey
-        } else {
-            switch draft.type {
-            case .openAI:
-                return ([], "Enter an API key to fetch models.")
-            #if DEBUG
-                case .mock:
-                    bearerToken = nil
-            #endif
-            }
-        }
-
-        let context = ProviderInvocationContext(
-            endpoint: normalizedEndpoint(draft.endpoint, for: draft.type),
-            bearerToken: bearerToken
-        )
-
-        do {
-            let models = try await provider.availableModels(context: context)
-            let sortedModels = models.sorted {
-                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-            }
-            if sortedModels.isEmpty {
-                return ([], "Model catalog unavailable")
-            }
-            return (sortedModels, nil)
-        } catch {
-            return ([], error.localizedDescription)
-        }
-    }
-
-    // MARK: - Catalog Refresh Triggers
-
-    /// Triggers a catalog refresh for a provider. Non-blocking; runs asynchronously.
-    func refreshCatalog(forProviderID providerID: String) {
-        guard let service = catalogRefreshService else { return }
-        guard let config = settings.providerConfigurations.first(where: { $0.id == providerID }) else { return }
-
-        let provider = resolveProvider(for: config)
-
-        let context = ProviderInvocationContext(
-            endpoint: config.endpoint,
-            bearerToken: config.normalizedAPIKey
-        )
-
-        catalogRefreshingProviderIDs.insert(providerID)
-        catalogRefreshErrors.removeValue(forKey: providerID)
-
-        Task {
-            let result = await service.refresh(
-                providerID: providerID,
-                context: context,
-                providerOverride: provider
-            )
-            self.catalogRefreshingProviderIDs.remove(providerID)
-            switch result {
-            case let .success(modelCount):
-                self.statusMessage = "Refreshed \(modelCount) models for \(config.name)"
-            case let .failure(error):
-                self.statusMessage = "Catalog refresh failed: \(error)"
-                self.catalogRefreshErrors[providerID] = error
-            }
-        }
-    }
-
-    private func resolveProvider(for config: ProviderConfiguration) -> any LLMProvider {
-        ensureProviderRegistered(for: config)
-    }
-
-    private func previewProvider(for draft: ProviderCatalogDraftInput) -> any LLMProvider {
-        if let provider = registry.provider(for: draft.providerID) {
-            return provider
-        }
-        return makeProviderRuntime(id: draft.providerID, type: draft.type)
-    }
-
-    /// Ensures a provider runtime is registered for the given configuration.
-    /// Returns the registered provider instance.
-    @discardableResult
-    func ensureProviderRegistered(for config: ProviderConfiguration) -> any LLMProvider {
-        if let existing = registry.provider(for: config.id) {
-            return existing
-        }
-        let provider = makeProviderRuntime(id: config.id, type: config.type)
-        registry.register(provider)
-        return provider
-    }
-
-    private func makeProviderRuntime(id: String, type: ProviderType) -> any LLMProvider {
-        switch type {
-        case .openAI:
-            OpenAIProvider(id: id)
-        #if DEBUG
-            case .mock:
-                MockProvider(id: id)
-        #endif
-        }
-    }
-
-    /// Triggers catalog refresh if provider has no usable cache.
-    private func triggerCatalogRefreshIfNeeded(providerID: String) {
-        guard let status = try? catalogRepository?.refreshStatus(forProviderID: providerID) else { return }
-        if !status.hasUsableCache {
-            refreshCatalog(forProviderID: providerID)
-        }
-    }
-
-    /// Selects a deterministic fallback when the current default provider is unset.
-    func selectDeterministicFallback() {
-        selectDeterministicFallbackProvider()
-    }
-
-    /// Deterministic fallback: select first enabled provider, or clear selection.
-    private func selectDeterministicFallbackProvider() {
-        if let fallback = fallbackProviderConfiguration() {
-            settings.selectedProviderID = fallback.id
-            let fallbackModel = fallback.defaultModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !fallbackModel.isEmpty {
-                settings.selectedModelID = fallbackModel
-            }
-        } else {
-            settings.selectedProviderID = ""
-            settings.selectedModelID = ""
-        }
-    }
-
-    // MARK: - Send Pipeline
-
-    func sendDraft(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        // Queue-full atomic rejection: no user message, no queue append, no persistence
-        if requestCoordinator.isQueueFull {
-            statusMessage = "Queue full – request rejected (max \(RuntimeConstants.pendingQueueCapacity))"
-            return
-        }
-
-        let conversationId = activeConversationId ?? ""
-
-        let userMessage = ChatMessage(role: .user, content: trimmed)
-        appendMessage(userMessage, toConversation: conversationId)
-        updateSidebarThreadsAfterUserMessage(userMessage)
-        cacheCurrentConversationSnapshotIfNeeded()
-
-        if !conversationId.isEmpty {
-            try? persistence?.persistUserMessage(userMessage, conversationId: conversationId)
-        }
-
-        let snapshot = QueueItemSnapshot(
-            prompt: trimmed,
-            providerID: settings.selectedProviderID,
-            modelID: settings.selectedModelID,
-            parameters: settings.parameters,
-            userMessageID: userMessage.id,
-            conversationId: conversationId
-        )
-
-        requestCoordinator.submitRequest(snapshot)
-    }
-
-    private func updateSidebarThreadsAfterUserMessage(_ message: ChatMessage) {
-        guard let conversationId = activeConversationId else { return }
-
-        let derivedTitle = ConversationSidebarTitleFormatter.topicTitle(from: message.content)
-
-        if let existingIndex = sidebarThreads.firstIndex(where: { $0.id == conversationId }) {
-            let existing = sidebarThreads[existingIndex]
-            let resolvedTitle =
-                existing.title == ConversationSidebarTitleFormatter.placeholderTitle
-                    ? derivedTitle
-                    : existing.title
-
-            sidebarThreads.remove(at: existingIndex)
-            sidebarThreads.insert(
-                ConversationSidebarThread(
-                    id: conversationId,
-                    title: resolvedTitle,
-                    lastActivityAt: message.createdAt
-                ),
-                at: 0
-            )
-        } else {
-            sidebarThreads.insert(
-                ConversationSidebarThread(
-                    id: conversationId,
-                    title: derivedTitle,
-                    lastActivityAt: message.createdAt
-                ),
-                at: 0
-            )
-        }
-    }
-
-    func quickBarSubmit(_ text: String) {
-        sendDraft(text)
-    }
-
-    func stopActiveRequest() {
-        guard let conversationId = activeConversationId else { return }
-        requestCoordinator.stopConversation(conversationId)
-    }
-
-    func activateConversation(conversationId: String) {
-        beginConversationActivation(conversationId: conversationId, allowSameConversation: false)
-    }
-
-    func retryActiveConversationLoad() {
-        guard let conversationId = activeConversationId else { return }
-        beginConversationActivation(conversationId: conversationId, allowSameConversation: true)
-    }
-
-    private func beginConversationActivation(
-        conversationId: String,
-        allowSameConversation: Bool
-    ) {
-        if !allowSameConversation {
-            guard conversationId != activeConversationId else { return }
-        }
-
-        // User activity: cancel any pending idle prewarm work immediately.
-        idlePrewarmTask?.cancel()
-
-        guard let persistence else {
-            activeConversationLoadError = "Persistence unavailable"
-            isActiveConversationLoading = false
-            return
-        }
-
-        activeConversationLoadError = nil
-        isActiveConversationLoading = true
-
-        cacheCurrentConversationSnapshotIfNeeded()
-
-        conversationLoadTask?.cancel()
-        conversationLoadGeneration &+= 1
-        let generation = conversationLoadGeneration
-        activeConversationRenderGeneration = generation
-        messageRenderRuntime.setActiveConversation(
-            conversationID: conversationId,
-            generation: generation
-        )
-        let previousConversationId = activeConversationId
-
-        // Sync current active messages into bucket before switching away
-        if let prevId = activeConversationId, !messages.isEmpty {
-            messagesByConversationId[prevId] = messages
-        }
-
-        requestCoordinator.rebalanceForActiveSwitch(newActiveConversationId: conversationId)
-
-        activeConversationSwitchTrace = ConversationSwitchTrace(
-            generation: generation,
-            conversationId: conversationId,
-            startedAt: .now,
-            snapshotAppliedAt: nil,
-            layoutReadyAt: nil,
-            didLogRichRenderReady: false,
-            didLogPresentedRendered: false,
-            didLogRenderCacheHitRate: false
-        )
-        ConversationSwitchDebug.log(
-            "start generation=\(generation) from=\(previousConversationId ?? "nil") to=\(conversationId)"
-        )
-
-        isLoadingOlderMessages = false
-        if !applyCachedConversationSnapshotIfAvailable(conversationId: conversationId, generation: generation) {
-            ConversationSwitchDebug.log(
-                "cache-miss generation=\(generation) conversation=\(conversationId)"
-            )
-            messages = []
-            hasMoreOlderMessages = false
-            oldestLoadedOrderIndex = nil
-            activeConversationId = conversationId
-            statusMessage = "Loading thread..."
-        }
-
-        syncStreamingContentForActiveConversationIfNeeded(conversationId: conversationId)
-
-        conversationLoadTask = makeConversationLoadTask(
-            persistence: persistence,
-            conversationId: conversationId,
-            generation: generation
-        )
-
-        scheduleSwitchAwayPrewarmIfNeeded(from: previousConversationId, persistence: persistence)
-        scheduleIdlePrewarmIfNeeded()
-    }
-
-    private func applyCachedConversationSnapshotIfAvailable(
-        conversationId: String,
-        generation: UInt64
-    ) -> Bool {
-        guard let cached = conversationPageCache[conversationId] else { return false }
-
-        let snapshotToApply = resolvedCachedConversationSnapshot(
-            cached,
-            conversationId: conversationId
-        )
-        let stats = makeConversationMessageStats(snapshotToApply.messages)
-        ConversationSwitchDebug.log(
-            "cache-hit generation=\(generation) conversation=\(conversationId) " +
-                "messages=\(stats.messageCount) assistants=\(stats.assistantCount) " +
-                "longAssistants=\(stats.longAssistantCount) chars=\(stats.totalChars)"
-        )
-        applyConversationSnapshot(snapshotToApply, conversationId: conversationId)
-        markConversationSwitchSnapshotAppliedIfNeeded(
-            conversationId: conversationId,
-            generation: generation,
-            source: "cache",
-            stats: stats
-        )
-        statusMessage = "Ready"
-        return true
-    }
-
-    private func resolvedCachedConversationSnapshot(
-        _ cached: ConversationPageSnapshot,
-        conversationId: String
-    ) -> ConversationPageSnapshot {
-        guard let bucket = messagesByConversationId[conversationId],
-              bucket != cached.messages
-        else {
-            return cached
-        }
-
-        let pageSize = RuntimeConstants.conversationMessagePageSize
-        let bounded = Array(bucket.suffix(pageSize))
-        return ConversationPageSnapshot(
-            messages: bounded,
-            hasMoreOlderMessages: cached.hasMoreOlderMessages,
-            oldestLoadedOrderIndex: cached.oldestLoadedOrderIndex
-        )
-    }
-
-    private func makeConversationLoadTask(
-        persistence: ChatPersistenceCoordinator,
-        conversationId: String,
-        generation: UInt64
-    ) -> Task<Void, Never> {
-        Task { [weak self] in
-            do {
-                let fetchStartedAt = Date.now
-                let pageSize = RuntimeConstants.conversationMessagePageSize
-                ConversationSwitchDebug.log(
-                    "db-fetch-start generation=\(generation) conversation=\(conversationId) " +
-                        "limit=\(pageSize)"
-                )
-                let page = try await Task.detached(priority: .userInitiated) {
-                    try persistence.fetchMessagePage(
-                        conversationId: conversationId,
-                        beforeOrderIndex: nil,
-                        limit: pageSize
-                    )
-                }.value
-                try Task.checkCancellation()
-
-                guard let self, generation == self.conversationLoadGeneration else { return }
-                let fetchMs = Int(Date.now.timeIntervalSince(fetchStartedAt) * 1000)
-                let stats = makeConversationMessageStats(page.messages)
-                ConversationSwitchDebug.log(
-                    "db-fetch-done generation=\(generation) conversation=\(conversationId) fetchMs=\(fetchMs) " +
-                        "messages=\(stats.messageCount) assistants=\(stats.assistantCount) " +
-                        "longAssistants=\(stats.longAssistantCount) chars=\(stats.totalChars)"
-                )
-                let snapshot = ConversationPageSnapshot(
-                    messages: page.messages,
-                    hasMoreOlderMessages: page.hasMoreOlderMessages,
-                    oldestLoadedOrderIndex: page.oldestOrderIndex
-                )
-                _ = self.applyConversationSnapshot(snapshot, conversationId: conversationId)
-                self.markConversationSwitchSnapshotAppliedIfNeeded(
-                    conversationId: conversationId,
-                    generation: generation,
-                    source: "db",
-                    stats: stats
-                )
-                self.cacheConversationSnapshot(conversationId: conversationId, snapshot: snapshot)
-                self.isActiveConversationLoading = false
-                self.activeConversationLoadError = nil
-                self.statusMessage = "Ready"
-            } catch is CancellationError {
-                ConversationSwitchDebug.log(
-                    "db-fetch-cancelled generation=\(generation) conversation=\(conversationId)"
-                )
-                guard let self else { return }
-                guard generation == self.conversationLoadGeneration else { return }
-                guard self.activeConversationId == conversationId else { return }
-                guard self.messages.isEmpty else { return }
-
-                if self.activeConversationSwitchTrace?.generation == generation {
-                    self.activeConversationSwitchTrace = nil
-                }
-                self.isActiveConversationLoading = false
-                self.activeConversationLoadError = "Loading cancelled"
-                self.statusMessage = "Loading cancelled"
-            } catch {
-                guard let self, generation == self.conversationLoadGeneration else { return }
-                if self.activeConversationSwitchTrace?.generation == generation {
-                    self.activeConversationSwitchTrace = nil
-                }
-                ConversationSwitchDebug.log(
-                    "db-fetch-failed generation=\(generation) conversation=\(conversationId) " +
-                        "error=\(error.localizedDescription)"
-                )
-                self.isActiveConversationLoading = false
-                self.activeConversationLoadError = error.localizedDescription
-                self.statusMessage = "Failed to load thread: \(error.localizedDescription)"
-            }
-        }
-    }
-
-    @discardableResult
-    func loadOlderMessagesIfNeeded() async -> Bool {
-        guard !isLoadingOlderMessages else { return false }
-        guard hasMoreOlderMessages else { return false }
-        guard let persistence, let conversationId = activeConversationId else { return false }
-        guard let beforeOrderIndex = oldestLoadedOrderIndex else {
-            hasMoreOlderMessages = false
-            return false
-        }
-
-        isLoadingOlderMessages = true
-        defer { isLoadingOlderMessages = false }
-        let pageSize = RuntimeConstants.conversationMessagePageSize
-
-        do {
-            let page = try await Task.detached(priority: .userInitiated) {
-                try persistence.fetchMessagePage(
-                    conversationId: conversationId,
-                    beforeOrderIndex: beforeOrderIndex,
-                    limit: pageSize
-                )
-            }.value
-
-            guard conversationId == activeConversationId else { return false }
-
-            hasMoreOlderMessages = page.hasMoreOlderMessages
-            if let oldestOrderIndex = page.oldestOrderIndex {
-                oldestLoadedOrderIndex = oldestOrderIndex
-            }
-
-            let existingIDs = Set(messages.map(\.id))
-            let incoming = page.messages.filter { !existingIDs.contains($0.id) }
-            guard !incoming.isEmpty else { return false }
-
-            messages = incoming + messages
-            cacheCurrentConversationSnapshotIfNeeded()
-            return true
-        } catch {
-            statusMessage = "Failed to load earlier messages: \(error.localizedDescription)"
-            return false
-        }
-    }
-
-    @discardableResult
-    func loadMoreSidebarThreadsIfNeeded() async -> Bool {
-        guard !isLoadingMoreSidebarThreads else { return false }
-        guard hasMoreSidebarThreads else { return false }
-        guard let persistence else { return false }
-
-        let loadGeneration = sidebarThreadsLoadGeneration
-        let cursor = sidebarThreadsCursor
-        isLoadingMoreSidebarThreads = true
-        defer { isLoadingMoreSidebarThreads = false }
-
-        do {
-            let page = try await Task.detached(priority: .userInitiated) {
-                try persistence.fetchSidebarThreadsPage(
-                    cursor: cursor,
-                    limit: 10
-                )
-            }.value
-
-            if let delay = sidebarThreadsLoadApplyDelayOverride {
-                try? await Task.sleep(for: delay)
-            }
-
-            guard loadGeneration == sidebarThreadsLoadGeneration else {
-                return false
-            }
-
-            hasMoreSidebarThreads = page.hasMore
-            sidebarThreadsCursor = page.nextCursor
-
-            let existingIDs = Set(sidebarThreads.map(\.id))
-            let incoming = page.threads.filter { !existingIDs.contains($0.id) }
-            guard !incoming.isEmpty else { return false }
-
-            sidebarThreads.append(contentsOf: incoming)
-            return true
-        } catch {
-            guard loadGeneration == sidebarThreadsLoadGeneration else {
-                return false
-            }
-            statusMessage = "Failed to load more threads: \(error.localizedDescription)"
-            return false
-        }
-    }
-
-    func resetConversation() {
-        cacheCurrentConversationSnapshotIfNeeded()
-        activeConversationSwitchTrace = nil
-
-        conversationLoadTask?.cancel()
-        conversationLoadTask = nil
-
-        if let prevId = activeConversationId, !messages.isEmpty {
-            messagesByConversationId[prevId] = messages
-        }
-
-        messages.removeAll()
-        isLoadingOlderMessages = false
-        hasMoreOlderMessages = false
-        oldestLoadedOrderIndex = nil
-        isActiveConversationLoading = false
-        activeConversationLoadError = nil
-        statusMessage = "Conversation cleared"
-
-        if let persistence {
-            activeConversationId = try? persistence.createNewConversation()
-            conversationLoadGeneration &+= 1
-            activeConversationRenderGeneration = conversationLoadGeneration
-            messageRenderRuntime.setActiveConversation(
-                conversationID: activeConversationId,
-                generation: activeConversationRenderGeneration
-            )
-        } else {
-            conversationLoadGeneration &+= 1
-            activeConversationRenderGeneration = conversationLoadGeneration
-            messageRenderRuntime.setActiveConversation(
-                conversationID: activeConversationId,
-                generation: activeConversationRenderGeneration
-            )
-        }
-
-        requestCoordinator.rebalanceForActiveSwitch(newActiveConversationId: activeConversationId)
-    }
-
-    func deleteConversation(conversationId: String) {
-        if requestCoordinator.isConversationRunning(conversationId) {
-            requestCoordinator.stopConversation(conversationId)
-        }
-        guard let persistence else { return }
-
-        messageRenderRuntime.clearProtection(conversationID: conversationId)
-
-        do {
-            try persistence.deleteConversation(id: conversationId)
-        } catch {
-            statusMessage = "Failed to delete: \(error.localizedDescription)"
-            return
-        }
-
-        sidebarThreads.removeAll { $0.id == conversationId }
-        conversationPageCache.removeValue(forKey: conversationId)
-        conversationPageCacheOrder.removeAll { $0 == conversationId }
-        messagesByConversationId.removeValue(forKey: conversationId)
-
-        if activeConversationId == conversationId {
-            resetConversation()
-        }
-    }
-
-    private func syncStreamingContentForActiveConversationIfNeeded(conversationId: String) {
-        guard conversationId == activeConversationId else { return }
-        guard let running = requestCoordinator.runningRequest(forConversation: conversationId) else { return }
-        guard let messageID = running.assistantMessageID else { return }
-        syncPresentedStreamingMessageIntoBucketsIfNeeded(
-            conversationId: conversationId,
-            messageID: messageID,
-            content: running.presentedText
-        )
-        pushStreamingContent(
-            conversationId: conversationId,
-            messageID: messageID,
-            content: running.presentedText
-        )
-    }
-
-    private func syncPresentedStreamingMessageIntoBucketsIfNeeded(
-        conversationId: String,
-        messageID: UUID,
-        content: String
-    ) {
-        var didUpdateActiveMessages = false
-
-        if conversationId == activeConversationId,
-           let activeIndex = messages.lastIndex(where: { $0.id == messageID }),
-           messages[activeIndex].content != content
-        {
-            let existing = messages[activeIndex]
-            messages[activeIndex] = existing.updatingContent(content)
-            didUpdateActiveMessages = true
-        }
-
-        if var bucket = messagesByConversationId[conversationId] {
-            if let bucketIndex = bucket.lastIndex(where: { $0.id == messageID }),
-               bucket[bucketIndex].content != content
-            {
-                let existing = bucket[bucketIndex]
-                bucket[bucketIndex] = existing.updatingContent(content)
-                messagesByConversationId[conversationId] = bucket
-            } else if didUpdateActiveMessages {
-                messagesByConversationId[conversationId] = messages
-            }
-        } else if didUpdateActiveMessages {
-            messagesByConversationId[conversationId] = messages
-        }
-    }
-
-    func archiveConversation(conversationId: String) {
-        if requestCoordinator.isConversationRunning(conversationId) {
-            statusMessage = "Stop active request before archiving"
-            return
-        }
-        guard let persistence else { return }
-
-        do {
-            try persistence.archiveConversation(id: conversationId)
-        } catch {
-            statusMessage = "Failed to archive: \(error.localizedDescription)"
-            return
-        }
-
-        sidebarThreads.removeAll { $0.id == conversationId }
-
-        if activeConversationId == conversationId {
-            resetConversation()
-        }
-    }
-
-    func unarchiveConversation(conversationId: String) {
-        guard let persistence else { return }
-
-        do {
-            try persistence.unarchiveConversation(id: conversationId)
-        } catch {
-            statusMessage = "Failed to unarchive: \(error.localizedDescription)"
-            return
-        }
-
-        // Re-insert into sidebar sorted by lastActivityAt
-        if let threads = try? persistence.fetchSidebarThreads(limit: 200) {
-            if let restored = threads.first(where: { $0.id == conversationId }) {
-                let insertIndex = sidebarThreads.firstIndex(where: {
-                    $0.lastActivityAt < restored.lastActivityAt
-                }) ?? sidebarThreads.endIndex
-                sidebarThreads.insert(restored, at: insertIndex)
-            }
-        }
-    }
-
-    func fetchArchivedThreads() -> [ConversationSidebarThread] {
-        guard let persistence else { return [] }
-        return (try? persistence.fetchArchivedThreads()) ?? []
-    }
-
-    @discardableResult
-    private func applyConversationSnapshot(
-        _ snapshot: ConversationPageSnapshot,
-        conversationId: String
-    ) -> Bool {
-        var didChange = false
-
-        if messages != snapshot.messages {
-            messages = snapshot.messages
-            didChange = true
-        }
-
-        // Sync to message bucket
-        messagesByConversationId[conversationId] = snapshot.messages
-
-        if hasMoreOlderMessages != snapshot.hasMoreOlderMessages {
-            hasMoreOlderMessages = snapshot.hasMoreOlderMessages
-            didChange = true
-        }
-
-        if oldestLoadedOrderIndex != snapshot.oldestLoadedOrderIndex {
-            oldestLoadedOrderIndex = snapshot.oldestLoadedOrderIndex
-            didChange = true
-        }
-
-        if activeConversationId != conversationId {
-            activeConversationId = conversationId
-            didChange = true
-        }
-
-        return didChange
-    }
-
-    private func cacheCurrentConversationSnapshotIfNeeded() {
-        guard let conversationId = activeConversationId else { return }
-        guard messages.count <= RuntimeConstants.conversationMessagePageSize else { return }
-        if let running = requestCoordinator?.runningRequest(forConversation: conversationId),
-           let messageID = running.assistantMessageID
-        {
-            syncPresentedStreamingMessageIntoBucketsIfNeeded(
-                conversationId: conversationId,
-                messageID: messageID,
-                content: running.presentedText
-            )
-        }
-        let snapshot = ConversationPageSnapshot(
-            messages: messages,
-            hasMoreOlderMessages: hasMoreOlderMessages,
-            oldestLoadedOrderIndex: oldestLoadedOrderIndex
-        )
-        cacheConversationSnapshot(conversationId: conversationId, snapshot: snapshot)
-    }
-
-    private func cacheConversationSnapshot(
-        conversationId: String,
-        snapshot: ConversationPageSnapshot
-    ) {
-        conversationPageCache[conversationId] = snapshot
-        conversationPageCacheOrder.removeAll { $0 == conversationId }
-        conversationPageCacheOrder.append(conversationId)
-
-        while conversationPageCacheOrder.count > conversationPageCacheCapacity {
-            let evicted = conversationPageCacheOrder.removeFirst()
-            conversationPageCache.removeValue(forKey: evicted)
-        }
-    }
-
-    func markConversationSwitchLayoutReady() {
-        guard var trace = activeConversationSwitchTrace else { return }
-        guard trace.conversationId == activeConversationId else { return }
-        guard trace.layoutReadyAt == nil else { return }
-
-        trace.layoutReadyAt = .now
-        let layoutReadyAt = trace.layoutReadyAt ?? .now
-        let snapshotLagMs: Int?
-        let snapshotLag: String
-        if let snapshotAt = trace.snapshotAppliedAt {
-            let lag = Int(layoutReadyAt.timeIntervalSince(snapshotAt) * 1000)
-            snapshotLagMs = lag
-            snapshotLag = "\(lag)ms"
-        } else {
-            snapshotLagMs = nil
-            snapshotLag = "n/a"
-        }
-        let totalElapsedMs = Int(layoutReadyAt.timeIntervalSince(trace.startedAt) * 1000)
-        PerfTrace.duration(
-            PerfTrace.Event.switchLayoutReady,
-            ms: Double(totalElapsedMs),
-            fields: [
-                "generation": "\(trace.generation)",
-                "conversation": trace.conversationId
-            ]
-        )
-        if let snapshotLagMs {
-            PerfTrace.duration(
-                PerfTrace.Event.switchSnapshotToLayoutReady,
-                ms: Double(snapshotLagMs),
-                fields: [
-                    "generation": "\(trace.generation)",
-                    "conversation": trace.conversationId
-                ]
-            )
-        }
-        ConversationSwitchDebug.log(
-            "layout-ready generation=\(trace.generation) conversation=\(trace.conversationId) " +
-                "snapshot->layout=\(snapshotLag) total=\(totalElapsedMs)ms"
-        )
-        activeConversationSwitchTrace = trace
-    }
-
-    func reportActiveConversationRichRenderReadyIfNeeded() {
-        guard var trace = activeConversationSwitchTrace else { return }
-        guard trace.conversationId == activeConversationId else { return }
-        guard let snapshotAppliedAt = trace.snapshotAppliedAt else { return }
-        guard !trace.didLogRichRenderReady else { return }
-
-        trace.didLogRichRenderReady = true
-        let now = Date.now
-        let snapshotElapsedMs = Int(now.timeIntervalSince(snapshotAppliedAt) * 1000)
-        let totalElapsedMs = Int(now.timeIntervalSince(trace.startedAt) * 1000)
-        let stats = makeConversationMessageStats(messages)
-        PerfTrace.duration(
-            PerfTrace.Event.switchRichReady,
-            ms: Double(totalElapsedMs),
-            fields: [
-                "generation": "\(trace.generation)",
-                "conversation": trace.conversationId,
-                "messages": "\(stats.messageCount)"
-            ]
-        )
-        PerfTrace.duration(
-            PerfTrace.Event.switchSnapshotToRichReady,
-            ms: Double(snapshotElapsedMs),
-            fields: [
-                "generation": "\(trace.generation)",
-                "conversation": trace.conversationId,
-                "messages": "\(stats.messageCount)"
-            ]
-        )
-        ConversationSwitchDebug.log(
-            "rich-ready generation=\(trace.generation) conversation=\(trace.conversationId) " +
-                "snapshot->rich=\(snapshotElapsedMs)ms total=\(totalElapsedMs)ms " +
-                "messages=\(stats.messageCount) longAssistants=\(stats.longAssistantCount)"
-        )
-        activeConversationSwitchTrace = nil
-    }
-
-    func reportSwitchPresentedRenderedFromReloadIfNeeded(
-        conversationId: String?,
-        generation: UInt64,
-        renderCacheHits: Int,
-        renderCacheMisses: Int,
-        contentWidth: Int
-    ) {
-        guard let conversationId else { return }
-        guard var trace = activeConversationSwitchTrace else { return }
-        guard trace.generation == generation else { return }
-        guard trace.conversationId == conversationId else { return }
-
-        let hits = max(0, renderCacheHits)
-        let misses = max(0, renderCacheMisses)
-        let total = hits + misses
-
-        if !trace.didLogRenderCacheHitRate, total > 0 {
-            let hitRate = Double(hits) / Double(total)
-            PerfTrace.count(
-                PerfTrace.Event.renderCacheHitRate,
-                fields: [
-                    "generation": "\(generation)",
-                    "conversation": conversationId,
-                    "hits": "\(hits)",
-                    "misses": "\(misses)",
-                    "hit_rate": String(format: "%.2f", hitRate)
-                ]
-            )
-            trace.didLogRenderCacheHitRate = true
-        }
-
-        guard !trace.didLogPresentedRendered else {
-            activeConversationSwitchTrace = trace
-            return
-        }
-        guard total > 0 else {
-            activeConversationSwitchTrace = trace
-            return
-        }
-
-        let mode = misses > 0 ? "cache-miss-reload" : "cache-hit-reload"
-        let elapsedMs = Int(Date.now.timeIntervalSince(trace.startedAt) * 1000)
-        PerfTrace.duration(
-            PerfTrace.Event.switchPresentedRendered,
-            ms: Double(elapsedMs),
-            fields: [
-                "generation": "\(generation)",
-                "conversation": conversationId,
-                "mode": mode,
-                "content_width": "\(contentWidth)",
-                "hits": "\(hits)",
-                "misses": "\(misses)"
-            ]
-        )
-
-        trace.didLogPresentedRendered = true
-        activeConversationSwitchTrace = trace
-    }
-
-    func reportHotSceneSwitchPresentedRenderedIfNeeded(
-        conversationId: String,
-        generation: UInt64
-    ) {
-        guard var trace = activeConversationSwitchTrace else { return }
-        guard trace.generation == generation else { return }
-        guard trace.conversationId == conversationId else { return }
-
-        if trace.snapshotAppliedAt == nil {
-            trace.snapshotAppliedAt = .now
-            let elapsedMs = Int(trace.snapshotAppliedAt!.timeIntervalSince(trace.startedAt) * 1000)
-            let stats = makeConversationMessageStats(messages)
-            PerfTrace.duration(
-                PerfTrace.Event.switchSnapshotApplied,
-                ms: Double(elapsedMs),
-                fields: [
-                    "generation": "\(generation)",
-                    "conversation": conversationId,
-                    "source": "hot-scene",
-                    "messages": "\(stats.messageCount)"
-                ]
-            )
-        }
-
-        if !trace.didLogRenderCacheHitRate {
-            PerfTrace.count(
-                PerfTrace.Event.renderCacheHitRate,
-                fields: [
-                    "generation": "\(generation)",
-                    "conversation": conversationId,
-                    "hits": "0",
-                    "misses": "0",
-                    "hit_rate": "n/a",
-                    "mode": "hot-scene"
-                ]
-            )
-            trace.didLogRenderCacheHitRate = true
-        }
-
-        if !trace.didLogPresentedRendered {
-            let elapsedMs = Int(Date.now.timeIntervalSince(trace.startedAt) * 1000)
-            PerfTrace.duration(
-                PerfTrace.Event.switchPresentedRendered,
-                ms: Double(elapsedMs),
-                fields: [
-                    "generation": "\(generation)",
-                    "conversation": conversationId,
-                    "mode": "hot-scene"
-                ]
-            )
-            trace.didLogPresentedRendered = true
-        }
-
-        activeConversationSwitchTrace = trace
-        markConversationSwitchLayoutReady()
-        reportActiveConversationRichRenderReadyIfNeeded()
-    }
-
-    var cachedConversationIDsForTesting: [String] {
-        conversationPageCacheOrder
-    }
-
-    func runStartupPrewarmForTesting() async {
-        await performStartupPrewarmIfNeeded()
-    }
-
     #if DEBUG
         func runAutomationScenarioIfNeeded() {
             guard !Self.didStartAutomationScenario else { return }
-            guard let raw = ProcessInfo.processInfo.environment["HUSH_AUTOMATION_SCENARIO"]?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-                !raw.isEmpty
+            guard let raw = automationScenarioValue(),
+                  !raw.isEmpty
             else {
                 return
             }
@@ -1830,11 +572,41 @@ final class AppContainer: ObservableObject {
 
         private static var didStartAutomationScenario: Bool = false
 
+        private func automationScenarioValue() -> String? {
+            if let raw = ProcessInfo.processInfo.environment["HUSH_AUTOMATION_SCENARIO"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !raw.isEmpty
+            {
+                return raw
+            }
+
+            let arguments = ProcessInfo.processInfo.arguments
+
+            if let index = arguments.firstIndex(of: "--automation-scenario"),
+               arguments.indices.contains(index + 1)
+            {
+                let raw = arguments[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+                return raw.isEmpty ? nil : raw
+            }
+
+            if let argument = arguments.first(where: { $0.hasPrefix("--automation-scenario=") }) {
+                let raw = String(argument.dropFirst("--automation-scenario=".count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return raw.isEmpty ? nil : raw
+            }
+
+            return nil
+        }
+
         private func runAutomationScenario(_ rawScenario: String) async {
             let scenario = rawScenario.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             switch scenario {
             case "hot-scene-memory":
                 await runHotSceneMemoryAutomation()
+            case "quickbar-layout":
+                runQuickBarLayoutAutomation(showsComplexAssistantReply: false)
+            case "quickbar-layout-complex":
+                runQuickBarLayoutAutomation(showsComplexAssistantReply: true)
             default:
                 return
             }
@@ -1907,6 +679,47 @@ final class AppContainer: ObservableObject {
             }
         }
 
+        private func runQuickBarLayoutAutomation(showsComplexAssistantReply: Bool) {
+            settings.providerConfigurations = [.mockDefault()]
+            settings.selectedProviderID = "mock"
+            settings.selectedModelID = "mock-text-1"
+
+            let base = Date.now
+            let messages = [
+                ChatMessage(
+                    role: .user,
+                    content: "QuickBar 里用户消息右侧留白看起来比 assistant 左侧更窄，帮我看一下。",
+                    createdAt: base.addingTimeInterval(-32)
+                ),
+                ChatMessage(
+                    role: .assistant,
+                    content: showsComplexAssistantReply
+                        ? """
+                        我先把 QuickBar 这里的复杂回复也放进同一个发布态检查里：
+
+                        - 对比 mirrored lane 和 full-width card 的切换
+                        - 确认 markdown 列表不会被误压进窄 bubble
+                        - 检查 transcript 和 composer 的整体呼吸感
+                        """
+                        : """
+                        我先对比消息容器、文本对齐和 transcript surface 的横向 inset，确认问题是出在 QuickBar 外层宽度，还是单条消息内部的布局约束。
+                        """,
+                    createdAt: base.addingTimeInterval(-12)
+                )
+            ]
+
+            configureQuickBarPreview(
+                conversationId: "quickbar-layout-automation",
+                messages: messages,
+                draft: "",
+                isExpanded: true,
+                isSending: false,
+                showQuickBar: true,
+                providerID: "mock",
+                modelID: "mock-text-1"
+            )
+        }
+
         private func waitForAutomationReady(conversationId: String, timeout: Duration) async -> Bool {
             let deadline = ContinuousClock.now + timeout
             while ContinuousClock.now < deadline {
@@ -1941,454 +754,51 @@ final class AppContainer: ObservableObject {
             return fallback
         }
     #endif
-
-    private func markConversationSwitchSnapshotAppliedIfNeeded(
-        conversationId: String,
-        generation: UInt64,
-        source: String,
-        stats: ConversationMessageStats
-    ) {
-        guard var trace = activeConversationSwitchTrace else { return }
-        guard trace.generation == generation else { return }
-        guard trace.conversationId == conversationId else { return }
-        guard trace.snapshotAppliedAt == nil else { return }
-
-        trace.snapshotAppliedAt = .now
-        let elapsedMs = Int(trace.snapshotAppliedAt!.timeIntervalSince(trace.startedAt) * 1000)
-        PerfTrace.duration(
-            PerfTrace.Event.switchSnapshotApplied,
-            ms: Double(elapsedMs),
-            fields: [
-                "generation": "\(generation)",
-                "conversation": conversationId,
-                "source": source,
-                "messages": "\(stats.messageCount)"
-            ]
-        )
-        ConversationSwitchDebug.log(
-            "snapshot-applied source=\(source) generation=\(generation) conversation=\(conversationId) " +
-                "elapsed=\(elapsedMs)ms messages=\(stats.messageCount) assistants=\(stats.assistantCount) " +
-                "longAssistants=\(stats.longAssistantCount) chars=\(stats.totalChars)"
-        )
-        activeConversationSwitchTrace = trace
-    }
-
-    private func scheduleStartupPrewarmIfNeeded() {
-        ConversationSwitchDebug.log("startup-prewarm-scheduled")
-        startupPrewarmTask?.cancel()
-        startupPrewarmTask = Task { [weak self] in
-            guard let self else { return }
-            await self.performStartupPrewarmIfNeeded()
-        }
-    }
-
-    private func performStartupPrewarmIfNeeded() async {
-        guard let persistence else { return }
-
-        let candidateIDs = Array(
-            sidebarThreads
-                .map(\.id)
-                .filter { $0 != activeConversationId }
-                .prefix(RenderConstants.startupPrewarmConversationCount)
-        )
-        guard !candidateIDs.isEmpty else {
-            ConversationSwitchDebug.log("startup-prewarm-skip no-candidates")
-            return
-        }
-
-        ConversationSwitchDebug.log(
-            "startup-prewarm-begin candidates=\(candidateIDs.count) active=\(activeConversationId ?? "nil")"
-        )
-
-        for conversationId in candidateIDs {
-            if Task.isCancelled { return }
-
-            do {
-                let fetchStartedAt = Date.now
-                let page = try await Task.detached(priority: .utility) {
-                    try persistence.fetchMessagePage(
-                        conversationId: conversationId,
-                        beforeOrderIndex: nil,
-                        limit: RenderConstants.startupPrewarmMessageLimit
-                    )
-                }.value
-
-                if Task.isCancelled { return }
-
-                let snapshot = ConversationPageSnapshot(
-                    messages: page.messages,
-                    hasMoreOlderMessages: page.hasMoreOlderMessages,
-                    oldestLoadedOrderIndex: page.oldestOrderIndex
-                )
-                cacheConversationSnapshot(conversationId: conversationId, snapshot: snapshot)
-                let fetchMs = Int(Date.now.timeIntervalSince(fetchStartedAt) * 1000)
-                let stats = makeConversationMessageStats(page.messages)
-                let prewarmedCount = await prewarmRenderCache(
-                    for: page.messages,
-                    conversationID: conversationId
-                )
-                ConversationSwitchDebug.log(
-                    "startup-prewarm-done conversation=\(conversationId) fetchMs=\(fetchMs) " +
-                        "messages=\(stats.messageCount) assistants=\(stats.assistantCount) " +
-                        "longAssistants=\(stats.longAssistantCount) prewarmedAssistants=\(prewarmedCount)"
-                )
-            } catch {
-                ConversationSwitchDebug.log(
-                    "startup-prewarm-failed conversation=\(conversationId) error=\(error.localizedDescription)"
-                )
-            }
-        }
-    }
-
-    private func prewarmRenderCache(
-        for messages: [ChatMessage],
-        conversationID: String?,
-        availableWidth: CGFloat = HushSpacing.chatContentMaxWidth
-    ) async -> Int {
-        let assistants = messages.filter { $0.role == .assistant }
-        guard !assistants.isEmpty else { return 0 }
-
-        let targetMessages = assistants.suffix(RenderConstants.startupRenderPrewarmAssistantMessageCap)
-        guard !targetMessages.isEmpty else { return 0 }
-
-        let style = RenderStyle.fromTheme(settings.theme, fontSettings: settings.fontSettings)
-        let inputs = targetMessages.map {
-            MessageRenderInput(
-                content: $0.content,
-                availableWidth: availableWidth,
-                style: style,
-                isStreaming: false
-            )
-        }
-        await messageRenderRuntime.prewarm(inputs: inputs, protectFor: conversationID)
-        return targetMessages.count
-    }
-
-    func scheduleStreamingCompletePrewarmIfNeeded(
-        conversationID: String,
-        finalAssistantContent: String
-    ) {
-        guard conversationID != activeConversationId else { return }
-        guard !finalAssistantContent.isEmpty else { return }
-
-        Task(priority: .utility) { [weak self] in
-            guard let self else { return }
-            await Task.yield()
-
-            let isHotScene = self.hotScenePool?.hotConversationIDs.contains(conversationID) ?? false
-            if isHotScene {
-                let messages = self.messagesForConversation(conversationID)
-                _ = await self.prewarmRenderCache(for: messages, conversationID: conversationID)
-                return
-            }
-
-            let style = RenderStyle.fromTheme(self.settings.theme, fontSettings: self.settings.fontSettings)
-            let input = MessageRenderInput(
-                content: finalAssistantContent,
-                availableWidth: HushSpacing.chatContentMaxWidth,
-                style: style,
-                isStreaming: false
-            )
-            await self.messageRenderRuntime.prewarm(
-                inputs: [input],
-                protectFor: conversationID
-            )
-        }
-    }
-
-    func performResizeCacheCleanup(
-        contentWidth: CGFloat,
-        hotConversationIDs: [String]
-    ) async {
-        guard contentWidth > 0 else { return }
-
-        messageRenderRuntime.clearAllProtections()
-
-        var targets: [String] = []
-        if let activeConversationId {
-            targets.append(activeConversationId)
-        }
-        targets.append(contentsOf: hotConversationIDs)
-
-        var seen: Set<String> = []
-        for conversationID in targets where seen.insert(conversationID).inserted {
-            let messages = messagesForConversation(conversationID)
-            _ = await prewarmRenderCache(
-                for: messages,
-                conversationID: conversationID,
-                availableWidth: contentWidth
-            )
-            await Task.yield()
-        }
-    }
-
-    private func noteUserActivityForIdlePrewarm() {
-        scheduleIdlePrewarmIfNeeded()
-    }
-
-    func cancelIdlePrewarmFromCoordinator() {
-        idlePrewarmTask?.cancel()
-    }
-
-    func scheduleIdlePrewarmFromCoordinator() {
-        scheduleIdlePrewarmIfNeeded()
-    }
-
-    private func scheduleIdlePrewarmIfNeeded() {
-        idlePrewarmTask?.cancel()
-        idlePrewarmTask = Task(priority: .utility) { [weak self] in
-            guard let self else { return }
-
-            try? await Task.sleep(for: .seconds(RenderConstants.idlePrewarmDelay))
-            if Task.isCancelled { return }
-            guard !self.isActiveConversationSending else { return }
-
-            let conversationIDs = self.hotConversationIDsForIdlePrewarm()
-            guard !conversationIDs.isEmpty else { return }
-
-            for conversationID in conversationIDs {
-                if Task.isCancelled { return }
-                guard let snapshot = self.conversationPageCache[conversationID] else { continue }
-                _ = await self.prewarmRenderCache(
-                    for: snapshot.messages,
-                    conversationID: conversationID
-                )
-            }
-        }
-    }
-
-    private func hotConversationIDsForIdlePrewarm() -> [String] {
-        let active = activeConversationId
-        return Array(
-            conversationPageCacheOrder
-                .reversed()
-                .filter { $0 != active }
-                .prefix(RenderConstants.startupPrewarmConversationCount)
-        )
-    }
-
-    private func scheduleSwitchAwayPrewarmIfNeeded(
-        from previousConversationId: String?,
-        persistence: ChatPersistenceCoordinator
-    ) {
-        guard let previousConversationId else { return }
-
-        let activatedConversationId = activeConversationId
-        let adjacent = sidebarAdjacentConversationIDs(around: previousConversationId)
-            .filter { $0 != activatedConversationId }
-
-        guard !adjacent.isEmpty else { return }
-
-        switchAwayPrewarmTask?.cancel()
-        switchAwayPrewarmTask = Task(priority: .utility) { [weak self] in
-            guard let self else { return }
-            await Task.yield()
-
-            for conversationID in adjacent {
-                if Task.isCancelled { return }
-                let messages = self.messagesForPrewarm(conversationId: conversationID, persistence: persistence)
-                if messages.isEmpty { continue }
-                _ = await self.prewarmRenderCache(
-                    for: messages,
-                    conversationID: conversationID
-                )
-                await Task.yield()
-            }
-        }
-    }
-
-    private func sidebarAdjacentConversationIDs(around conversationId: String) -> [String] {
-        guard let idx = sidebarThreads.firstIndex(where: { $0.id == conversationId }) else { return [] }
-
-        var candidates: [String] = []
-        if idx > 0 {
-            candidates.append(sidebarThreads[idx - 1].id)
-        }
-        if idx + 1 < sidebarThreads.count {
-            candidates.append(sidebarThreads[idx + 1].id)
-        }
-
-        var seen: Set<String> = []
-        return candidates.filter { seen.insert($0).inserted }
-    }
-
-    private func messagesForPrewarm(
-        conversationId: String,
-        persistence: ChatPersistenceCoordinator
-    ) -> [ChatMessage] {
-        if let snapshot = conversationPageCache[conversationId] {
-            return snapshot.messages
-        }
-        if let bucket = messagesByConversationId[conversationId] {
-            return bucket
-        }
-        return (try? persistence.fetchMessagePage(
-            conversationId: conversationId,
-            beforeOrderIndex: nil,
-            limit: RenderConstants.startupPrewarmMessageLimit
-        ).messages) ?? []
-    }
-
-    func handleScenePhaseChange(_ phase: ScenePhase) {
-        guard phase == .background || phase == .inactive else { return }
-        flushSettings()
-    }
-
-    // MARK: - Data Management
-
-    func fetchDataStats() async -> DataStats {
-        guard let persistence else {
-            return DataStats(databaseSizeBytes: 0, conversationCount: 0, messageCount: 0)
-        }
-        return await Task.detached(priority: .utility) {
-            let size = persistence.databaseFileSize()
-            let conversations = (try? persistence.conversationCount()) ?? 0
-            let messages = (try? persistence.messageCount()) ?? 0
-            return DataStats(databaseSizeBytes: size, conversationCount: conversations, messageCount: messages)
-        }.value
-    }
-
-    func deleteAllChatHistory() async {
-        guard !isSending else {
-            statusMessage = "Stop active request before clearing data"
-            return
-        }
-        guard let persistence else { return }
-        let messageAssetStore = self.messageAssetStore
-
-        sidebarThreadsLoadGeneration &+= 1
-
-        do {
-            try await Task.detached(priority: .userInitiated) {
-                try await messageAssetStore?.deleteAllAssets()
-                try persistence.deleteAllChatData()
-            }.value
-        } catch {
-            statusMessage = "Failed to clear data: \(error.localizedDescription)"
-            return
-        }
-
-        sidebarThreads.removeAll()
-        conversationPageCache.removeAll()
-        conversationPageCacheOrder.removeAll()
-        isLoadingMoreSidebarThreads = false
-        sidebarThreadsCursor = nil
-        hasMoreSidebarThreads = false
-
-        messages.removeAll()
-        isLoadingOlderMessages = false
-        hasMoreOlderMessages = false
-        oldestLoadedOrderIndex = nil
-        activeConversationId = try? persistence.createNewConversation()
-        conversationLoadGeneration &+= 1
-        activeConversationRenderGeneration = conversationLoadGeneration
-        messageRenderRuntime.setActiveConversation(
-            conversationID: activeConversationId,
-            generation: activeConversationRenderGeneration
-        )
-        statusMessage = "All chat history cleared"
-    }
-
-    // MARK: - Settings Persistence (Debounced)
-
-    private func persistSettingsIfNeeded(previous: AppSettings) {
-        guard previous != settings else { return }
-        isDirty = true
-        scheduleDebouncedSave()
-    }
-
-    private func scheduleDebouncedSave() {
-        debounceTask?.cancel()
-        debounceTask = Task {
-            do {
-                try await Task.sleep(for: RuntimeConstants.settingsDebounceInterval)
-                self.performSave()
-            } catch {
-                // Cancelled — a newer debounce or flush superseded this one
-            }
-        }
-    }
-
-    private func performSave() {
-        guard isDirty else { return }
-        do {
-            try preferencesRepository?.save(settings)
-            isDirty = false
-        } catch {
-            // Keep dirty for retry on next debounce cycle or flush
-            statusMessage = "Failed to save settings: \(error.localizedDescription)"
-        }
-    }
-
-    /// Force-save pending settings immediately. Call at lifecycle boundaries
-    /// (app background/inactive scene phase transitions).
-    func flushSettings() {
-        debounceTask?.cancel()
-        debounceTask = nil
-        performSave()
-    }
-}
-
-private extension AppContainer {
-    func fallbackProviderConfiguration() -> ProviderConfiguration? {
-        settings.providerConfigurations.first(where: { $0.isEnabled })
-    }
-
-    func normalizeEndpoint(_ endpoint: String) -> String {
-        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? OpenAIProvider.defaultEndpoint : trimmed
-    }
-
-    func normalizedEndpoint(_ endpoint: String, for type: ProviderType) -> String {
-        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            switch type {
-            case .openAI:
-                return OpenAIProvider.defaultEndpoint
-            #if DEBUG
-                case .mock:
-                    return "local://mock-provider"
-            #endif
-            }
-        }
-        return trimmed
-    }
-}
-
-// MARK: - Agent Preset Management
-
-extension AppContainer {
-    func fetchAgentPresets() -> [AgentPreset] {
-        (try? agentPresetRepository?.fetchAll()) ?? []
-    }
-
-    func saveAgentPreset(_ preset: AgentPreset) {
-        try? agentPresetRepository?.upsert(preset)
-    }
-
-    func deleteAgentPreset(id: String) {
-        try? agentPresetRepository?.delete(id: id)
-    }
-}
-
-// MARK: - Prompt Template Management
-
-extension AppContainer {
-    func fetchPromptTemplates() -> [PromptTemplate] {
-        (try? promptTemplateRepository?.fetchAll()) ?? []
-    }
-
-    func savePromptTemplate(_ template: PromptTemplate) {
-        try? promptTemplateRepository?.upsert(template)
-    }
-
-    func deletePromptTemplate(id: String) {
-        try? promptTemplateRepository?.delete(id: id)
-    }
 }
 
 #if DEBUG
     extension AppContainer {
+        func configureQuickBarPreview(
+            conversationId: String = "quickbar-preview",
+            messages: [ChatMessage] = [],
+            draft: String = "",
+            isExpanded: Bool,
+            isSending: Bool = false,
+            showQuickBar: Bool = true,
+            providerID: String = "mock",
+            modelID: String = "mock-text-1"
+        ) {
+            quickBarGeneration &+= 1
+
+            let resolvedConversationId: String? = if messages.isEmpty, !isSending {
+                nil
+            } else {
+                conversationId
+            }
+
+            quickBarState = QuickBarSessionState(
+                conversationId: resolvedConversationId,
+                messages: messages,
+                draft: draft,
+                isExpanded: isExpanded,
+                providerID: providerID,
+                selectedModelID: modelID,
+                generation: quickBarGeneration
+            )
+
+            if let resolvedConversationId {
+                messagesByConversationId[resolvedConversationId] = messages
+            }
+
+            runningConversationIds = if isSending, let resolvedConversationId {
+                [resolvedConversationId]
+            } else {
+                []
+            }
+            self.showQuickBar = showQuickBar
+            statusMessage = "Ready"
+        }
+
         func setRunningConversationIDsForTesting(_ ids: Set<String>) {
             runningConversationIds = ids
         }
@@ -2398,5 +808,3 @@ extension AppContainer {
         }
     }
 #endif
-
-// swiftlint:enable file_length type_body_length
