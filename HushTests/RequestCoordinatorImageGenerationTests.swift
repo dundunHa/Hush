@@ -260,7 +260,7 @@ private actor CapturingMessageAssetStore: MessageAssetStore {
         nil
     }
 
-    func deleteAllAssets() async throws {}
+    func deleteAllAssets() throws {}
 }
 
 private let requestCoordinatorOnePixelPNGData =

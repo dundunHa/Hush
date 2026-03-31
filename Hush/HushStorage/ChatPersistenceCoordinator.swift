@@ -33,14 +33,14 @@ struct BootstrapState: Equatable {
 ///
 /// Thread safety: This type is designed to be used from `@MainActor` context
 /// via `AppContainer`. The underlying GRDB operations are thread-safe.
-private let persistenceLogger = Logger(subsystem: "com.hush.app", category: "Persistence")
+let persistenceLogger = Logger(subsystem: "com.hush.app", category: "Persistence")
 
 public final class ChatPersistenceCoordinator: Sendable {
-    private let dbManager: DatabaseManager
+    let dbManager: DatabaseManager
     private let conversationRepo: GRDBConversationRepository
     private let messageRepo: GRDBMessageRepository
-    private let outboxRepo: GRDBSyncOutboxRepository
-    private struct SidebarThreadRow: FetchableRecord, Decodable {
+    let outboxRepo: GRDBSyncOutboxRepository
+    struct SidebarThreadRow: FetchableRecord, Decodable {
         let id: String
         let title: String?
         let createdAt: Date
@@ -120,55 +120,6 @@ public final class ChatPersistenceCoordinator: Sendable {
 
     public func unarchiveConversation(id: String) throws {
         try conversationRepo.setArchived(id: id, isArchived: false)
-    }
-
-    nonisolated func fetchArchivedThreads() throws -> [ConversationSidebarThread] {
-        let sql = """
-        WITH firstUser AS (
-            SELECT m.conversationId AS conversationId, m.content AS firstUserContent
-            FROM messages m
-            INNER JOIN (
-                SELECT conversationId, MIN(orderIndex) AS firstUserOrderIndex
-                FROM messages
-                WHERE deletedAt IS NULL
-                  AND role = ?
-                GROUP BY conversationId
-            ) idx
-                ON idx.conversationId = m.conversationId
-               AND idx.firstUserOrderIndex = m.orderIndex
-            WHERE m.deletedAt IS NULL
-              AND m.role = ?
-        )
-        SELECT
-            c.id AS id,
-            c.title AS title,
-            c.createdAt AS createdAt,
-            c.updatedAt AS lastActivityAt,
-            firstUser.firstUserContent AS firstUserContent
-        FROM conversations c
-        LEFT JOIN firstUser ON firstUser.conversationId = c.id
-        WHERE c.deletedAt IS NULL
-          AND c.isArchived = 1
-        ORDER BY c.updatedAt DESC
-        """
-
-        return try dbManager.read { db in
-            let rows = try SidebarThreadRow.fetchAll(
-                db,
-                sql: sql,
-                arguments: [ChatRole.user.rawValue, ChatRole.user.rawValue]
-            )
-            return rows.map { row in
-                ConversationSidebarThread(
-                    id: row.id,
-                    title: ConversationSidebarTitleFormatter.makeTitle(
-                        conversationTitle: row.title,
-                        firstUserContent: row.firstUserContent
-                    ),
-                    lastActivityAt: row.lastActivityAt
-                )
-            }
-        }
     }
 
     // MARK: - Message Persistence
@@ -547,65 +498,5 @@ public final class ChatPersistenceCoordinator: Sendable {
         guard !json.isEmpty, let data = json.data(using: .utf8) else { return [] }
         let decoder = JSONDecoder()
         return (try? decoder.decode([MessageAttachment].self, from: data)) ?? []
-    }
-}
-
-// MARK: - Data Management
-
-extension ChatPersistenceCoordinator {
-    /// Returns the total file size of the SQLite database (main + WAL + SHM) in bytes.
-    nonisolated func databaseFileSize() -> UInt64 {
-        let path = dbManager.databasePath
-        let walPath = path + "-wal"
-        let shmPath = path + "-shm"
-
-        var total: UInt64 = 0
-        for filePath in [path, walPath, shmPath] {
-            if let attrs = try? FileManager.default.attributesOfItem(atPath: filePath),
-               let size = attrs[.size] as? UInt64
-            {
-                total += size
-            }
-        }
-        return total
-    }
-
-    /// Returns the total number of non-deleted conversations.
-    nonisolated func conversationCount() throws -> Int {
-        try dbManager.read { db in
-            try Int.fetchOne(
-                db,
-                sql: "SELECT COUNT(*) FROM conversations WHERE deletedAt IS NULL"
-            ) ?? 0
-        }
-    }
-
-    /// Returns the total number of non-deleted messages.
-    nonisolated func messageCount() throws -> Int {
-        try dbManager.read { db in
-            try Int.fetchOne(
-                db,
-                sql: "SELECT COUNT(*) FROM messages WHERE deletedAt IS NULL"
-            ) ?? 0
-        }
-    }
-
-    /// Hard-deletes all conversations, messages, and outbox entries, then reclaims disk space.
-    nonisolated func deleteAllChatData() throws {
-        try dbManager.write { db in
-            try db.execute(sql: "DELETE FROM syncOutbox")
-            try db.execute(sql: "DELETE FROM messages")
-            try db.execute(sql: "DELETE FROM conversations")
-        }
-        do {
-            try dbManager.vacuum()
-        } catch {
-            persistenceLogger.warning("VACUUM failed after clearing data: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    /// Returns pending outbox entries for future sync worker consumption.
-    public func pendingOutboxEntries(limit: Int = 50) throws -> [SyncOutboxRecord] {
-        try outboxRepo.fetchPending(limit: limit)
     }
 }

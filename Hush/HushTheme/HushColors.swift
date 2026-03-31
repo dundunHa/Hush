@@ -335,6 +335,30 @@ enum HushColors {
 }
 
 private extension HushThemePalette {
+    struct QuickBarTranscriptPalette {
+        let transcriptStroke: Color
+        let transcriptHoverStroke: Color
+        let transcriptSoftFill: Color
+        let transcriptSoftFillStrong: Color
+        let transcriptHoverFill: Color
+        let transcriptCodeFill: Color
+        let transcriptCodeBorder: Color
+        let transcriptCodeSeparator: Color
+    }
+
+    struct QuickBarTextPalette {
+        let primaryText: Color
+        let secondaryText: Color
+        let tertiaryText: Color
+        let controlForeground: Color
+        let controlForegroundMuted: Color
+        let markdownBody: Color
+        let markdownCode: Color
+        let markdownBlockquote: Color
+        let markdownMathFallback: Color
+        let markdownTableHeader: Color
+    }
+
     func adapted(
         for surfaceStyle: ConversationSurfaceStyle,
         theme: AppTheme
@@ -342,15 +366,20 @@ private extension HushThemePalette {
         guard surfaceStyle == .quickBar else { return self }
 
         let usesDarkAppearance = theme.usesDarkAppearance
-        let transcriptStroke = quickBarSurfaceStroke.opacity(usesDarkAppearance ? 0.18 : 0.24)
-        let transcriptHoverStroke = quickBarSurfaceStroke.opacity(usesDarkAppearance ? 0.26 : 0.30)
-        let transcriptSoftFill = quickBarSurface.opacity(usesDarkAppearance ? 0.16 : 0.24)
-        let transcriptSoftFillStrong = quickBarSurface.opacity(usesDarkAppearance ? 0.24 : 0.36)
-        let transcriptHoverFill = quickBarControlFill.opacity(usesDarkAppearance ? 0.26 : 0.42)
-        let transcriptCodeFill = quickBarSurface.opacity(usesDarkAppearance ? 0.38 : 0.50)
-        let transcriptCodeBorder = quickBarSurfaceStroke.opacity(usesDarkAppearance ? 0.22 : 0.24)
-        let transcriptCodeSeparator = quickBarSurfaceStroke.opacity(usesDarkAppearance ? 0.16 : 0.18)
+        let transcriptPalette = quickBarTranscriptPalette(usesDarkAppearance: usesDarkAppearance)
+        let textPalette = quickBarTextPalette(usesDarkAppearance: usesDarkAppearance)
+        return quickBarAdaptedPalette(
+            transcriptPalette: transcriptPalette,
+            textPalette: textPalette,
+            usesDarkAppearance: usesDarkAppearance
+        )
+    }
 
+    private func quickBarAdaptedPalette(
+        transcriptPalette: QuickBarTranscriptPalette,
+        textPalette: QuickBarTextPalette,
+        usesDarkAppearance _: Bool
+    ) -> HushThemePalette {
         return HushThemePalette(
             rootBackground: rootBackground,
             sidebarBackground: sidebarBackground,
@@ -359,33 +388,33 @@ private extension HushThemePalette {
             composerBackground: composerBackground,
             composerEditorBackground: composerEditorBackground,
             separator: separator,
-            subtleStroke: transcriptStroke,
+            subtleStroke: transcriptPalette.transcriptStroke,
             splitPaneEdgeStroke: splitPaneEdgeStroke,
             splitPaneShadow: splitPaneShadow,
             sidebarGlassTint: sidebarGlassTint,
             sidebarGlassStroke: sidebarGlassStroke,
             sidebarGlassHighlight: sidebarGlassHighlight,
             sidebarGlassShadow: sidebarGlassShadow,
-            primaryText: quickBarPrimaryText.opacity(usesDarkAppearance ? 0.96 : 0.94),
-            secondaryText: quickBarSecondaryText.opacity(usesDarkAppearance ? 0.92 : 0.94),
-            tertiaryText: quickBarTertiaryText.opacity(usesDarkAppearance ? 0.88 : 0.92),
+            primaryText: textPalette.primaryText,
+            secondaryText: textPalette.secondaryText,
+            tertiaryText: textPalette.tertiaryText,
             accent: accent,
             accentMutedBackground: accentMutedBackground,
             accentMutedStroke: accentMutedStroke,
-            hoverFill: transcriptHoverFill,
-            hoverStroke: transcriptHoverStroke,
+            hoverFill: transcriptPalette.transcriptHoverFill,
+            hoverStroke: transcriptPalette.transcriptHoverStroke,
             selectionFill: selectionFill,
             selectionStroke: selectionStroke,
-            softFill: transcriptSoftFill,
-            softFillStrong: transcriptSoftFillStrong,
+            softFill: transcriptPalette.transcriptSoftFill,
+            softFillStrong: transcriptPalette.transcriptSoftFillStrong,
             primaryActionBackground: primaryActionBackground,
             primaryActionForeground: primaryActionForeground,
             disabledActionBackground: disabledActionBackground,
             disabledActionForeground: disabledActionForeground,
             destructiveActionBackground: destructiveActionBackground,
             destructiveActionForeground: destructiveActionForeground,
-            controlForeground: quickBarControlForeground.opacity(usesDarkAppearance ? 0.94 : 0.96),
-            controlForegroundMuted: quickBarControlMuted.opacity(usesDarkAppearance ? 0.86 : 0.90),
+            controlForeground: textPalette.controlForeground,
+            controlForegroundMuted: textPalette.controlForegroundMuted,
             debugOverlayBackground: debugOverlayBackground,
             debugOverlayForeground: debugOverlayForeground,
             errorText: errorText,
@@ -399,19 +428,19 @@ private extension HushThemePalette {
             toolBubbleStroke: toolBubbleStroke,
             systemBubble: systemBubble,
             systemBubbleStroke: systemBubbleStroke,
-            markdownBody: quickBarPrimaryText.opacity(usesDarkAppearance ? 0.94 : 0.92),
+            markdownBody: textPalette.markdownBody,
             markdownHeading: quickBarPrimaryText,
-            markdownCode: quickBarPrimaryText.opacity(usesDarkAppearance ? 0.90 : 0.88),
-            markdownCodeBackground: transcriptCodeFill,
+            markdownCode: textPalette.markdownCode,
+            markdownCodeBackground: transcriptPalette.transcriptCodeFill,
             markdownLink: quickBarButtonFill,
-            markdownBlockquote: quickBarSecondaryText.opacity(usesDarkAppearance ? 0.90 : 0.92),
-            markdownBlockquoteBar: transcriptStroke,
-            markdownMathFallback: quickBarButtonFill.opacity(usesDarkAppearance ? 0.94 : 1),
-            markdownTableHeader: quickBarPrimaryText.opacity(usesDarkAppearance ? 0.92 : 0.90),
-            markdownTableBorder: transcriptStroke,
-            codeBlockBackground: transcriptCodeFill,
-            codeBlockBorder: transcriptCodeBorder,
-            codeBlockSeparator: transcriptCodeSeparator,
+            markdownBlockquote: textPalette.markdownBlockquote,
+            markdownBlockquoteBar: transcriptPalette.transcriptStroke,
+            markdownMathFallback: textPalette.markdownMathFallback,
+            markdownTableHeader: textPalette.markdownTableHeader,
+            markdownTableBorder: transcriptPalette.transcriptStroke,
+            codeBlockBackground: transcriptPalette.transcriptCodeFill,
+            codeBlockBorder: transcriptPalette.transcriptCodeBorder,
+            codeBlockSeparator: transcriptPalette.transcriptCodeSeparator,
             composerShellTop: composerShellTop,
             composerShellBottom: composerShellBottom,
             composerShellStroke: composerShellStroke,
@@ -428,6 +457,34 @@ private extension HushThemePalette {
             quickBarButtonForeground: quickBarButtonForeground,
             quickBarDisabledButtonFill: quickBarDisabledButtonFill,
             quickBarDisabledButtonForeground: quickBarDisabledButtonForeground
+        )
+    }
+
+    private func quickBarTranscriptPalette(usesDarkAppearance: Bool) -> QuickBarTranscriptPalette {
+        QuickBarTranscriptPalette(
+            transcriptStroke: quickBarSurfaceStroke.opacity(usesDarkAppearance ? 0.18 : 0.24),
+            transcriptHoverStroke: quickBarSurfaceStroke.opacity(usesDarkAppearance ? 0.26 : 0.30),
+            transcriptSoftFill: quickBarSurface.opacity(usesDarkAppearance ? 0.16 : 0.24),
+            transcriptSoftFillStrong: quickBarSurface.opacity(usesDarkAppearance ? 0.24 : 0.36),
+            transcriptHoverFill: quickBarControlFill.opacity(usesDarkAppearance ? 0.26 : 0.42),
+            transcriptCodeFill: quickBarSurface.opacity(usesDarkAppearance ? 0.38 : 0.50),
+            transcriptCodeBorder: quickBarSurfaceStroke.opacity(usesDarkAppearance ? 0.22 : 0.24),
+            transcriptCodeSeparator: quickBarSurfaceStroke.opacity(usesDarkAppearance ? 0.16 : 0.18)
+        )
+    }
+
+    private func quickBarTextPalette(usesDarkAppearance: Bool) -> QuickBarTextPalette {
+        QuickBarTextPalette(
+            primaryText: quickBarPrimaryText.opacity(usesDarkAppearance ? 0.96 : 0.94),
+            secondaryText: quickBarSecondaryText.opacity(usesDarkAppearance ? 0.92 : 0.94),
+            tertiaryText: quickBarTertiaryText.opacity(usesDarkAppearance ? 0.88 : 0.92),
+            controlForeground: quickBarControlForeground.opacity(usesDarkAppearance ? 0.94 : 0.96),
+            controlForegroundMuted: quickBarControlMuted.opacity(usesDarkAppearance ? 0.86 : 0.90),
+            markdownBody: quickBarPrimaryText.opacity(usesDarkAppearance ? 0.94 : 0.92),
+            markdownCode: quickBarPrimaryText.opacity(usesDarkAppearance ? 0.90 : 0.88),
+            markdownBlockquote: quickBarSecondaryText.opacity(usesDarkAppearance ? 0.90 : 0.92),
+            markdownMathFallback: quickBarButtonFill.opacity(usesDarkAppearance ? 0.94 : 1),
+            markdownTableHeader: quickBarPrimaryText.opacity(usesDarkAppearance ? 0.92 : 0.90)
         )
     }
 }

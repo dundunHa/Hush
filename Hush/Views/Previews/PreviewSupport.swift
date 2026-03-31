@@ -218,12 +218,12 @@
         ) -> AppContainer {
             forTesting(
                 settings: settings,
-                activeConversationId: activeConversationId,
-                messages: messages,
-                sidebarThreads: sidebarThreads,
                 messageRenderRuntime: MessageRenderRuntime(),
                 agentPresetRepository: agentPresetRepository,
                 promptTemplateRepository: promptTemplateRepository,
+                activeConversationId: activeConversationId,
+                messages: messages,
+                sidebarThreads: sidebarThreads,
                 enableStartupPrewarm: false
             )
         }
@@ -239,10 +239,10 @@
                 try? coordinator.persistUserMessage(message, conversationId: conversationId)
             }
             return forTesting(
+                messageRenderRuntime: MessageRenderRuntime(),
                 persistence: coordinator,
                 activeConversationId: conversationId,
                 messages: PreviewFixtures.sampleConversation,
-                messageRenderRuntime: MessageRenderRuntime(),
                 enableStartupPrewarm: false
             )
         }
@@ -325,13 +325,16 @@
         nonisolated func availableModels(
             context _: ProviderInvocationContext
         ) async throws -> [ModelDescriptor] {
-            [
-                ModelDescriptor(
-                    id: "mock-text-1",
-                    displayName: "Preview model",
-                    capabilities: [.text]
-                )
-            ]
+            await Task.yield()
+            return await MainActor.run {
+                [
+                    ModelDescriptor(
+                        id: "mock-text-1",
+                        displayName: "Preview model",
+                        capabilities: [.text]
+                    )
+                ]
+            }
         }
 
         nonisolated func send(
@@ -340,7 +343,10 @@
             parameters _: ModelParameters,
             context _: ProviderInvocationContext
         ) async throws -> ProviderResponse {
-            ProviderResponse(text: "Preview response")
+            await Task.yield()
+            return await MainActor.run {
+                ProviderResponse(text: "Preview response")
+            }
         }
 
         nonisolated func sendStreaming(

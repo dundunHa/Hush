@@ -80,7 +80,7 @@ public final class FileMessageAssetStore: MessageAssetStore, @unchecked Sendable
         return persisted
     }
 
-    public func deleteAllAssets() async throws {
+    public func deleteAllAssets() throws {
         guard fileManager.fileExists(atPath: baseURL.path) else { return }
         try fileManager.removeItem(at: baseURL)
     }

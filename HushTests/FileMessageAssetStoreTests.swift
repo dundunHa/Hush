@@ -134,7 +134,7 @@ struct FileMessageAssetStoreTests {
 
         #expect(FileManager.default.fileExists(atPath: directory.path))
 
-        try await store.deleteAllAssets()
+        try store.deleteAllAssets()
 
         #expect(!FileManager.default.fileExists(atPath: directory.path))
     }

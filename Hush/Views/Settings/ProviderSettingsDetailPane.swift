@@ -210,7 +210,7 @@ extension ProviderSettingsView {
         let selectedModelIDs = selectedCatalogModelIDs(for: allModels)
         let isRefreshing = isCatalogRefreshing(for: providerID)
         let refreshError = visibleCatalogRefreshError(for: providerID)
-        let isDraftSource = shouldDisplayDraftCatalog()
+        let isDraftSource = shouldDisplayDraftCatalog(for: providerID)
         let hasFilteredModels = !filteredModels.isEmpty
         let areAllFilteredModelsSelected = !filteredModels.isEmpty
             && Set(filteredModels.map(\.id)).isSubset(of: Set(selectedModelIDs))

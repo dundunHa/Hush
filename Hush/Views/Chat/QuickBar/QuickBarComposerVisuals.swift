@@ -1,6 +1,15 @@
 import SwiftUI
 
 enum QuickBarComposerVisuals {
+    struct SendButtonStyleState {
+        let isHovered: Bool
+        let isEnabled: Bool
+        let isSending: Bool
+        let isExpandedLayout: Bool
+        let palette: HushThemePalette
+        let usesDarkAppearance: Bool
+    }
+
     @ViewBuilder
     static func shellSurface(
         isExpandedLayout: Bool,
@@ -73,37 +82,30 @@ enum QuickBarComposerVisuals {
         )
     }
 
-    static func sendButtonSurface(
-        isHovered: Bool,
-        isEnabled: Bool,
-        isSending: Bool,
-        isExpandedLayout: Bool,
-        palette: HushThemePalette,
-        usesDarkAppearance: Bool
-    ) -> some View {
+    static func sendButtonSurface(_ state: SendButtonStyleState) -> some View {
         QuickBarMinimalSurface(
             shape: Circle(),
             fill: actionFillColor(
-                isHovered: isHovered,
-                isEnabled: isEnabled,
-                isSending: isSending,
-                palette: palette,
-                usesDarkAppearance: usesDarkAppearance
+                isHovered: state.isHovered,
+                isEnabled: state.isEnabled,
+                isSending: state.isSending,
+                palette: state.palette,
+                usesDarkAppearance: state.usesDarkAppearance
             ),
             stroke: actionStrokeColor(
-                isHovered: isHovered,
-                isEnabled: isEnabled,
-                isSending: isSending,
-                palette: palette
+                isHovered: state.isHovered,
+                isEnabled: state.isEnabled,
+                isSending: state.isSending,
+                palette: state.palette
             ),
-            shadowColor: palette.splitPaneShadow,
+            shadowColor: state.palette.splitPaneShadow,
             shadowOpacity: actionShadowOpacity(
-                isHovered: isHovered,
-                isEnabled: isEnabled,
-                isSending: isSending,
-                isExpandedLayout: isExpandedLayout
+                isHovered: state.isHovered,
+                isEnabled: state.isEnabled,
+                isSending: state.isSending,
+                isExpandedLayout: state.isExpandedLayout
             ),
-            shadowRadius: isHovered ? 8 : 6,
+            shadowRadius: state.isHovered ? 8 : 6,
             shadowYOffset: 2
         )
     }

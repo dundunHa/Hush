@@ -497,11 +497,11 @@ private actor TrackingMessageAssetStore: MessageAssetStore {
         attachments _: [ProviderResponseAttachment],
         conversationId _: String,
         messageId _: UUID
-    ) async throws -> [MessageAttachment] {
+    ) throws -> [MessageAttachment] {
         []
     }
 
-    func deleteAllAssets() async throws {
+    func deleteAllAssets() throws {
         deleteAllAssetsCallCount += 1
     }
 

@@ -5,10 +5,13 @@ extension ProviderSettingsView {
         ProviderCatalogSelectionLogic.normalizedModelIDs(modelIDs)
     }
 
-    func currentCatalogDraftSignature() -> ProviderCatalogDraftSignature {
-        ProviderCatalogDraftSignature(
+    func currentCatalogDraftSignature(providerID: String) -> ProviderCatalogDraftSignature {
+        let keyPrefix = String(apiKeyToSave.prefix(8))
+        return ProviderCatalogDraftSignature(
+            providerID: providerID,
             type: providerType,
-            normalizedEndpoint: ProviderCatalogRefreshGate.normalizedEndpoint(endpoint, type: providerType)
+            normalizedEndpoint: ProviderCatalogRefreshGate.normalizedEndpoint(endpoint, type: providerType),
+            apiKeyPrefix: keyPrefix
         )
     }
 
@@ -34,28 +37,28 @@ extension ProviderSettingsView {
         )
     }
 
-    func shouldDisplayDraftCatalog() -> Bool {
-        guard draftCatalogSignature == currentCatalogDraftSignature() else {
+    func shouldDisplayDraftCatalog(for providerID: String) -> Bool {
+        guard draftCatalogSignature == currentCatalogDraftSignature(providerID: providerID) else {
             return false
         }
         return isDraftCatalogRefreshing || draftCatalogError != nil || !draftCatalogModels.isEmpty
     }
 
     func visibleCatalogModels(for providerID: String) -> [ModelDescriptor] {
-        let models = shouldDisplayDraftCatalog()
+        let models = shouldDisplayDraftCatalog(for: providerID)
             ? draftCatalogModels
             : container.cachedModels(forProviderID: providerID)
         return models.sorted { $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending }
     }
 
     func visibleCatalogRefreshError(for providerID: String) -> String? {
-        shouldDisplayDraftCatalog()
+        shouldDisplayDraftCatalog(for: providerID)
             ? draftCatalogError
             : container.catalogRefreshErrors[providerID]
     }
 
     func isCatalogRefreshing(for providerID: String) -> Bool {
-        shouldDisplayDraftCatalog()
+        shouldDisplayDraftCatalog(for: providerID)
             ? isDraftCatalogRefreshing
             : container.catalogRefreshingProviderIDs.contains(providerID)
     }

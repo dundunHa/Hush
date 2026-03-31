@@ -160,10 +160,16 @@ final class HotScenePoolController: NSViewController {
            previousConversationID != activeConversationID,
            let previousScene = pool.sceneFor(conversationID: previousConversationID)
         {
+            previousScene.preserveScrollPositionForHotReuse()
             previousScene.view.isHidden = true
         }
 
         result.scene.view.isHidden = false
+        if isHotHitWithoutReload {
+            view.layoutSubtreeIfNeeded()
+            result.scene.view.layoutSubtreeIfNeeded()
+            result.scene.restorePreservedScrollPositionForHotReuse()
+        }
 
         if isHotHitWithoutReload {
             container.reportHotSceneSwitchPresentedRenderedIfNeeded(

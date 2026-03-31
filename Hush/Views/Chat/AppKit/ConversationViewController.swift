@@ -6,6 +6,7 @@ final class ConversationViewController: NSViewController {
     private var theme: AppTheme
     private var surfaceStyle: ConversationSurfaceStyle
     private var bottomReservedHeight: CGFloat
+    private var preservedScrollOriginY: CGFloat?
     private let messageTableView = MessageTableView()
     private var hasAppliedConversationState = false
     private var lastLayoutReadyGeneration: UInt64?
@@ -132,6 +133,15 @@ final class ConversationViewController: NSViewController {
             lastStreamingPushContentForTesting = content
         #endif
         messageTableView.updateStreamingCell(messageID: messageID, content: content)
+    }
+
+    func preserveScrollPositionForHotReuse() {
+        preservedScrollOriginY = messageTableView.currentScrollOriginY
+    }
+
+    func restorePreservedScrollPositionForHotReuse() {
+        guard let preservedScrollOriginY else { return }
+        messageTableView.restorePreservedScrollOrigin(preservedScrollOriginY)
     }
 
     private func renderConversationState() {
