@@ -278,12 +278,14 @@ struct QuickBarComposer: View {
 
     private var sendButtonSurface: some View {
         QuickBarComposerVisuals.sendButtonSurface(
-            isHovered: isSendHovered,
-            isEnabled: canSendDraft,
-            isSending: container.isQuickBarSending,
-            isExpandedLayout: isExpandedLayout,
-            palette: palette,
-            usesDarkAppearance: container.settings.theme.usesDarkAppearance
+            .init(
+                isHovered: isSendHovered,
+                isEnabled: canSendDraft,
+                isSending: container.isQuickBarSending,
+                isExpandedLayout: isExpandedLayout,
+                palette: palette,
+                usesDarkAppearance: container.settings.theme.usesDarkAppearance
+            )
         )
     }
 

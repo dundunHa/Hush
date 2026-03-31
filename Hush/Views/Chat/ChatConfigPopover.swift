@@ -210,7 +210,12 @@ private extension ChatConfigDrawer {
         HStack(spacing: HushSpacing.sm) {
             summaryChip(title: "Context", value: "\(contextLimitValueBinding.wrappedValue)")
             summaryChip(title: "Temp", value: temperatureText)
-            summaryChip(title: "Budget", value: maxTokensValueBinding.wrappedValue == 0 ? "∞" : compactTokenCount(maxTokensValueBinding.wrappedValue))
+            summaryChip(
+                title: "Budget",
+                value: maxTokensValueBinding.wrappedValue == 0
+                    ? "∞"
+                    : compactTokenCount(maxTokensValueBinding.wrappedValue)
+            )
         }
     }
 

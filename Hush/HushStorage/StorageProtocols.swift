@@ -83,7 +83,7 @@ public protocol MessageAssetStore: Sendable {
         messageId: UUID
     ) async throws -> [MessageAttachment]
 
-    func deleteAllAssets() async throws
+    func deleteAllAssets() throws
 
     func url(forRelativePath relativePath: String) -> URL?
 }

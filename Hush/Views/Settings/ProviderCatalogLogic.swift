@@ -37,8 +37,10 @@ enum ProviderCatalogRefreshGate {
 }
 
 struct ProviderCatalogDraftSignature: Equatable {
+    let providerID: String
     let type: ProviderType
     let normalizedEndpoint: String
+    let apiKeyPrefix: String
 }
 
 enum ProviderCatalogSelectionLogic {

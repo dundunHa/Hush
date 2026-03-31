@@ -472,6 +472,7 @@ extension RequestCoordinator {
               !state.isTerminal else { return }
         let hadContent = !state.accumulatedText.isEmpty
         let owningConversationId = state.conversationId
+        let shouldPersist = shouldPersistConversation(for: requestID)
 
         appendTraceEvent(
             for: requestID,
@@ -486,7 +487,7 @@ extension RequestCoordinator {
         flushPendingUIUpdate(requestID: requestID, contentSource: .accumulated)
         cleanupFlushState(requestID: requestID)
 
-        if shouldPersistConversation(for: requestID),
+        if shouldPersist,
            let msgID = container.requestStates[requestID]?.assistantMessageID
         {
             try? persistence?.finalizeAssistantMessage(
@@ -502,7 +503,7 @@ extension RequestCoordinator {
                 debugInfoJSON: stoppedDebugInfoJSON
             )
             container.appendMessage(stoppedMessage, toConversation: owningConversationId)
-            if shouldPersistConversation(for: requestID), !owningConversationId.isEmpty {
+            if shouldPersist, !owningConversationId.isEmpty {
                 try? persistence?.persistSystemMessage(
                     stoppedMessage,
                     conversationId: owningConversationId,
@@ -526,6 +527,7 @@ extension RequestCoordinator {
               !state.isTerminal else { return }
         let owningConversationId = state.conversationId
         let flushState = sessionFlushState[requestID]
+        let shouldPersist = shouldPersistConversation(for: requestID)
 
         appendTraceEvent(
             for: requestID,
@@ -544,7 +546,7 @@ extension RequestCoordinator {
         flushPendingUIUpdate(requestID: requestID, contentSource: .accumulated)
         cleanupFlushState(requestID: requestID)
 
-        if shouldPersistConversation(for: requestID),
+        if shouldPersist,
            let msgID = container.requestStates[requestID]?.assistantMessageID
         {
             try? persistence?.finalizeAssistantMessage(
@@ -556,7 +558,7 @@ extension RequestCoordinator {
 
         let isBackground = owningConversationId != container.activeConversationId
         let finalAssistantContent = state.accumulatedText
-        if isBackground, shouldPersistConversation(for: requestID) {
+        if isBackground, shouldPersist {
             container.scheduleStreamingCompletePrewarmIfNeeded(
                 conversationID: owningConversationId,
                 finalAssistantContent: finalAssistantContent
@@ -580,6 +582,7 @@ extension RequestCoordinator {
         guard let state = container.requestStates[requestID],
               !state.isTerminal else { return }
         let owningConversationId = state.conversationId
+        let shouldPersist = shouldPersistConversation(for: requestID)
         let errorDescription = error.errorDescription ?? "Unknown error"
         let resolvedDebugInfoJSON = finalizedDebugInfoJSON(
             for: requestID,
@@ -593,7 +596,7 @@ extension RequestCoordinator {
         flushPendingUIUpdate(requestID: requestID, contentSource: .accumulated)
         cleanupFlushState(requestID: requestID)
 
-        if shouldPersistConversation(for: requestID),
+        if shouldPersist,
            let msgID = container.requestStates[requestID]?.assistantMessageID
         {
             try? persistence?.finalizeAssistantMessage(
@@ -610,7 +613,7 @@ extension RequestCoordinator {
         )
         container.appendMessage(errorMessage, toConversation: owningConversationId)
         logger.info("[Request] Error message added to chat: \(errorDescription)")
-        if shouldPersistConversation(for: requestID), !owningConversationId.isEmpty {
+        if shouldPersist, !owningConversationId.isEmpty {
             try? persistence?.persistSystemMessage(
                 errorMessage,
                 conversationId: owningConversationId,
@@ -735,42 +738,75 @@ extension RequestCoordinator {
             requestID: requestID
         ) else { return }
 
-        let preflightTimeout = preflightTimeoutOverride ?? RuntimeConstants.preflightTimeout
-        let modelDescriptor: ModelDescriptor
-        do {
-            modelDescriptor = try await preflightModelValidation(
-                provider: provider,
-                modelID: snapshot.modelID,
-                providerID: snapshot.providerID,
-                providerName: config.name,
-                settings: PreflightValidationSettings(
-                    timeout: preflightTimeout,
-                    invocationContext: invocationContext,
-                    catalogRepository: container.catalogRepository
-                )
-            )
-        } catch let error as RequestError {
-            failSession(requestID: requestID, error: error)
-            return
-        } catch is CancellationError {
-            return
-        } catch {
-            failSession(
-                requestID: requestID,
-                error: .remoteError(provider: snapshot.providerID, message: error.localizedDescription)
-            )
-            return
-        }
+        guard let modelDescriptor = await validatedModelDescriptor(
+            snapshot: snapshot,
+            provider: provider,
+            providerName: config.name,
+            invocationContext: invocationContext,
+            catalogRepository: container.catalogRepository
+        ) else { return }
 
         guard let reqState = container.requestStates[requestID], !reqState.isTerminal else { return }
         container.requestStates[requestID]?.status = .streaming
-        let routeOutputs = modelDescriptor.supportedOutputs.map(\.rawValue).joined(separator: ",")
+        recordRouteDecision(
+            for: snapshot,
+            requestID: requestID,
+            modelDescriptor: modelDescriptor
+        )
+
+        await routeRequestExecution(
+            snapshot: snapshot,
+            provider: provider,
+            modelDescriptor: modelDescriptor,
+            invocationContext: invocationContext
+        )
+    }
+
+    private func validatedModelDescriptor(
+        snapshot: QueueItemSnapshot,
+        provider: any LLMProvider,
+        providerName: String,
+        invocationContext: ProviderInvocationContext,
+        catalogRepository: ProviderCatalogRepository?
+    ) async -> ModelDescriptor? {
+        let preflightTimeout = preflightTimeoutOverride ?? RuntimeConstants.preflightTimeout
+        do {
+            return try await preflightModelValidation(
+                provider: provider,
+                modelID: snapshot.modelID,
+                providerID: snapshot.providerID,
+                providerName: providerName,
+                settings: PreflightValidationSettings(
+                    timeout: preflightTimeout,
+                    invocationContext: invocationContext,
+                    catalogRepository: catalogRepository
+                )
+            )
+        } catch let error as RequestError {
+            failSession(requestID: snapshot.id, error: error)
+        } catch is CancellationError {
+            return nil
+        } catch {
+            failSession(
+                requestID: snapshot.id,
+                error: .remoteError(provider: snapshot.providerID, message: error.localizedDescription)
+            )
+        }
+        return nil
+    }
+
+    private func recordRouteDecision(
+        for snapshot: QueueItemSnapshot,
+        requestID: RequestID,
+        modelDescriptor: ModelDescriptor
+    ) {
+        let supportedOutputs = modelDescriptor.supportedOutputs.map(\.rawValue)
+        let routeOutputs = supportedOutputs.joined(separator: ",")
         let routeLogMessage =
             "[Request] Model route decision: model=\(snapshot.modelID), "
                 + "type=\(modelDescriptor.modelType.rawValue), outputs=\(routeOutputs)"
         logger.info("\(routeLogMessage, privacy: .public)")
         mutateDebugInfo(for: requestID) { current in
-            let supportedOutputs = modelDescriptor.supportedOutputs.map(\.rawValue)
             let requestKind = self.modelProducesImageOutput(modelDescriptor) ? "image_generation" : "chat_completion"
             let routeTarget = requestKind == "image_generation"
                 ? "provider.send"
@@ -779,7 +815,7 @@ extension RequestCoordinator {
             current.routeDecision =
                 "RequestCoordinator routed to \(routeTarget) because "
                     + "modelType=\(modelDescriptor.modelType.rawValue) and "
-                    + "supportedOutputs=\(supportedOutputs.joined(separator: ","))"
+                    + "supportedOutputs=\(routeOutputs)"
             current.descriptorModelType = modelDescriptor.modelType.rawValue
             current.descriptorSupportedOutputs = supportedOutputs
             current.descriptorRawMetadataJSON = self.trimmedDebugPreview(modelDescriptor.rawMetadataJSON)
@@ -797,7 +833,15 @@ extension RequestCoordinator {
                 )
             )
         }
+    }
 
+    private func routeRequestExecution(
+        snapshot: QueueItemSnapshot,
+        provider: any LLMProvider,
+        modelDescriptor: ModelDescriptor,
+        invocationContext: ProviderInvocationContext
+    ) async {
+        let requestID = snapshot.id
         let contextMessages = messagesForExecution(snapshot: snapshot)
 
         if modelProducesImageOutput(modelDescriptor) {
@@ -830,34 +874,80 @@ extension RequestCoordinator {
         settings: PreflightValidationSettings
     ) async throws -> ModelDescriptor {
         logger.info("[Preflight] Validating model '\(modelID)' for provider '\(providerName ?? providerID)'")
-        if let repo = settings.catalogRepository {
-            do {
-                let status = try repo.refreshStatus(forProviderID: providerID)
-                logger.info("[Preflight] Catalog cache status: hasUsableCache=\(status.hasUsableCache)")
-
-                if status.hasUsableCache {
-                    let cachedModels = try repo.models(forProviderID: providerID)
-                    logger.info("[Preflight] Found \(cachedModels.count) cached models")
-                    if let model = cachedModels.first(where: { $0.id == modelID }) {
-                        logger.info("[Preflight] Model validation passed (from cache)")
-                        return model
-                    } else {
-                        logger.error("[Preflight] Model '\(modelID)' not found in cached models")
-                        throw RequestError.modelInvalid(modelID: modelID, providerID: providerID, providerName: providerName)
-                    }
-                } else {
-                    logger.info("[Preflight] No usable cache, falling back to live validation")
-                }
-            } catch let error as RequestError {
-                throw error
-            } catch {
-                logger.info("[Preflight] Cache check failed: \(error.localizedDescription), falling back to live validation")
-            }
-        } else {
-            logger.info("[Preflight] No catalog repository, using live validation")
+        if let cachedModel = try preflightModelFromCache(
+            modelID: modelID,
+            providerID: providerID,
+            providerName: providerName,
+            catalogRepository: settings.catalogRepository
+        ) {
+            return cachedModel
         }
 
-        return try await withThrowingTaskGroup(of: ModelDescriptor.self) { group in
+        return try await preflightModelLive(
+            provider: provider,
+            modelID: modelID,
+            providerID: providerID,
+            providerName: providerName,
+            settings: settings
+        )
+    }
+
+    private func isNonTerminalSession(requestID: RequestID) -> Bool {
+        guard let container else { return false }
+        guard let state = container.requestStates[requestID] else { return false }
+        return !state.isTerminal
+    }
+
+    private struct PreflightValidationSettings {
+        let timeout: Duration
+        let invocationContext: ProviderInvocationContext
+        let catalogRepository: (any ProviderCatalogRepository)?
+    }
+
+    private func preflightModelFromCache(
+        modelID: String,
+        providerID: String,
+        providerName: String?,
+        catalogRepository: (any ProviderCatalogRepository)?
+    ) throws -> ModelDescriptor? {
+        guard let catalogRepository else {
+            logger.info("[Preflight] No catalog repository, using live validation")
+            return nil
+        }
+
+        do {
+            let status = try catalogRepository.refreshStatus(forProviderID: providerID)
+            logger.info("[Preflight] Catalog cache status: hasUsableCache=\(status.hasUsableCache)")
+            guard status.hasUsableCache else {
+                logger.info("[Preflight] No usable cache, falling back to live validation")
+                return nil
+            }
+
+            let cachedModels = try catalogRepository.models(forProviderID: providerID)
+            logger.info("[Preflight] Found \(cachedModels.count) cached models")
+            guard let model = cachedModels.first(where: { $0.id == modelID }) else {
+                logger.error("[Preflight] Model '\(modelID)' not found in cached models")
+                throw RequestError.modelInvalid(modelID: modelID, providerID: providerID, providerName: providerName)
+            }
+
+            logger.info("[Preflight] Model validation passed (from cache)")
+            return model
+        } catch let error as RequestError {
+            throw error
+        } catch {
+            logger.info("[Preflight] Cache check failed: \(error.localizedDescription), falling back to live validation")
+            return nil
+        }
+    }
+
+    private func preflightModelLive(
+        provider: any LLMProvider,
+        modelID: String,
+        providerID: String,
+        providerName: String?,
+        settings: PreflightValidationSettings
+    ) async throws -> ModelDescriptor {
+        try await withThrowingTaskGroup(of: ModelDescriptor.self) { group in
             group.addTask {
                 let models = try await provider.availableModels(context: settings.invocationContext)
                 guard let model = models.first(where: { $0.id == modelID }) else {
@@ -877,18 +967,6 @@ extension RequestCoordinator {
             group.cancelAll()
             return result
         }
-    }
-
-    private func isNonTerminalSession(requestID: RequestID) -> Bool {
-        guard let container else { return false }
-        guard let state = container.requestStates[requestID] else { return false }
-        return !state.isTerminal
-    }
-
-    private struct PreflightValidationSettings {
-        let timeout: Duration
-        let invocationContext: ProviderInvocationContext
-        let catalogRepository: (any ProviderCatalogRepository)?
     }
 
     private func modelProducesImageOutput(_ descriptor: ModelDescriptor) -> Bool {
@@ -926,86 +1004,144 @@ extension RequestCoordinator {
                 parameters: snapshot.parameters,
                 context: context
             )
-            if let debugInfo = response.debugInfo {
-                mergeDebugInfo(debugInfo, for: requestID)
-            }
-
-            guard let state = container.requestStates[requestID], !state.isTerminal else { return }
-
-            let providerElapsed = ContinuousClock.now - startTime
-            let responsePreview = String(response.text.prefix(50))
-            let responseSummary =
-                "[Image] Provider responded: text=\(responsePreview), "
-                    + "attachments=\(response.attachments.count), elapsed=\(providerElapsed)"
-            logger.info("\(responseSummary, privacy: .public)")
-
-            let attachments: [MessageAttachment]
-            let assistantMessageID = UUID()
-            if response.attachments.isEmpty {
-                attachments = []
-            } else if let messageAssetStore {
-                attachments = try await messageAssetStore.materialize(
-                    attachments: response.attachments,
-                    conversationId: snapshot.conversationId,
-                    messageId: assistantMessageID
-                )
-                logger.info("[Image] Assets materialized: \(attachments.count) attachment(s) persisted locally")
-            } else {
-                throw RequestError.remoteError(
-                    provider: snapshot.providerID,
-                    message: "Image assets could not be persisted locally"
-                )
-            }
-
-            guard !attachments.isEmpty else {
-                throw RequestError.remoteError(
-                    provider: snapshot.providerID,
-                    message: "Image generation did not produce a renderable attachment"
-                )
-            }
-
-            let assistantMessage = ChatMessage(
-                id: assistantMessageID,
-                role: .assistant,
-                content: response.text.isEmpty ? "Generated image." : response.text,
-                attachments: attachments,
-                debugInfoJSON: currentDebugInfoJSON(for: requestID)
+            try await processImageResponse(
+                response,
+                requestID: requestID,
+                snapshot: snapshot,
+                startTime: startTime,
+                container: container
             )
-            container.requestStates[requestID]?.assistantMessageID = assistantMessage.id
-            container.appendMessage(assistantMessage, toConversation: snapshot.conversationId)
-
-            if shouldPersistConversation(for: snapshot), !snapshot.conversationId.isEmpty {
-                try persistence?.persistSystemMessage(
-                    assistantMessage,
-                    conversationId: snapshot.conversationId,
-                    status: .completed
-                )
-            }
-
-            if shouldPersistConversation(for: snapshot),
-               snapshot.conversationId != container.activeConversationId
-            {
-                container.markUnreadCompletion(forConversation: snapshot.conversationId)
-            }
-
-            appendTraceEvent(
-                for: requestID,
-                category: .response,
-                title: "Image response completed",
-                summary: "Received \(attachments.count) attachment(s)",
-                sections: traceSections([
-                    ("Assistant Preview", trimmedDebugPreview(assistantMessage.content)),
-                    ("Attachment Count", String(attachments.count))
-                ])
-            )
-
-            let totalElapsed = ContinuousClock.now - startTime
-            logger.info("[Image] Image generation complete: messageID=\(assistantMessageID), totalElapsed=\(totalElapsed)")
-            finishImageSession(requestID: requestID, conversationId: snapshot.conversationId)
         } catch is CancellationError {
             return
-        } catch let error as ProviderRequestDebugFailure {
-            let elapsed = ContinuousClock.now - startTime
+        } catch {
+            handleImageRequestFailure(
+                error,
+                requestID: requestID,
+                snapshot: snapshot,
+                baseDebugInfo: baseDebugInfo,
+                startTime: startTime
+            )
+        }
+    }
+
+    private func processImageResponse(
+        _ response: ProviderResponse,
+        requestID: RequestID,
+        snapshot: QueueItemSnapshot,
+        startTime: ContinuousClock.Instant,
+        container: AppContainer
+    ) async throws {
+        if let debugInfo = response.debugInfo {
+            mergeDebugInfo(debugInfo, for: requestID)
+        }
+
+        guard let state = container.requestStates[requestID], !state.isTerminal else { return }
+
+        let providerElapsed = ContinuousClock.now - startTime
+        let responsePreview = String(response.text.prefix(50))
+        let responseSummary =
+            "[Image] Provider responded: text=\(responsePreview), "
+                + "attachments=\(response.attachments.count), elapsed=\(providerElapsed)"
+        logger.info("\(responseSummary, privacy: .public)")
+
+        let assistantMessage = try await makeImageAssistantMessage(
+            from: response,
+            requestID: requestID,
+            snapshot: snapshot
+        )
+        container.requestStates[requestID]?.assistantMessageID = assistantMessage.id
+        container.appendMessage(assistantMessage, toConversation: snapshot.conversationId)
+
+        if shouldPersistConversation(for: snapshot), !snapshot.conversationId.isEmpty {
+            try persistence?.persistSystemMessage(
+                assistantMessage,
+                conversationId: snapshot.conversationId,
+                status: .completed
+            )
+        }
+
+        if shouldPersistConversation(for: snapshot),
+           snapshot.conversationId != container.activeConversationId
+        {
+            container.markUnreadCompletion(forConversation: snapshot.conversationId)
+        }
+
+        appendTraceEvent(
+            for: requestID,
+            category: .response,
+            title: "Image response completed",
+            summary: "Received \(assistantMessage.attachments.count) attachment(s)",
+            sections: traceSections([
+                ("Assistant Preview", trimmedDebugPreview(assistantMessage.content)),
+                ("Attachment Count", String(assistantMessage.attachments.count))
+            ])
+        )
+
+        let totalElapsed = ContinuousClock.now - startTime
+        logger.info("[Image] Image generation complete: messageID=\(assistantMessage.id), totalElapsed=\(totalElapsed)")
+        finishImageSession(requestID: requestID, conversationId: snapshot.conversationId)
+    }
+
+    private func makeImageAssistantMessage(
+        from response: ProviderResponse,
+        requestID: RequestID,
+        snapshot: QueueItemSnapshot
+    ) async throws -> ChatMessage {
+        let assistantMessageID = UUID()
+        let attachments = try await materializeImageAttachments(
+            from: response,
+            snapshot: snapshot,
+            assistantMessageID: assistantMessageID
+        )
+        return ChatMessage(
+            id: assistantMessageID,
+            role: .assistant,
+            content: response.text.isEmpty ? "Generated image." : response.text,
+            attachments: attachments,
+            debugInfoJSON: currentDebugInfoJSON(for: requestID)
+        )
+    }
+
+    private func materializeImageAttachments(
+        from response: ProviderResponse,
+        snapshot: QueueItemSnapshot,
+        assistantMessageID: UUID
+    ) async throws -> [MessageAttachment] {
+        let attachments: [MessageAttachment]
+        if response.attachments.isEmpty {
+            attachments = []
+        } else if let messageAssetStore {
+            attachments = try await messageAssetStore.materialize(
+                attachments: response.attachments,
+                conversationId: snapshot.conversationId,
+                messageId: assistantMessageID
+            )
+            logger.info("[Image] Assets materialized: \(attachments.count) attachment(s) persisted locally")
+        } else {
+            throw RequestError.remoteError(
+                provider: snapshot.providerID,
+                message: "Image assets could not be persisted locally"
+            )
+        }
+
+        guard !attachments.isEmpty else {
+            throw RequestError.remoteError(
+                provider: snapshot.providerID,
+                message: "Image generation did not produce a renderable attachment"
+            )
+        }
+        return attachments
+    }
+
+    private func handleImageRequestFailure(
+        _ error: Error,
+        requestID: RequestID,
+        snapshot: QueueItemSnapshot,
+        baseDebugInfo: MessageDebugInfo,
+        startTime: ContinuousClock.Instant
+    ) {
+        let elapsed = ContinuousClock.now - startTime
+        if let error = error as? ProviderRequestDebugFailure {
             logger.error("[Image] Image generation failed after \(elapsed): \(error.message)")
             let mergedDebugInfo = baseDebugInfo.merged(with: error.debugInfo)
             mergeDebugInfo(mergedDebugInfo, for: requestID)
@@ -1014,8 +1150,10 @@ extension RequestCoordinator {
                 error: .remoteError(provider: error.providerID, message: error.message),
                 debugInfoJSON: mergedDebugInfo.prettyJSONString()
             )
-        } catch let error as RequestError {
-            let elapsed = ContinuousClock.now - startTime
+            return
+        }
+
+        if let error = error as? RequestError {
             logger.error("[Image] Image generation failed after \(elapsed): \(error.errorDescription ?? "unknown")")
             mergeDebugInfo(baseDebugInfo, for: requestID)
             failSession(
@@ -1023,18 +1161,18 @@ extension RequestCoordinator {
                 error: error,
                 debugInfoJSON: baseDebugInfo.prettyJSONString()
             )
-        } catch {
-            let elapsed = ContinuousClock.now - startTime
-            logger.error("[Image] Image generation failed after \(elapsed): \(error.localizedDescription)")
-            var mergedDebugInfo = baseDebugInfo
-            mergedDebugInfo.providerError = error.localizedDescription
-            mergeDebugInfo(mergedDebugInfo, for: requestID)
-            failSession(
-                requestID: requestID,
-                error: .remoteError(provider: snapshot.providerID, message: error.localizedDescription),
-                debugInfoJSON: mergedDebugInfo.prettyJSONString()
-            )
+            return
         }
+
+        logger.error("[Image] Image generation failed after \(elapsed): \(error.localizedDescription)")
+        var mergedDebugInfo = baseDebugInfo
+        mergedDebugInfo.providerError = error.localizedDescription
+        mergeDebugInfo(mergedDebugInfo, for: requestID)
+        failSession(
+            requestID: requestID,
+            error: .remoteError(provider: snapshot.providerID, message: error.localizedDescription),
+            debugInfoJSON: mergedDebugInfo.prettyJSONString()
+        )
     }
 
     private func finishImageSession(requestID: RequestID, conversationId: String) {

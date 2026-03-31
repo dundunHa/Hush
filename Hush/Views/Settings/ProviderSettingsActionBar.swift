@@ -75,7 +75,7 @@ extension ProviderSettingsView {
                 apiKey: apiKeyToSave,
                 persistedAPIKey: persistedConfig(for: providerID)?.apiKey
             )
-            let signature = currentCatalogDraftSignature()
+            let signature = currentCatalogDraftSignature(providerID: providerID)
 
             draftCatalogSignature = signature
             draftCatalogModels = []
@@ -197,7 +197,6 @@ extension ProviderSettingsView {
         }
     }
 
-    // swiftlint:disable function_body_length
     func saveCustomProviderSettings(
         providerID: String?,
         normalizedDefaultModelID: String,
@@ -245,8 +244,6 @@ extension ProviderSettingsView {
             container.refreshCatalog(forProviderID: config.id)
         }
     }
-
-    // swiftlint:enable function_body_length
 
     func saveSettings() {
         guard let selectedTarget else { return }
