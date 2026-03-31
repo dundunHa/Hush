@@ -81,6 +81,21 @@ extension AppContainer {
 
     // MARK: - Multi-Provider Profile Management
 
+    /// Adds a new placeholder OpenAI-compatible provider using the same defaults as the settings UI.
+    func addPlaceholderProvider() {
+        let newID = "provider-\(UUID().uuidString.prefix(8))"
+        let profile = ProviderConfiguration(
+            id: newID,
+            name: ProviderType.openAI.displayName,
+            type: .openAI,
+            endpoint: normalizeEndpoint(OpenAIProvider.defaultEndpoint),
+            apiKeyEnvironmentVariable: "HUSH_API_KEY",
+            defaultModelID: "",
+            isEnabled: true
+        )
+        saveProviderProfile(profile)
+    }
+
     /// Saves or updates a provider profile by its stable ID.
     func saveProviderProfile(_ profile: ProviderConfiguration) {
         let wasSelectedProvider = settings.selectedProviderID == profile.id

@@ -187,7 +187,7 @@ struct AppContainerProviderSettingsTests {
         }
     }
 
-    @Test("disabled OpenAI can save without a default model")
+    @Test("disabled OpenAI can save without a default model and preserves current selection")
     func disabledOpenAICanSaveWithoutDefaultModel() throws {
         let container = AppContainer.forTesting()
 
@@ -201,7 +201,8 @@ struct AppContainerProviderSettingsTests {
         )
 
         #expect(snapshot.defaultModelID.isEmpty)
-        #expect(container.settings.selectedProviderID.isEmpty)
+        #expect(container.settings.selectedProviderID == "mock")
+        #expect(container.settings.selectedModelID == "mock-text-1")
     }
 
     @Test("disabling selected openai falls back to mock provider")

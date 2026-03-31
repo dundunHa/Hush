@@ -57,11 +57,11 @@ struct IdlePrewarmTests {
         let container = AppContainer.forTesting(
             settings: .testDefault,
             registry: registry,
+            messageRenderRuntime: runtime,
             persistence: coordinator,
             activeConversationId: conversationA,
             messages: [],
-            sidebarThreads: sidebarThreads,
-            messageRenderRuntime: runtime
+            sidebarThreads: sidebarThreads
         )
 
         container.activateConversation(conversationId: conversationB)
@@ -123,11 +123,11 @@ struct IdlePrewarmTests {
         let container = AppContainer.forTesting(
             settings: .testDefault,
             registry: registry,
+            messageRenderRuntime: runtime,
             persistence: coordinator,
             activeConversationId: conversationA,
             messages: [],
-            sidebarThreads: sidebarThreads,
-            messageRenderRuntime: runtime
+            sidebarThreads: sidebarThreads
         )
 
         container.activateConversation(conversationId: conversationB)
@@ -181,11 +181,11 @@ struct IdlePrewarmTests {
         let container = AppContainer.forTesting(
             settings: .testDefault,
             registry: registry,
+            messageRenderRuntime: runtime,
             persistence: coordinator,
             activeConversationId: conversationA,
             messages: [],
-            sidebarThreads: sidebarThreads,
-            messageRenderRuntime: runtime
+            sidebarThreads: sidebarThreads
         )
 
         let style = RenderStyle.fromTheme()
@@ -243,11 +243,11 @@ struct IdlePrewarmTests {
         let container = AppContainer.forTesting(
             settings: .testDefault,
             registry: registry,
+            messageRenderRuntime: runtime,
             persistence: coordinator,
             activeConversationId: conversationA,
             messages: [],
-            sidebarThreads: sidebarThreads,
-            messageRenderRuntime: runtime
+            sidebarThreads: sidebarThreads
         )
 
         container.activateConversation(conversationId: conversationB)

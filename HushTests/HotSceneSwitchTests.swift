@@ -155,9 +155,9 @@ struct HotSceneSwitchTests {
         let container = AppContainer.forTesting(
             settings: .testDefault,
             registry: registry,
+            messageRenderRuntime: runtime,
             persistence: coordinator,
-            activeConversationId: conversationA,
-            messageRenderRuntime: runtime
+            activeConversationId: conversationA
         )
 
         controller.update(container: container, theme: container.settings.theme)
